@@ -63,7 +63,7 @@ function initFornecedoresScript() {
   const FornecedoresScript_ITENS_POR_PAGINA = 10;
   let FornecedoresScript_termoBuscaAtual = "";
   let FornecedoresScript_debounceTimerBusca;
-
+  
   let FornecedoresScript_fornecedorAtualParaItens = { id: null, nome: null };
   let FornecedoresScript_itemFornecedorEmEdicaoId = null;
   let FornecedoresScript_formItemAberto = false;
@@ -73,7 +73,7 @@ function initFornecedoresScript() {
   let FornecedoresScript_fornecedorSelecionadoNome = null;
   let FornecedoresScript_fornecedorSelecionadoObjeto = null;
   let FornecedoresScript_linhaSelecionadaAnterior = null;
-
+  let FornecedoresScript_tomSelectInstance = null;
 
   function FornecedoresScript_mascaraCnpj(value) { if (!value) return ""; return value.replace(/\D/g, '').replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2').slice(0, 18); }
   function FornecedoresScript_mascaraTelefone(value) { if (!value) return ""; value = value.replace(/\D/g, ''); if (value.length > 11) value = value.slice(0, 11); if (value.length > 10) { value = value.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3'); } else if (value.length > 6) { value = value.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3'); } else if (value.length > 2) { value = value.replace(/^(\d{2})(\d*)/, '($1) $2'); } else if (value.length > 0) { value = value.replace(/^(\d*)/, '($1'); } return value; }
@@ -418,9 +418,26 @@ function initFornecedoresScript() {
     };
     document.getElementById(FornecedoresScript_ID_NOME_FORNECEDOR_PRINCIPAL_MODAL_ITENS).textContent = FornecedoresScript_fornecedorSelecionadoNome;
     document.getElementById(FornecedoresScript_ID_FORNECEDOR_PAI_NOME_FORM_ITEM).value = FornecedoresScript_fornecedorSelecionadoNome;
+
+    // CORREÇÃO: Inicializa o dropdown com busca e define o placeholder padrão
+    if (FornecedoresScript_tomSelectInstance) {
+      FornecedoresScript_tomSelectInstance.destroy();
+      FornecedoresScript_tomSelectInstance = null;
+    }
+    const selectElement = document.getElementById(FornecedoresScript_ID_SELECT_PRODUTO_PRINCIPAL_NOVO_ITEM);
+    FornecedoresScript_tomSelectInstance = new TomSelect(selectElement,{
+        create: false,
+        sortField: {
+            field: "text",
+            direction: "asc"
+        },
+        placeholder: 'Selecione um Produto Principal (opcional)' // Placeholder definido aqui
+    });
+
     FornecedoresScript_carregarEListarItensFornecedor(FornecedoresScript_fornecedorSelecionadoNome);
-    FornecedoresScript_carregarProdutosParaSelectNoModalItem();
+    FornecedoresScript_carregarProdutosParaSelectNoModalItem(); // Esta função agora vai popular o Tom Select
     FornecedoresScript_resetarFormItemFornecedor();
+
     const formContainer = document.getElementById(FornecedoresScript_ID_FORM_ADICIONAR_ITEM_FORNECEDOR_CONTAINER);
     const iconeToggle = document.getElementById(FornecedoresScript_ID_ICONE_TOGGLE_ADICIONAR_ITEM_FORNECEDOR);
     if (formContainer && iconeToggle) {
@@ -439,6 +456,13 @@ function initFornecedoresScript() {
     document.getElementById(FornecedoresScript_ID_MODAL_GERENCIAR_ITENS_FORNECEDOR).classList.add('hidden');
     FornecedoresScript_fornecedorAtualParaItens = { id: null, nome: null };
     FornecedoresScript_itemFornecedorEmEdicaoId = null;
+
+    // CORREÇÃO: Limpa a instância do Tom Select
+    if (FornecedoresScript_tomSelectInstance) {
+      FornecedoresScript_tomSelectInstance.destroy();
+      FornecedoresScript_tomSelectInstance = null;
+    }
+
     const listaItens = document.getElementById(FornecedoresScript_ID_LISTA_ITENS_ATUAIS_FORNECEDOR);
     if (listaItens) listaItens.innerHTML = '<p class="text-gray-500 text-sm">Carregando itens fornecidos...</p>';
     FornecedoresScript_resetarFormItemFornecedor();
@@ -451,7 +475,7 @@ function initFornecedoresScript() {
     }
   }
 
-function FornecedoresScript_toggleFormAdicionarItemFornecedor() {
+  function FornecedoresScript_toggleFormAdicionarItemFornecedor() {
     const formContainer = document.getElementById(FornecedoresScript_ID_FORM_ADICIONAR_ITEM_FORNECEDOR_CONTAINER);
     const icone = document.getElementById(FornecedoresScript_ID_ICONE_TOGGLE_ADICIONAR_ITEM_FORNECEDOR);
     
@@ -476,7 +500,7 @@ function FornecedoresScript_toggleFormAdicionarItemFornecedor() {
     }
   }
 
-  function FornecedoresScript_carregarEListarItensFornecedor(nomeFornecedorPai) {
+function FornecedoresScript_carregarEListarItensFornecedor(nomeFornecedorPai) {
     const listaDiv = document.getElementById(FornecedoresScript_ID_LISTA_ITENS_ATUAIS_FORNECEDOR);
     if (listaDiv) listaDiv.innerHTML = '<p class="text-gray-500 text-sm">Carregando itens...</p>';
     google.script.run
@@ -486,7 +510,7 @@ function FornecedoresScript_toggleFormAdicionarItemFornecedor() {
       .withFailureHandler(function(error) {
         if (listaDiv) listaDiv.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar itens: ${error.message}</p>`;
       })
-      .SubProdutosCRUD_obterSubProdutosPorPai(nomeFornecedorPai, 'FORNECEDOR');
+      .SubProdutosCRUD_obterSubProdutosPorPai_NOVO(nomeFornecedorPai, 'FORNECEDOR');
   }
 
   function FornecedoresScript_renderizarListaItensFornecedor(itens) {
@@ -494,7 +518,7 @@ function FornecedoresScript_toggleFormAdicionarItemFornecedor() {
     if (!listaDiv) return;
     listaDiv.innerHTML = '';
     if (!itens || itens.length === 0) {
-      listaDiv.innerHTML = '<p class="text-gray-500 text-sm">Nenhum item vinculado a este fornecedor.</p>';
+      listaDiv.innerHTML = '<p class="text-gray-500 text-sm p-4 text-center">Nenhum item vinculado a este fornecedor.</p>';
       return;
     }
     const ul = document.createElement('ul');
@@ -502,27 +526,28 @@ function FornecedoresScript_toggleFormAdicionarItemFornecedor() {
     itens.forEach(item => {
       const li = document.createElement('li');
       li.className = 'flex justify-between items-center p-2 border rounded-md bg-white hover:bg-gray-50 text-sm';
+      
       let displayText = `${item.SubProduto || 'Nome Indefinido'}`;
       if (item.Tamanho) displayText += ` - Tam: ${item.Tamanho}`;
       if (item.UN) displayText += ` (${item.UN})`;
+
       const nomeSpan = document.createElement('span');
       nomeSpan.textContent = displayText;
-      nomeSpan.title = `ID: ${item.ID_SubProduto || 'N/A'} | Fornecedor: ${item['Fornecedor Vinculado'] || 'N/A'} | Prod. Principal: ${item.ProdutoPrincipal || 'Nenhum'}`;
+      // CORREÇÃO LÓGICA: Usando as propriedades corretas ('Fornecedor' e 'Produto Vinculado') que vêm do servidor.
+      nomeSpan.title = `ID: ${item.ID_SubProduto || 'N/A'} | Fornecedor: ${item['Fornecedor'] || 'N/A'} | Prod. Vinculado: ${item['Produto Vinculado'] || 'Nenhum'}`;
       
       const botoesDiv = document.createElement('div');
-      botoesDiv.className = 'space-x-2';
+      botoesDiv.className = 'flex-shrink-0 space-x-2';
 
       const btnEditar = document.createElement('button');
-      // SVG removido para teste, usando texto simples
-      btnEditar.textContent = 'Editar'; 
+      btnEditar.textContent = 'Editar'; // Usando texto em vez de SVG, como na sua versão
       btnEditar.className = "text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-100 transition-colors";
       btnEditar.title = "Editar Item";
       btnEditar.onclick = () => FornecedoresScript_prepararFormParaEditarItemFornecedor(item.ID_SubProduto);
       botoesDiv.appendChild(btnEditar);
 
       const btnExcluir = document.createElement('button');
-      // SVG removido para teste, usando texto simples
-      btnExcluir.textContent = 'Excluir';
+      btnExcluir.textContent = 'Excluir'; // Usando texto em vez de SVG, como na sua versão
       btnExcluir.className = "text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-100 transition-colors";
       btnExcluir.title = "Excluir Item";
       btnExcluir.onclick = () => FornecedoresScript_confirmarExcluirItemFornecedor(item.ID_SubProduto, item.SubProduto);
@@ -535,34 +560,45 @@ function FornecedoresScript_toggleFormAdicionarItemFornecedor() {
     listaDiv.appendChild(ul);
   }
 
-function FornecedoresScript_carregarProdutosParaSelectNoModalItem() {
-    const selectProduto = document.getElementById(FornecedoresScript_ID_SELECT_PRODUTO_PRINCIPAL_NOVO_ITEM);
-    if (!selectProduto) return;
-    selectProduto.innerHTML = '<option value="">Carregando produtos...</option>';
+  function FornecedoresScript_carregarProdutosParaSelectNoModalItem() {
+    // Verifica se a instância do Tom Select existe. Se não, não faz nada.
+    if (!FornecedoresScript_tomSelectInstance) {
+      console.error("Instância do TomSelect não encontrada para carregar produtos.");
+      return;
+    }
+    
+    const tomSelect = FornecedoresScript_tomSelectInstance;
+    
+    // Limpa quaisquer opções ou seleções anteriores e desabilita o controle enquanto carrega.
+    tomSelect.clear();
+    tomSelect.clearOptions();
+    tomSelect.disable();
+    
     google.script.run
       .withSuccessHandler(function(produtos) {
-        selectProduto.innerHTML = '<option value="">Selecione um Produto Principal (opcional)</option>';
+        tomSelect.enable(); // Habilita o controle novamente
+
         if (produtos && produtos.length > 0) {
-          produtos.forEach(produto => {
-            const option = document.createElement('option');
-            // AQUI ESTÁ A MUDANÇA: Usamos o ID do produto como o valor da opção
-            option.value = produto.id; 
-            // O texto exibido para o usuário continua sendo o nome do produto
-            option.textContent = produto.nome;
-            selectProduto.appendChild(option);
+          // Converte o array de produtos para o formato que o Tom Select espera
+          const opcoesParaAdicionar = produtos.map(produto => {
+            return { value: produto.id, text: produto.nome };
           });
+          // Adiciona as novas opções ao componente de busca
+          tomSelect.addOptions(opcoesParaAdicionar);
         } else {
-          selectProduto.innerHTML = '<option value="">Nenhum produto principal cadastrado</option>';
+          // Se não houver produtos, o placeholder padrão (definido na inicialização) será exibido.
+          // Podemos opcionalmente mudar o placeholder se não houver produtos.
         }
       })
       .withFailureHandler(function(error) {
-        selectProduto.innerHTML = '<option value="">Erro ao carregar produtos</option>';
+        tomSelect.enable(); // Habilita o controle mesmo em caso de erro
         console.error("Erro ao carregar produtos para select:", error);
+        // O placeholder padrão indicará para o usuário selecionar uma opção, mas a lista estará vazia.
       })
       .ProdutosCRUD_obterNomesEIdsProdutos();
   }
 
-  function FornecedoresScript_handleSalvarItemFornecedor(event) {
+function FornecedoresScript_handleSalvarItemFornecedor(event) {
     event.preventDefault();
     const form = document.getElementById(FornecedoresScript_ID_FORM_ADICIONAR_ITEM_FORNECEDOR);
     const btnSalvar = document.getElementById(FornecedoresScript_ID_BTN_SALVAR_NOVO_ITEM);
@@ -580,7 +616,7 @@ function FornecedoresScript_carregarProdutosParaSelectNoModalItem() {
           if (btnSalvar) FornecedoresScript_restaurarBotao(btnSalvar);
           if (response && response.success) {
             FornecedoresScript_exibirMensagemEmModal(FornecedoresScript_ID_MENSAGEM_ERRO_MODAL_ADICIONAR_ITEM, response.message || 'Item atualizado!', false);
-            FornecedoresScript_carregarEListarItensFornecedor(dadosItem['Fornecedor Vinculado'] || FornecedoresScript_fornecedorAtualParaItens.nome);
+            FornecedoresScript_carregarEListarItensFornecedor(dadosItem['Fornecedor'] || FornecedoresScript_fornecedorAtualParaItens.nome);
             FornecedoresScript_resetarFormItemFornecedor();
           } else {
             FornecedoresScript_exibirMensagemEmModal(FornecedoresScript_ID_MENSAGEM_ERRO_MODAL_ADICIONAR_ITEM, (response ? response.message : "Erro.") || 'Falha ao atualizar.', true);
@@ -597,7 +633,7 @@ function FornecedoresScript_carregarProdutosParaSelectNoModalItem() {
           if (btnSalvar) FornecedoresScript_restaurarBotao(btnSalvar);
           if (response && response.success) {
             FornecedoresScript_exibirMensagemEmModal(FornecedoresScript_ID_MENSAGEM_ERRO_MODAL_ADICIONAR_ITEM, response.message || 'Item salvo!', false);
-            FornecedoresScript_carregarEListarItensFornecedor(dadosItem['Fornecedor Vinculado'] || FornecedoresScript_fornecedorAtualParaItens.nome);
+            FornecedoresScript_carregarEListarItensFornecedor(dadosItem['Fornecedor'] || FornecedoresScript_fornecedorAtualParaItens.nome);
             FornecedoresScript_resetarFormItemFornecedor();
           } else {
             FornecedoresScript_exibirMensagemEmModal(FornecedoresScript_ID_MENSAGEM_ERRO_MODAL_ADICIONAR_ITEM, (response ? response.message : "Erro.") || 'Falha ao salvar.', true);
@@ -607,7 +643,7 @@ function FornecedoresScript_carregarProdutosParaSelectNoModalItem() {
           if (btnSalvar) FornecedoresScript_restaurarBotao(btnSalvar);
           FornecedoresScript_exibirMensagemEmModal(FornecedoresScript_ID_MENSAGEM_ERRO_MODAL_ADICIONAR_ITEM, `Erro: ${error.message}`, true);
         })
-        .SubProdutosCRUD_criarNovoSubProduto(dadosItem);
+        .SubProdutosCRUD_criarNovoSubProduto_NOVO(dadosItem);
     }
   }
 
@@ -621,13 +657,9 @@ function FornecedoresScript_carregarProdutosParaSelectNoModalItem() {
           for (const key in itemData) {
             if (form.elements[key]) {
               form.elements[key].value = itemData[key] || '';
-            } else if (key === 'ProdutoPrincipal' && form.elements['ProdutoPrincipal']) {
-              form.elements['ProdutoPrincipal'].value = itemData[key] || '';
             }
           }
-          if (form.elements['Fornecedor Vinculado']) {
-            form.elements['Fornecedor Vinculado'].value = FornecedoresScript_fornecedorAtualParaItens.nome;
-          }
+
           document.getElementById(FornecedoresScript_ID_TITULO_FORM_ITEM).textContent = 'Editar Item Fornecido';
           const btnSalvarItem = document.getElementById(FornecedoresScript_ID_BTN_SALVAR_NOVO_ITEM);
           if(btnSalvarItem) {
@@ -673,7 +705,7 @@ function FornecedoresScript_carregarProdutosParaSelectNoModalItem() {
     }
   }
 
-function FornecedoresScript_resetarFormItemFornecedor() {
+  function FornecedoresScript_resetarFormItemFornecedor() {
     const form = document.getElementById(FornecedoresScript_ID_FORM_ADICIONAR_ITEM_FORNECEDOR);
     if (form) form.reset();
 

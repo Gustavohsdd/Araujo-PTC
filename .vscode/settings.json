@@ -1,0 +1,12 @@
+{
+  "emeraldwalk.runonsave": {
+    "commands": [
+      {
+        "match": ".*",
+        "cmd": "cmd /c clasp push",
+        "isAsync": true,
+        "silent": false
+      }
+    ]
+  }
+}
