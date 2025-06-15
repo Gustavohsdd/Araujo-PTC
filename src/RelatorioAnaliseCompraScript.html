@@ -1,0 +1,106 @@
+<script>
+function initRelatorioAnaliseCompra() {
+    
+    function formatCurrency(value) {
+        if (value === null || typeof value === 'undefined' || isNaN(value)) return "N/A";
+        return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function renderReport(data) {
+        const reportContent = document.getElementById('report-content');
+        const template = document.getElementById('product-card-template');
+        reportContent.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            reportContent.innerHTML = '<div class="empty-state">Nenhum dado histórico encontrado para os produtos desta cotação.</div>';
+            return;
+        }
+
+        data.forEach(produto => {
+            const card = template.content.cloneNode(true);
+            
+            // Popula o novo cabeçalho com nome e intervalo
+            card.querySelector('.product-name-text').textContent = produto.produto;
+            const intervaloHeader = card.querySelector('.avg-interval-header');
+            const intervaloTexto = produto.intervaloMedioDias !== null ? `Intervalo Médio: ${Math.round(produto.intervaloMedioDias)} dias` : "";
+            if (intervaloHeader && intervaloTexto) {
+                intervaloHeader.textContent = intervaloTexto;
+            } else if (intervaloHeader) {
+                intervaloHeader.style.display = 'none'; // Esconde a pílula de intervalo se não houver dados
+            }
+
+            // Popula o histórico de preços
+            const priceHistoryTbody = card.querySelector('[data-section="price-history"] tbody');
+            if (produto.ultimos6Pedidos.length > 0) {
+                produto.ultimos6Pedidos.forEach(pedido => {
+                    const tr = priceHistoryTbody.insertRow();
+                    tr.insertCell().textContent = pedido.data;
+                    tr.insertCell().textContent = formatCurrency(pedido.preco);
+                    tr.insertCell().textContent = formatCurrency(pedido.precoPorFator);
+                });
+            } else {
+                const tr = priceHistoryTbody.insertRow();
+                const td = tr.insertCell();
+                td.colSpan = 3;
+                td.textContent = "Sem pedidos recentes.";
+            }
+            
+            // Popula a variação de preço por fator
+            card.querySelector('[data-metric="min-price-factor"]').textContent = formatCurrency(produto.precoFatorMin6M);
+            card.querySelector('[data-metric="max-price-factor"]').textContent = formatCurrency(produto.precoFatorMax6M);
+            card.querySelector('[data-metric="avg-price-factor"]').textContent = formatCurrency(produto.precoFatorMedioPonderado6M);
+            
+            // Popula o volume de compra
+            const volumeTbody = card.querySelector('[data-section="purchase-volume"] tbody');
+             if (produto.volumesPorPedido.length > 0) {
+                produto.volumesPorPedido.forEach(pedido => {
+                    const tr = volumeTbody.insertRow();
+                    tr.insertCell().textContent = pedido.data;
+                    tr.insertCell().textContent = pedido.quantidade;
+                    tr.insertCell().textContent = pedido.un;
+                });
+            } else {
+                const tr = volumeTbody.insertRow();
+                const td = tr.insertCell();
+                td.colSpan = 3;
+                td.textContent = "Sem dados de volume.";
+            }
+
+            reportContent.appendChild(card);
+        });
+    }
+
+    (async function() {
+        const idCotacao = typeof REPORT_COTACAO_ID !== 'undefined' ? REPORT_COTACAO_ID : null;
+        const idDisplay = document.getElementById('cotacao-id-display');
+        
+        if (idDisplay) {
+            idDisplay.textContent = idCotacao || 'Inválido';
+        }
+
+        if (!idCotacao) {
+            document.getElementById('report-content').innerHTML = '<div class="empty-state">ID da Cotação não fornecido.</div>';
+            return;
+        }
+
+        try {
+            const response = await new Promise((resolve, reject) => {
+                google.script.run
+                    .withSuccessHandler(resolve)
+                    .withFailureHandler(reject)
+                    .RelatoriosController_obterDadosAnaliseCompra(idCotacao);
+            });
+
+            if (response.success) {
+                renderReport(response.dados);
+            } else {
+                throw new Error(response.message || "Falha ao carregar dados do relatório.");
+            }
+        } catch (error) {
+            document.getElementById('report-content').innerHTML = `<div class="empty-state" style="color: #991B1B;">Erro: ${error.message}</div>`;
+        }
+    })();
+}
+
+initRelatorioAnaliseCompra();
+</script>

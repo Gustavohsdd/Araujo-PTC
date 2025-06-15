@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" xintegrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body { 
+        padding: 20px; 
+        font-family: 'Inter', sans-serif;
+        background-color: #f8f9fa;
+      }
+      .header-portal {
+        background-color: #007bff;
+        color: white;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-radius: 0.3rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .header-portal h3 {
+        margin-bottom: 0.25rem;
+        font-weight: 600;
+      }
+      .header-portal p {
+        margin-bottom: 0.1rem;
+        font-size: 0.95rem;
+      }
+      .table-container { 
+        margin-top: 20px; 
+        max-height: 60vh;
+        overflow-y: auto; 
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.3rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .table th { 
+        position: sticky; 
+        top: 0; 
+        background-color: #e9ecef; 
+        z-index: 1; 
+        white-space: nowrap; 
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .editable-input { 
+        width: 100%; 
+        min-width: 100px; 
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+        border-radius: 0.25rem;
+        border: 1px solid #ced4da;
+      }
+      .price-input { text-align: right; }
+      .text-input { text-align: left; }
+      td { 
+        vertical-align: middle !important; 
+        font-size: 0.875rem;
+      } 
+      #status-message { 
+        margin-top: 20px; 
+        font-weight: 500; 
+        display: none; 
+        padding: 0.75rem 1.25rem;
+        border-radius: 0.25rem;
+      }
+      .status-saving { 
+        font-style: italic; 
+        color: #004085; 
+        background-color: #cce5ff;
+        border-color: #b8daff;
+      }
+      .status-success {
+        color: #155724;
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+      }
+      .status-danger {
+        color: #721c24;
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+      }
+      .table-responsive { overflow-x: auto; }
+      .instruction-box { 
+        background-color: #e9ecef; 
+        border: 1px solid #ced4da; 
+        padding: 15px; 
+        margin-bottom: 20px; 
+        border-radius: 5px; 
+        font-size: 0.9rem;
+      }
+      .instruction-box strong { color: #007bff; }
+      .instruction-box pre { 
+        background-color: #f8f9fa; 
+        padding: 10px; 
+        border-radius: 3px; 
+        white-space: pre-wrap; 
+        word-wrap: break-word; 
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+        font-size: 0.85em; 
+        border: 1px solid #ddd;
+      }
+      .btn-save-portal {
+        background-color: #28a745; 
+        border-color: #28a745;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+      }
+      .btn-save-portal:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
+      }
+      .btn-save-portal:disabled {
+        background-color: #6c757d;
+        border-color: #6c757d;
+      }
+      .footer-note {
+        margin-top: 2rem;
+        font-size: 0.8rem;
+        color: #6c757d;
+        text-align: center;
+      }
+    
+      /* Estilos para a nova seção de Pedido Finalizado */
+      .pedido-info-box {
+        background-color: #e9ecef;
+        border: 1px solid #ced4da;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      }
+      .info-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-bottom: 0.25rem;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .info-value {
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #212529;
+        margin-bottom: 0;
+      }
+      .pedido-itens-box .table thead.thead-dark th {
+        background-color: #343a40;
+        color: white;
+      }
+      .pedido-itens-box .total-row {
+        background-color: #f8f9fa;
+        font-size: 1.2rem;
+      }
+      .text-right { text-align: right; }
+      .text-center { text-align: center; }
+    
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <div class="header-portal">
+        <h3 id="page-title">Portal de Cotação de Preços</h3>
+        <p>Fornecedor: <strong id="supplier-name">Carregando...</strong></p>
+        <p>Referência da Cotação: <strong id="quotation-id">Carregando...</strong></p>
+      </div>
+      
+      <hr>
+
+      <div class="instruction-box">
+          <p><strong>Instruções Importantes:</strong></p>
+          <ol>
+              <li>Preencha ou corrija os dados para os itens listados abaixo.</li>
+              <li>Para o campo <strong>Preço Unitário</strong>, utilize <strong>vírgula (,)</strong> como separador decimal (Ex: 10,50).</li>
+              <li>O campo <strong>Fator</strong> é <strong>obrigatório</strong> e crucial. Ele representa o multiplicador para converter o preço da embalagem informada para o preço da unidade base (geralmente KG ou UNidade).
+                  <br><strong>Exemplos de Fator:</strong>
+                  <pre>
+- Saco de Farinha 25 KG (Preço informado é do saco): Fator = 25
+- Fardo com 6 unidades de Molho de Tomate 1,8 KG cada (Preço informado é do fardo): Fator = 10.8 (6 un * 1,8 KG/un)
+- Caixa de Embalagens com 100 unidades (Preço informado é da caixa): Fator = 100
+                  </pre>
+                  O objetivo é que o sistema possa calcular automaticamente o preço por quilo (KG) ou por unidade (UN) base do produto.
+              </li>
+              <li>Após preencher todos os itens, clique em "<strong>Finalizar e Enviar Cotação</strong>" ao final da página. As alterações nos campos são salvas automaticamente ao sair de cada campo.</li>
+          </ol>
+      </div>
+
+
+      <div class="table-responsive">
+        <div class="table-container">
+          <table class="table table-bordered table-striped table-hover table-sm">
+            <thead class="thead-light">
+              <tr>
+                <th>Subproduto (Descrição Detalhada)</th>
+                <th>Tamanho / Embalagem</th>
+                <th>UN (Unidade da Embalagem)</th>
+                <th>Fator (para Unidade Base)</th>
+                <th>Preço Unitário (da Embalagem)</th>
+              </tr>
+            </thead>
+            <tbody id="product-table-body">
+              </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- NOVA SEÇÃO: Pedido Finalizado - Inicialmente Oculta -->
+      <div id="pedido-finalizado-container" style="display: none; margin-top: 40px;">
+        <hr>
+        <h3 class="mb-3" style="font-weight: 700; color: #0056b3;">Confirmação do Pedido</h3>
+        
+        <div class="pedido-info-box">
+          <div class="row">
+            <div class="col-md-6">
+              <p class="info-label">Empresa para Faturamento:</p>
+              <p id="pedido-empresa-faturada" class="info-value">Carregando...</p>
+            </div>
+            <div class="col-md-6">
+              <p class="info-label">CNPJ:</p>
+              <p id="pedido-cnpj" class="info-value">Carregando...</p>
+            </div>
+          </div>
+          <div class="row mt-2">
+            <div class="col-md-12">
+               <p class="info-label">Condição de Pagamento:</p>
+               <p id="pedido-condicao-pagamento" class="info-value">Carregando...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pedido-itens-box mt-4">
+            <h4 class="mb-3" style="font-weight: 600; font-size: 1.2rem;">Itens Aprovados</h4>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered">
+                    <thead class="thead-dark">
+                        <tr>
+                            <th scope="col">Produto (Subproduto)</th>
+                            <th scope="col">UN</th>
+                            <th scope="col" class="text-center">Qtd.</th>
+                            <th scope="col" class="text-right">Valor Unit.</th>
+                            <th scope="col" class="text-right">Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pedido-itens-table-body">
+                        <!-- Linhas dos itens serão inseridas aqui via script -->
+                    </tbody>
+                    <tfoot>
+                        <tr class="total-row">
+                            <td colspan="4" class="text-right font-weight-bold">TOTAL DO PEDIDO:</td>
+                            <td id="pedido-valor-total" class="text-right font-weight-bold">R$ 0,00</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+      </div>
+      <!-- FIM DA NOVA SEÇÃO -->
+
+      <div class="text-right mt-3 mb-3">
+          <button id="save-button" class="btn btn-success btn-lg btn-save-portal" onclick="PortalFornecedorScript_finalizarCotacao()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16" style="margin-right: 5px; vertical-align: text-bottom;">
+              <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+            </svg>
+            Finalizar e Enviar Cotação
+          </button>
+      </div>
+
+      <div id="status-message" role="alert"></div>
+
+      <div class="footer-note">
+        <p>Em caso de dúvidas ou problemas, entre em contato com o comprador.</p>
+      </div>
+
+    </div>
+
+    <script>
+      // Injeta os dados do Apps Script em variáveis JavaScript globais
+      var portalNomeFornecedor = <?= JSON.stringify(nomeFornecedor || "Não Identificado") ?>;
+      var portalIdCotacao = <?= JSON.stringify(idCotacao || "N/A") ?>;
+      var portalToken = <?= JSON.stringify(token || "") ?>;
+      var portalStatus = <?= JSON.stringify(status || "") ?>; // Novo: Status da cotação
+      var portalProdutos = <?= JSON.stringify(produtos || []) ?>; 
+      var portalPedidoFinalizado = <?= JSON.stringify(pedidoFinalizado || { pedidoExiste: false }) ?>; // Novo: Dados do pedido
+    </script>
+
+    <?!= App_incluirHtml('PortalFornecedorScript', true) ?>
+  </body>
+  <script>
+    setTimeout(() => {
+      if (typeof initPortalFornecedorScript === 'function') {
+        initPortalFornecedorScript();
+      } else {
+        console.error("Falha ao inicializar PortalFornecedorScript: função initPortalFornecedorScript não encontrada.");
+        const body = document.querySelector('body');
+        if (body) {
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = "color: red; background: #ffebee; border: 1px solid red; padding: 10px; text-align: center; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;";
+            errorDiv.textContent = "Erro Crítico: Script do Portal do Fornecedor não carregou corretamente.";
+            body.prepend(errorDiv); // Adiciona no topo do body
+        }
+      }
+    }, 150); // Aumentei um pouco o timeout para garantir que tudo esteja pronto
+  </script>
+</html>

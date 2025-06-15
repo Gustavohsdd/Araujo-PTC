@@ -1,0 +1,389 @@
+<script>
+function initPortalFornecedorScript() {
+  // console.log("PortalFornecedorScript: Iniciando script."); // Log removido
+
+  let PortalFornecedorScript_pageToken = '';
+  let PortalFornecedorScript_productData = []; 
+  let PortalFornecedorScript_idCotacaoGlobal = '';
+  
+  const PortalFornecedorScript_elSupplierName = document.getElementById('supplier-name');
+  const PortalFornecedorScript_elQuotationId = document.getElementById('quotation-id');
+  const PortalFornecedorScript_elProductTableBody = document.getElementById('product-table-body');
+  const PortalFornecedorScript_elSaveButton = document.getElementById('save-button'); 
+  const PortalFornecedorScript_elStatusMessage = document.getElementById('status-message');
+
+try {
+    const localNomeFornecedor = typeof portalNomeFornecedor !== 'undefined' ? portalNomeFornecedor : "Não Identificado (Script)";
+    const localIdCotacao = typeof portalIdCotacao !== 'undefined' ? portalIdCotacao : "N/A (Script)";
+    const localStatus = typeof portalStatus !== 'undefined' ? portalStatus : "";
+    
+    let rawToken = typeof portalToken !== 'undefined' ? portalToken : '';
+    if (typeof rawToken === 'string' && rawToken.startsWith('"') && rawToken.endsWith('"')) {
+      try { PortalFornecedorScript_pageToken = JSON.parse(rawToken); } 
+      catch (e) { PortalFornecedorScript_pageToken = rawToken; }
+    } else {
+      PortalFornecedorScript_pageToken = rawToken;
+    }
+
+    PortalFornecedorScript_idCotacaoGlobal = localIdCotacao;
+
+    if (PortalFornecedorScript_elSupplierName) PortalFornecedorScript_elSupplierName.textContent = localNomeFornecedor;
+    if (PortalFornecedorScript_elQuotationId) PortalFornecedorScript_elQuotationId.textContent = localIdCotacao;
+    
+    // Processa os produtos para a tabela de cotação
+    if (typeof portalProdutos === 'string' && portalProdutos.trim() !== "") {
+      try {
+        PortalFornecedorScript_productData = JSON.parse(portalProdutos);
+        if (!Array.isArray(PortalFornecedorScript_productData)) {
+          PortalFornecedorScript_productData = [];
+        }
+      } catch (parseError) {
+        console.error("Erro ao fazer parse de 'portalProdutos':", parseError);
+        PortalFornecedorScript_productData = [];
+      }
+    } else if (Array.isArray(portalProdutos)) { 
+      PortalFornecedorScript_productData = portalProdutos;
+    } else {
+      PortalFornecedorScript_productData = [];
+    }
+    PortalFornecedorScript_displayProducts(PortalFornecedorScript_productData);
+
+    // Processa e exibe os dados do pedido finalizado, se existirem
+    let pedidoData = null;
+    if (typeof portalPedidoFinalizado === 'string' && portalPedidoFinalizado.trim() !== "") {
+        try { pedidoData = JSON.parse(portalPedidoFinalizado); }
+        catch(e) { console.error("Erro ao fazer parse de 'portalPedidoFinalizado'.", e); }
+    } else if (typeof portalPedidoFinalizado === 'object' && portalPedidoFinalizado !== null) {
+        pedidoData = portalPedidoFinalizado;
+    }
+    
+    if (pedidoData && pedidoData.pedidoExiste) {
+        PortalFornecedorScript_displayPedidoFinalizado(pedidoData);
+    } else if (localStatus === 'Respondido') {
+        // Se o status for respondido mas não houver itens, exibe uma mensagem
+        PortalFornecedorScript_displayStatus("Sua cotação foi enviada. No momento, não há itens aprovados para este pedido.", "info", 0);
+    }
+
+
+  } catch (e) {
+    console.error("PortalFornecedorScript: Erro na inicialização:", e);
+    if (PortalFornecedorScript_elStatusMessage) PortalFornecedorScript_displayStatus("Erro Crítico ao carregar. Contate o administrador.", "danger", 0);
+  }
+
+  function PortalFornecedorScript_createInput(type, value, idLinha, columnName, className = '') {
+    const input = document.createElement('input');
+    input.type = type;
+    input.inputMode = (columnName === 'fator' || columnName === 'preco') ? 'decimal' : 'text';
+    input.className = `form-control form-control-sm editable-input ${className}`;
+    input.dataset.idLinha = idLinha;
+    input.dataset.column = columnName; 
+    const initialValueStr = String(value === null || value === undefined ? '' : value);
+    input.dataset.originalValue = initialValueStr; 
+    input.value = initialValueStr; 
+    input.autocomplete = 'off';
+
+    if (columnName === 'preco') {
+      input.placeholder = "0,00"; 
+      input.oninput = PortalFornecedorScript_formatarInputNumericoDecimal; 
+    } else if (columnName === 'fator') {
+      input.oninput = PortalFornecedorScript_formatarInputNumericoDecimal; 
+    }
+
+    input.addEventListener('blur', function() { PortalFornecedorScript_salvarCelula(this); });
+    input.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault(); 
+            PortalFornecedorScript_salvarCelula(this);
+        }
+    });
+    return input;
+  }
+
+  function PortalFornecedorScript_formatarInputNumericoDecimal(event) {
+    let value = event.target.value;
+    value = value.replace(/[^0-9.,]/g, ''); 
+    let separatorCount = 0;
+    value = value.split('').filter(char => {
+        if (char === '.' || char === ',') {
+            separatorCount++;
+            return separatorCount === 1; 
+        }
+        return true; 
+    }).join('');
+    event.target.value = value;
+  }
+
+  function PortalFornecedorScript_displayProducts(produtosArray) {
+    if (!PortalFornecedorScript_elProductTableBody) return;
+    PortalFornecedorScript_elProductTableBody.innerHTML = ''; 
+
+    if (!produtosArray || !Array.isArray(produtosArray) || produtosArray.length === 0) {
+      PortalFornecedorScript_elProductTableBody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum produto encontrado para esta cotação.</td></tr>';
+      if(PortalFornecedorScript_elSaveButton) PortalFornecedorScript_elSaveButton.disabled = true;
+      return;
+    }
+
+    produtosArray.forEach(p => {
+      const row = PortalFornecedorScript_elProductTableBody.insertRow();
+      row.dataset.idLinha = p.idLinha; 
+      row.insertCell().appendChild(PortalFornecedorScript_createInput('text', p.subproduto, p.idLinha, 'subproduto', 'text-input'));
+      row.insertCell().appendChild(PortalFornecedorScript_createInput('text', p.tamanho,    p.idLinha, 'tamanho', 'text-input'));
+      row.insertCell().appendChild(PortalFornecedorScript_createInput('text', p.un,         p.idLinha, 'un', 'text-input'));
+      row.insertCell().appendChild(PortalFornecedorScript_createInput('text', p.fator,      p.idLinha, 'fator', 'text-input'));
+      row.insertCell().appendChild(PortalFornecedorScript_createInput('text', p.preco,      p.idLinha, 'preco', 'price-input'));
+    });
+
+    if(PortalFornecedorScript_elSaveButton) PortalFornecedorScript_elSaveButton.disabled = false;
+    if(PortalFornecedorScript_elSaveButton) PortalFornecedorScript_elSaveButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16" style="margin-right: 5px; vertical-align: text-bottom;">
+        <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+      </svg>
+      Finalizar e Enviar Cotação`;
+  }
+
+  /**
+   * Exibe a seção de confirmação de pedido se os dados existirem.
+   * @param {object} pedidoData - Objeto contendo os dados do pedido finalizado.
+   */
+  function PortalFornecedorScript_displayPedidoFinalizado(pedidoData) {
+    if (!pedidoData || !pedidoData.pedidoExiste) {
+      return; // Não faz nada se não houver pedido
+    }
+
+    const container = document.getElementById('pedido-finalizado-container');
+    const empresaEl = document.getElementById('pedido-empresa-faturada');
+    const cnpjEl = document.getElementById('pedido-cnpj');
+    const condicaoEl = document.getElementById('pedido-condicao-pagamento');
+    const tableBody = document.getElementById('pedido-itens-table-body');
+    const totalEl = document.getElementById('pedido-valor-total');
+
+    if (!container || !empresaEl || !cnpjEl || !condicaoEl || !tableBody || !totalEl) {
+      console.error("Elementos do DOM para o pedido finalizado não foram encontrados.");
+      return;
+    }
+
+    // Preenche as informações de faturamento
+    empresaEl.textContent = pedidoData.empresaFaturada || "Não informado";
+    cnpjEl.textContent = pedidoData.cnpj || "Não informado";
+    condicaoEl.textContent = pedidoData.condicaoPagamento || "Não informado";
+
+    // Limpa a tabela antes de adicionar novos itens
+    tableBody.innerHTML = '';
+    let valorTotalPedido = 0;
+
+    // Adiciona os itens comprados à tabela
+    pedidoData.itensComprados.forEach(item => {
+      const row = tableBody.insertRow();
+      row.insertCell().textContent = item.subproduto;
+      row.insertCell().textContent = item.un;
+      row.insertCell(2).className = 'text-center';
+      row.cells[2].textContent = item.quantidade;
+      row.insertCell(3).className = 'text-right';
+      row.cells[3].textContent = item.precoUnit;
+      row.insertCell(4).className = 'text-right';
+      row.cells[4].textContent = item.valorTotal;
+      
+      // Extrai o valor numérico para somar ao total
+      const valorNumerico = parseFloat(String(item.valorTotal).replace('R$', '').replace(/\./g, '').replace(',', '.').trim());
+      if (!isNaN(valorNumerico)) {
+        valorTotalPedido += valorNumerico;
+      }
+    });
+    
+    // Atualiza o valor total no rodapé da tabela
+    totalEl.textContent = valorTotalPedido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Exibe a seção do pedido
+    container.style.display = 'block';
+
+    // Desativa a tabela de edição e o botão de finalizar
+    document.querySelectorAll('#product-table-body .editable-input').forEach(input => input.disabled = true);
+    if (PortalFornecedorScript_elSaveButton) {
+      PortalFornecedorScript_elSaveButton.disabled = true;
+      PortalFornecedorScript_elSaveButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-patch-check-fill" viewBox="0 0 16 16" style="margin-right: 5px; vertical-align: text-bottom;">
+           <path d="M10.067.87a2.89 2.89 0 0 0-4.134 0l-.622.638-.89-.011a2.89 2.89 0 0 0-2.924 2.924l.01.89-.638.622a2.89 2.89 0 0 0 0 4.134l.638.622-.011.89a2.89 2.89 0 0 0 2.924 2.924l.89.01.622.638a2.89 2.89 0 0 0 4.134 0l.622-.638.89.011a2.89 2.89 0 0 0 2.924-2.924l-.01-.89.638-.622a2.89 2.89 0 0 0 0-4.134l-.638-.622.011-.89a2.89 2.89 0 0 0-2.924-2.924l-.89-.01zm.287 5.984-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7 8.793l2.646-2.647a.5.5 0 0 1 .708.708"/>
+        </svg>
+        Pedido Enviado`;
+      PortalFornecedorScript_elSaveButton.classList.remove('btn-success');
+      PortalFornecedorScript_elSaveButton.classList.add('btn-primary');
+    }
+    
+    // Oculta a caixa de instruções para simplificar a visualização
+    const instructionBox = document.querySelector('.instruction-box');
+    if(instructionBox) instructionBox.style.display = 'none';
+  }
+
+  function PortalFornecedorScript_salvarCelula(inputElement) {
+    const idLinha = parseInt(inputElement.dataset.idLinha, 10);
+    const coluna = inputElement.dataset.column;
+    const valorAtualVisual = String(inputElement.value).trim(); 
+    const valorOriginalDataset = String(inputElement.dataset.originalValue).trim();
+
+    let backendValor = valorAtualVisual; 
+    let alterado = false;
+
+    if (coluna === 'fator' || coluna === 'preco') {
+        const valorAtualParaNumero = valorAtualVisual.replace(',', '.'); 
+        const valorOriginalParaNumero = valorOriginalDataset.replace(',', '.'); 
+        
+        const numAtual = parseFloat(valorAtualParaNumero);
+        const numOriginal = parseFloat(valorOriginalParaNumero);
+
+        if (isNaN(numAtual) && isNaN(numOriginal)) {
+            alterado = valorAtualParaNumero !== valorOriginalParaNumero;
+        } else if (isNaN(numAtual) || isNaN(numOriginal)) {
+            alterado = true; 
+        } else { 
+            alterado = numAtual !== numOriginal;
+        }
+        backendValor = (valorAtualParaNumero === '' || isNaN(numAtual)) ? null : numAtual;
+    } else { 
+        alterado = valorAtualVisual !== valorOriginalDataset; 
+        backendValor = valorAtualVisual;
+    }
+    
+    if (!alterado) {
+        inputElement.classList.remove('is-invalid', 'is-valid');
+        return;
+    }
+    
+    if (coluna === 'fator') {
+        if (backendValor === null || backendValor === '') { 
+            PortalFornecedorScript_displayStatus(`O campo 'Fator' é obrigatório.`, "danger", 5000, inputElement);
+            inputElement.focus(); 
+            return;
+        }
+        const numFator = Number(backendValor); 
+        if (isNaN(numFator) || numFator <= 0) {
+            PortalFornecedorScript_displayStatus(`O 'Fator' deve ser um número positivo.`, "danger", 5000, inputElement);
+            inputElement.focus();
+            return;
+        }
+    }
+    if (coluna === 'preco') {
+        if (backendValor !== null && backendValor !== '' && isNaN(Number(backendValor))) { 
+            PortalFornecedorScript_displayStatus(`O 'Preço' deve ser um valor numérico.`, "danger", 5000, inputElement);
+            inputElement.focus();
+            return;
+        }
+    }
+
+    const dadosCelula = { idLinha: idLinha, coluna: coluna, valor: backendValor };
+    inputElement.classList.add('saving-cell');
+    PortalFornecedorScript_displayStatus(`Salvando alteração...`, "info", 0, inputElement);
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            inputElement.classList.remove('saving-cell');
+            if (response && response.success) {
+                PortalFornecedorScript_displayStatus(response.message || "Alteração salva com sucesso!", "success", 3000, inputElement);
+                inputElement.dataset.originalValue = valorAtualVisual; 
+                
+                const produtoAfetado = PortalFornecedorScript_productData.find(p => p.idLinha === idLinha);
+                if (produtoAfetado) {
+                    produtoAfetado[coluna] = valorAtualVisual; 
+                }
+            } else {
+                PortalFornecedorScript_displayStatus(response.message || "Erro ao salvar a alteração.", "danger", 5000, inputElement);
+                inputElement.value = valorOriginalDataset; 
+            }
+        })
+        .withFailureHandler(function(error) {
+            inputElement.classList.remove('saving-cell');
+            PortalFornecedorScript_displayStatus(`Erro de comunicação ao salvar: ${error.message}`, "danger", 5000, inputElement);
+            inputElement.value = valorOriginalDataset; 
+        })
+        .PortalController_salvarCelulaFornecedor(dadosCelula, PortalFornecedorScript_pageToken, PortalFornecedorScript_idCotacaoGlobal);
+  }
+
+  function PortalFornecedorScript_finalizarCotacao() {
+    if (!PortalFornecedorScript_elSaveButton || !PortalFornecedorScript_pageToken) return;
+    const allFatorInputs = PortalFornecedorScript_elProductTableBody.querySelectorAll('input[data-column="fator"]');
+    let temFatorVazioOuInvalido = false;
+    allFatorInputs.forEach(input => {
+        const fatorVal = input.value.trim().replace(',', '.');
+        if (fatorVal === '' || isNaN(Number(fatorVal)) || Number(fatorVal) <= 0) {
+            temFatorVazioOuInvalido = true;
+            input.classList.add('is-invalid'); 
+        } else {
+            input.classList.remove('is-invalid');
+        }
+    });
+
+    if (temFatorVazioOuInvalido) {
+        PortalFornecedorScript_displayStatus("Por favor, preencha todos os campos 'Fator' com um número positivo antes de finalizar.", "danger", 0);
+        return;
+    }
+    
+    PortalFornecedorScript_displayStatus("Finalizando cotação, aguarde...", "info", 0);
+    PortalFornecedorScript_elSaveButton.disabled = true;
+    PortalFornecedorScript_elSaveButton.textContent = "Enviando...";
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response && response.success) {
+                PortalFornecedorScript_displayStatus(response.message || "Cotação enviada com sucesso! Obrigado. Você já pode fechar esta página.", "success", 0);
+                PortalFornecedorScript_elProductTableBody.querySelectorAll('.editable-input').forEach(input => input.disabled = true);
+                PortalFornecedorScript_elSaveButton.textContent = "Cotação Enviada";
+            } else {
+                PortalFornecedorScript_displayStatus(response.message || "Erro ao finalizar a cotação. Tente novamente.", "danger", 0);
+                PortalFornecedorScript_elSaveButton.disabled = false;
+                PortalFornecedorScript_elSaveButton.innerHTML = `
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16" style="margin-right: 5px; vertical-align: text-bottom;">
+                    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+                  </svg>
+                  Finalizar e Enviar Cotação`;
+            }
+        })
+        .withFailureHandler(function(error) {
+            PortalFornecedorScript_displayStatus(`Erro de comunicação ao finalizar: ${error.message}. Verifique sua conexão e tente novamente.`, "danger", 0);
+            PortalFornecedorScript_elSaveButton.disabled = false;
+            PortalFornecedorScript_elSaveButton.innerHTML = `
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16" style="margin-right: 5px; vertical-align: text-bottom;">
+                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
+              </svg>
+              Finalizar e Enviar Cotação`;
+        })
+        .PortalController_finalizarCotacaoFornecedor(PortalFornecedorScript_pageToken, PortalFornecedorScript_idCotacaoGlobal);
+  }
+  window.PortalFornecedorScript_finalizarCotacao = PortalFornecedorScript_finalizarCotacao; 
+
+  function PortalFornecedorScript_displayStatus(message, type, duration = 5000, inputElement = null) {
+    if (!PortalFornecedorScript_elStatusMessage) return;
+    PortalFornecedorScript_elStatusMessage.className = 'alert'; 
+    PortalFornecedorScript_elStatusMessage.classList.add(`status-${type}`); 
+    PortalFornecedorScript_elStatusMessage.textContent = message;
+    PortalFornecedorScript_elStatusMessage.style.whiteSpace = (type === 'danger' || message.includes('\n')) ? 'pre-wrap' : 'normal';
+    PortalFornecedorScript_elStatusMessage.style.display = 'block';
+    
+    if (inputElement) {
+        inputElement.classList.remove('is-valid', 'is-invalid'); 
+        if (type === 'success') {
+            inputElement.classList.add('is-valid');
+            setTimeout(() => inputElement.classList.remove('is-valid'), 2000);
+        } else if (type === 'danger') {
+            inputElement.classList.add('is-invalid');
+        }
+    }
+    
+    if (duration > 0) {
+        setTimeout(() => {
+            if (PortalFornecedorScript_elStatusMessage.textContent === message) { 
+                 PortalFornecedorScript_elStatusMessage.style.display = 'none';
+            }
+        }, duration);
+    }
+  }
+  
+} // Fim de initPortalFornecedorScript
+
+if (typeof window.initPortalFornecedorScriptGlobalFlag === 'undefined') {
+    window.initPortalFornecedorScriptGlobalFlag = true; 
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPortalFornecedorScript);
+    } else {
+        initPortalFornecedorScript();
+    }
+}
+</script>

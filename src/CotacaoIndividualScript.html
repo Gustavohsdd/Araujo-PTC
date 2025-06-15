@@ -1,0 +1,1017 @@
+<script>
+//####################################################################################################
+// MÓDULO: COTACAO INDIVIDUAL (CLIENT-SIDE PRINCIPAL) - CotacaoIndividualScript.html
+// Funções principais da página de Cotação Individual, excluindo lógicas de módulos específicos.
+//####################################################################################################
+
+//----------------------------------------------------------------------------------------------------
+// DECLARAÇÕES GLOBAIS (acessíveis por este script e por outros módulos como EtapasScript.html, FuncoesScript.html)
+//----------------------------------------------------------------------------------------------------
+
+// IDs dos Elementos do DOM
+const CotacaoIndividualScript_ID_SEARCH_INPUT_TOP = 'CotacaoIndividualScript_searchInput_Top';
+const CotacaoIndividualScript_ID_TITULO_PAGINA = 'CotacaoIndividualScript_tituloPagina';
+const CotacaoIndividualScript_ID_COTACAO_EXIBIDO = 'CotacaoIndividualScript_idCotacaoExibido';
+const CotacaoIndividualScript_ID_DATA_ABERTURA_EXIBIDA = 'CotacaoIndividualScript_dataAberturaExibida';
+const CotacaoIndividualScript_ID_MENSAGEM_FEEDBACK = 'CotacaoIndividualScript_mensagemFeedback';
+const CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER = 'CotacaoIndividualScript_tableContainer';
+const CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO = 'CotacaoIndividualScript_tabelaProdutosCotacao';
+const CotacaoIndividualScript_ID_TABELA_LOADING_MSG_CELL = 'CotacaoIndividualScript_tabelaLoadingMsg';
+const CotacaoIndividualScript_ID_PAGE_LOADING_OVERLAY = 'CotacaoIndividualScript_pageLoadingOverlay';
+
+const CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER = 'CotacaoIndividualScript_retirarProdutosContainer';
+const CotacaoIndividualScript_ID_ACORDEAO_CRIT1 = 'CotacaoIndividualScript_acordeaoCrit1';
+const CotacaoIndividualScript_ID_ACORDEAO_CRIT2 = 'CotacaoIndividualScript_acordeaoCrit2';
+const CotacaoIndividualScript_ID_ACORDEAO_CRIT3 = 'CotacaoIndividualScript_acordeaoCrit3';
+const CotacaoIndividualScript_ID_BTN_EXCLUIR_SELECIONADOS_RETIRAR = 'CotacaoIndividualScript_btnExcluirSelecionados';
+
+const CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE = 'EtapasScript_btnSalvarContagemEstoque';
+
+const CotacaoIndividualScript_ID_MENU_ETAPAS_BTN = 'CotacaoIndividualScript_menuEtapasBtn';
+const CotacaoIndividualScript_ID_MENU_ETAPAS_DROPDOWN = 'CotacaoIndividualScript_menuEtapasDropdown';
+const CotacaoIndividualScript_ID_MENU_RELATORIOS_BTN = 'CotacaoIndividualScript_menuRelatoriosBtn';
+const CotacaoIndividualScript_ID_MENU_RELATORIOS_DROPDOWN = 'CotacaoIndividualScript_menuRelatoriosDropdown';
+const CotacaoIndividualScript_ID_MENU_FUNCOES_BTN = 'CotacaoIndividualScript_menuFuncoesBtn';
+const CotacaoIndividualScript_ID_MENU_FUNCOES_DROPDOWN = 'CotacaoIndividualScript_menuFuncoesDropdown';
+
+const CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER = 'CotacaoIndividualScript_gerenciarCotacoesPortalContainer';
+const CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_BODY = 'CotacaoIndividualScript_gerenciarCotacoesPortalBody';
+
+// Variáveis Globais da Página
+let CotacaoIndividualScript_cotacaoIdAtual = null;
+let CotacaoIndividualScript_modoPagina = 'editar';
+let CotacaoIndividualScript_cabecalhosVisiveis = [];
+let CABECALHOS_COTACOES_TODOS = []; // Será populado pelo servidor
+let CotacaoIndividualScript_dadosOriginaisCotacao = [];
+let CotacaoIndividualScript_modoEtapaAtual = null;
+
+const CotacaoIndividualScript_COLUNAS_A_OCULTAR_DEFAULT = [
+  "ID da Cotação", "Data Abertura", "Produto", "Status da Cotação",
+  "Estoque Mínimo", "Estoque Atual", "NCM", "CST", "CFOP", "Categoria"
+];
+let CotacaoIndividualScript_colunasAOcultar = CotacaoIndividualScript_COLUNAS_A_OCULTAR_DEFAULT;
+
+let CotacaoIndividualScript_COLUNAS_PARA_ABA_SUBPRODUTOS_CLIENTE = [];
+
+const CotacaoIndividualScript_MAPA_CORES_COLUNAS = {
+  "SubProduto": "bg-col-amarelo", "Categoria": "bg-col-amarelo", "Fornecedor": "bg-col-amarelo",
+  "Tamanho": "bg-col-laranja", "UN": "bg-col-laranja", "Fator": "bg-col-laranja",
+  "Preço": "bg-col-azul-cot", "Preço por Fator": "bg-col-azul-cot",
+  "Comprar": "bg-col-verde", "Valor Total": "bg-col-verde", "Economia em Cotação": "bg-col-verde",
+  "Empresa Faturada": "bg-col-roxo-leve", "Condição de Pagamento": "bg-col-roxo-leve"
+};
+
+//----------------------------------------------------------------------------------------------------
+// FUNÇÕES UTILITÁRIAS GLOBAIS DA PÁGINA (acessíveis por outros módulos)
+//----------------------------------------------------------------------------------------------------
+window.CotacaoIndividualScript_getClasseCorColuna = function(nomeCabecalho) {
+  return CotacaoIndividualScript_MAPA_CORES_COLUNAS[nomeCabecalho] || "";
+}
+
+window.CotacaoIndividualScript_mostrarLoadingOverlay = function(mostrar = true, mensagem = "Processando...") {
+  const overlay = document.getElementById(CotacaoIndividualScript_ID_PAGE_LOADING_OVERLAY);
+  if (overlay) {
+    overlay.classList.toggle('hidden', !mostrar);
+    const msgElement = overlay.querySelector('.loading-message-text');
+    if (msgElement) msgElement.textContent = mensagem;
+  }
+}
+
+window.CotacaoIndividualScript_exibirFeedback = function(mensagem, isError = false, duracao = 5000) {
+  const feedbackDiv = document.getElementById(CotacaoIndividualScript_ID_MENSAGEM_FEEDBACK);
+  if (feedbackDiv) {
+    feedbackDiv.textContent = mensagem;
+    feedbackDiv.className = `feedback-message ${isError ? 'feedback-error' : 'feedback-success'}`;
+    feedbackDiv.classList.remove('hidden');
+    if (duracao > 0) {
+      setTimeout(() => {
+        // Verifica se a mensagem ainda é a mesma para evitar esconder um feedback novo
+        if (feedbackDiv.textContent === mensagem) {
+          feedbackDiv.classList.add('hidden');
+          feedbackDiv.textContent = '';
+        }
+      }, duracao);
+    }
+  }
+}
+
+window.CotacaoIndividualScript_ocultarFeedback = function() {
+  const feedbackDiv = document.getElementById(CotacaoIndividualScript_ID_MENSAGEM_FEEDBACK);
+  if (feedbackDiv) {
+    feedbackDiv.classList.add('hidden');
+    feedbackDiv.textContent = '';
+  }
+}
+
+window.CotacaoIndividualScript_obterParametrosUrl = function() {
+  return new Promise((resolve, reject) => {
+    try {
+      google.script.url.getLocation(function(location) {
+        const params = {};
+        if (location) {
+          if (location.parameter) Object.assign(params, location.parameter);
+          if (location.parameters) {
+            for (const key in location.parameters) {
+              if (location.parameters[key] && location.parameters[key].length === 1) params[key] = location.parameters[key][0];
+              else if (location.parameters[key]) params[key] = location.parameters[key];
+            }
+          }
+          resolve(params);
+        } else {
+          console.error("CotacaoIndividualScript_obterParametrosUrl: Objeto location foi null ou undefined.");
+          resolve({});
+        }
+      });
+    } catch (e) {
+      console.error("CotacaoIndividualScript_obterParametrosUrl: Erro ao chamar google.script.url.getLocation:", e);
+      reject(e);
+    }
+  });
+}
+
+window.CotacaoIndividualScript_parsearStringEstoqueComprar = function(textoEstoqueComprar) {
+  const resultado = { estoqueAtual: null, comprar: null };
+  if (!textoEstoqueComprar || typeof textoEstoqueComprar !== 'string' || textoEstoqueComprar.trim() === "") {
+      return resultado;
+  }
+  const matchEstoque = textoEstoqueComprar.match(/Estoque Atual:\s*([0-9.,]+(?:[.,]\d+)?|N\/A)/i);
+  if (matchEstoque && matchEstoque[1]) {
+      if (matchEstoque[1].toUpperCase() === 'N/A') {
+          resultado.estoqueAtual = null;
+      } else {
+          const num = parseFloat(String(matchEstoque[1]).replace(",", "."));
+          resultado.estoqueAtual = isNaN(num) ? null : num;
+      }
+  }
+  const matchComprar = textoEstoqueComprar.match(/Comprar:\s*([0-9.,]+(?:[.,]\d+)?|N\/A)/i);
+  if (matchComprar && matchComprar[1]) {
+      if (matchComprar[1].toUpperCase() === 'N/A') {
+          resultado.comprar = null;
+      } else {
+          const num = parseFloat(String(matchComprar[1]).replace(",", "."));
+          resultado.comprar = isNaN(num) ? null : num;
+      }
+  }
+  return resultado;
+}
+
+/**
+ * Remove acentos de uma string.
+ * @param {string} text O texto para normalizar.
+ * @return {string} O texto sem acentos.
+ */
+function CotacaoIndividualScript_removerAcentos(text) {
+  if (text === null || text === undefined) return "";
+  return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/**
+ * Transforma uma célula (td) em um campo de select para edição.
+ * @param {Event} event - O evento de clique.
+ * @param {string[]} opcoes - Um array de strings com as opções para o select.
+ */
+function CotacaoIndividualScript_transformarCelulaEmSelect(event, opcoes) {
+    const td = event.currentTarget;
+    if (td.querySelector('select')) return; // Já está em modo de edição
+
+    const valorOriginal = td.dataset.valorOriginal || '';
+    const select = document.createElement('select');
+    select.className = 'inline-edit-input'; // Reusa a classe do input
+
+    // Adiciona uma opção vazia no início
+    const optionVazia = document.createElement('option');
+    optionVazia.value = "";
+    optionVazia.textContent = "Selecione...";
+    select.appendChild(optionVazia);
+
+    // Adiciona as empresas da lista
+    opcoes.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt;
+        option.textContent = opt;
+        if (opt === valorOriginal) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+
+    td.innerHTML = '';
+    td.appendChild(select);
+    select.style.width = '98%';
+    select.style.boxSizing = 'border-box';
+    select.focus();
+
+    const salvarAlteracao = () => {
+         const novoValor = select.value;
+         const tr = td.closest('tr');
+         const coluna = td.dataset.coluna;
+
+         // Se o valor não mudou, apenas restaura
+         if (novoValor === valorOriginal) {
+             td.textContent = valorOriginal;
+             return;
+         }
+         // Lógica de salvar (chama a mesma função que o input)
+         CotacaoIndividualScript_salvarEdicaoInline(select);
+    };
+
+    select.addEventListener('blur', salvarAlteracao);
+    select.addEventListener('change', salvarAlteracao); // Salva ao mudar a opção
+    select.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            td.textContent = valorOriginal; // Restaura
+        }
+    });
+}
+
+//----------------------------------------------------------------------------------------------------
+// LÓGICA DE EDIÇÃO INLINE UNIVERSAL
+//----------------------------------------------------------------------------------------------------
+
+/**
+ * Transforma uma célula (td) em um campo de input para edição.
+ * @param {Event} event - O evento de clique.
+ */
+function CotacaoIndividualScript_transformarCelulaEmInput(event) {
+    const td = event.currentTarget;
+    if (td.querySelector('input')) return; // Já está em modo de edição
+
+    const valorOriginal = td.dataset.valorOriginal || '';
+    const coluna = td.dataset.coluna;
+    const tipoInput = ["Fator", "Preço", "Comprar"].includes(coluna) ? 'number' : 'text';
+
+    td.innerHTML = `<input type="${tipoInput}" step="any" class="inline-edit-input" value="${valorOriginal}" />`;
+    const input = td.querySelector('input');
+    input.style.width = '95%';
+    input.style.boxSizing = 'border-box';
+    input.focus();
+    input.select();
+
+    input.addEventListener('blur', () => CotacaoIndividualScript_salvarEdicaoInline(input));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') {
+            td.textContent = valorOriginal; // Restaura o valor original sem salvar
+        }
+    });
+}
+
+/**
+ * Salva o valor do input/select inline, atualiza a UI e chama o servidor.
+ */
+function CotacaoIndividualScript_salvarEdicaoInline(element) {
+    const td = element.parentElement;
+    const novoValorStr = element.value;
+    const valorOriginalStr = td.dataset.valorOriginal || '';
+
+    if (novoValorStr === valorOriginalStr) {
+        td.textContent = valorOriginalStr;
+        return;
+    }
+
+    const tr = td.closest('tr');
+    const coluna = td.dataset.coluna;
+    const identificadores = {
+        Produto: tr.dataset.produto,
+        SubProdutoChave: tr.dataset.subprodutoOriginalPersistido,
+        Fornecedor: tr.dataset.fornecedor
+    };
+
+    td.textContent = novoValorStr;
+    td.dataset.valorOriginal = novoValorStr;
+
+    // Se a coluna editada afeta cálculos, atualiza o grupo
+    if (["Fator", "Preço", "Comprar"].includes(coluna)) {
+        CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(tr);
+    }
+    
+    // Se estiver no modo de faturamento, atualiza os dashboards
+    if (CotacaoIndividualScript_modoEtapaAtual === 'definir_empresa') {
+        if (typeof EtapasScript_atualizarDashboardFornecedor === 'function') {
+            const fornecedor = tr.dataset.fornecedor;
+            EtapasScript_atualizarDashboardFornecedor(fornecedor);
+        }
+        if (typeof EtapasScript_atualizarDashboardGlobal === 'function') {
+            EtapasScript_atualizarDashboardGlobal();
+        }
+    }
+
+    // Envia a alteração para o servidor
+    google.script.run
+        .withSuccessHandler(response => {
+            if (response && response.success) {
+                console.log(`Salvo: ${coluna} = ${novoValorStr}`);
+                
+                // INÍCIO DA MODIFICAÇÃO: Atualizar o estado local
+                // Esta é a correção principal. Ela encontra o item correspondente no array de dados
+                // da página e atualiza o valor, para que ele seja "lembrado".
+                const itemOriginal = CotacaoIndividualScript_dadosOriginaisCotacao.find(item =>
+                    item.Produto === identificadores.Produto &&
+                    item._subProdutoOriginalPersistido === identificadores.SubProdutoChave &&
+                    item.Fornecedor === identificadores.Fornecedor
+                );
+                if (itemOriginal) {
+                    itemOriginal[coluna] = novoValorStr;
+                    console.log('Estado local atualizado para a coluna:', coluna);
+                }
+                // FIM DA MODIFICAÇÃO
+
+                if (response.novoSubProdutoNomeSeAlterado) {
+                    tr.dataset.subprodutoOriginalPersistido = response.novoSubProdutoNomeSeAlterado;
+                }
+                if (response.valoresCalculados) {
+                    const celulaValorTotal = tr.querySelector('td[data-coluna="Valor Total"]');
+                    if (celulaValorTotal) celulaValorTotal.textContent = response.valoresCalculados.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    
+                    const celulaPrecoFator = tr.querySelector('td[data-coluna="Preço por Fator"]');
+                    if (celulaPrecoFator) celulaPrecoFator.textContent = response.valoresCalculados.precoPorFator.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                }
+            } else {
+                console.error("Falha ao salvar:", response.message);
+                td.textContent = valorOriginalStr;
+                td.dataset.valorOriginal = valorOriginalStr;
+                td.style.backgroundColor = '#FECACA';
+            }
+        })
+        .withFailureHandler(err => {
+            console.error("Erro de comunicação:", err);
+            td.textContent = valorOriginalStr;
+            td.dataset.valorOriginal = valorOriginalStr;
+            td.style.backgroundColor = '#FECACA';
+        })
+        .CotacaoIndividualController_salvarEdicaoCelulaIndividual(CotacaoIndividualScript_cotacaoIdAtual, identificadores, coluna, novoValorStr);
+}
+
+/**
+ * Atualiza todas as colunas calculadas para todas as linhas do mesmo subproduto.
+ * @param {HTMLTableRowElement} trEditada - A linha da tabela que disparou a modificação.
+ */
+function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
+    const subprodutoOriginal = trEditada.dataset.subprodutoOriginalPersistido;
+    if (!subprodutoOriginal) return;
+    
+    const tbody = trEditada.parentElement;
+    const todasLinhasDoGrupo = tbody.querySelectorAll(`tr[data-subproduto-original-persistido="${subprodutoOriginal}"]`);
+    
+    const lerValorDaLinha = (tr, coluna) => {
+        const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
+        return cell ? parseFloat(cell.textContent.replace(',', '.')) || 0 : 0;
+    };
+    
+    const escreverValorNaLinha = (tr, coluna, valor, casasDecimais = 2) => {
+        const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
+        if (cell) cell.textContent = valor.toFixed(casasDecimais).replace('.',',');
+    };
+
+    // 1ª Passagem: Encontrar o Preço por Fator máximo no grupo
+    let maxPrecoPorFator = 0;
+    todasLinhasDoGrupo.forEach(tr => {
+        const preco = lerValorDaLinha(tr, "Preço");
+        const fator = lerValorDaLinha(tr, "Fator");
+        const precoPorFator = fator > 0 ? (preco / fator) : 0;
+        if (precoPorFator > maxPrecoPorFator) {
+            maxPrecoPorFator = precoPorFator;
+        }
+    });
+
+    // 2ª Passagem: Atualizar todas as linhas do grupo com os cálculos corretos
+    todasLinhasDoGrupo.forEach(tr => {
+        const preco = lerValorDaLinha(tr, "Preço");
+        const fator = lerValorDaLinha(tr, "Fator");
+        const comprar = lerValorDaLinha(tr, "Comprar");
+
+        // Atualiza 'Preço por Fator'
+        const precoPorFator = fator > 0 ? (preco / fator) : 0;
+        escreverValorNaLinha(tr, "Preço por Fator", precoPorFator, 4);
+
+        // Atualiza 'Valor Total'
+        const valorTotal = preco * comprar;
+        escreverValorNaLinha(tr, "Valor Total", valorTotal, 2);
+
+        // Atualiza 'Economia em Cotação'
+        let economia = 0;
+        if (comprar > 0 && maxPrecoPorFator > 0) {
+            economia = (maxPrecoPorFator - precoPorFator) * comprar;
+        }
+        escreverValorNaLinha(tr, "Economia em Cotação", economia, 2);
+    });
+}
+
+//----------------------------------------------------------------------------------------------------
+// LÓGICA DE BUSCA
+//----------------------------------------------------------------------------------------------------
+function CotacaoIndividualScript_filtrarTabelaPrincipal() {
+    const termoBusca = document.getElementById(CotacaoIndividualScript_ID_SEARCH_INPUT_TOP).value;
+    const termoNormalizado = CotacaoIndividualScript_removerAcentos(termoBusca.toLowerCase());
+    const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
+
+    if (!tbody) return;
+
+    const todasLinhasCategoria = Array.from(tbody.querySelectorAll('.categoria-accordion-header-row'));
+    const todasLinhasProdutoPrincipal = Array.from(tbody.querySelectorAll('.produto-group-separator-row'));
+    const todasLinhasSubProduto = Array.from(tbody.querySelectorAll('.sub-produto-row'));
+
+    todasLinhasSubProduto.forEach(row => {
+        if (row.classList.contains('hidden-by-etapa')) { // Não filtra se estiver em um modo de etapa que oculta subprodutos
+            row.classList.remove('hidden-by-search'); // Garante que não fique oculto pela busca se a etapa o mostra
+            return;
+        }
+
+        let textoLinha = "";
+        CotacaoIndividualScript_cabecalhosVisiveis.forEach(cabecalho => {
+            const cell = row.querySelector(`td[data-coluna="${cabecalho}"]`);
+            if (cell) {
+                textoLinha += (cell.textContent || "") + " ";
+            }
+        });
+        const nomeProdutoPrincipal = row.dataset.produto || "";
+        const categoriaProduto = row.dataset.categoria || "";
+        textoLinha += nomeProdutoPrincipal + " " + categoriaProduto;
+
+        const textoLinhaNormalizado = CotacaoIndividualScript_removerAcentos(textoLinha.toLowerCase());
+        const deveEsconder = !(termoNormalizado === "" || textoLinhaNormalizado.includes(termoNormalizado));
+        row.classList.toggle('hidden-by-search', deveEsconder);
+    });
+
+    todasLinhasProdutoPrincipal.forEach(linhaProdutoPrincipal => {
+        if (linhaProdutoPrincipal.classList.contains('hidden-by-etapa')) {
+            linhaProdutoPrincipal.classList.remove('hidden-by-search');
+            return;
+        }
+        const nomeProduto = linhaProdutoPrincipal.dataset.produtoNome;
+        const subProdutosVisiveisDestePrincipal = todasLinhasSubProduto.some(subRow => 
+            subRow.dataset.produto === nomeProduto && 
+            !subRow.classList.contains('hidden-by-search') &&
+            !subRow.classList.contains('hidden-by-etapa')
+        );
+        const deveEsconder = !(subProdutosVisiveisDestePrincipal || termoNormalizado === "");
+        linhaProdutoPrincipal.classList.toggle('hidden-by-search', deveEsconder);
+    });
+
+    todasLinhasCategoria.forEach(linhaCategoria => {
+        if (linhaCategoria.classList.contains('hidden-by-etapa')) { // Embora categorias não devam ser hidden-by-etapa diretamente
+            linhaCategoria.classList.remove('hidden-by-search');
+            return;
+        }
+        const categoriaTargetClass = linhaCategoria.dataset.targetClass;
+        const itensVisiveisNestaCategoria = Array.from(tbody.querySelectorAll(`.${categoriaTargetClass}`)).some(itemRow =>
+            !itemRow.classList.contains('hidden-by-search') && 
+            !itemRow.classList.contains('hidden-by-etapa') &&
+            (itemRow.classList.contains('produto-group-separator-row') || itemRow.classList.contains('sub-produto-row'))
+        );
+        const deveEsconder = !(itensVisiveisNestaCategoria || termoNormalizado === "");
+        linhaCategoria.classList.toggle('hidden-by-search', deveEsconder);
+
+        const accordionContentRows = tbody.querySelectorAll(`.${categoriaTargetClass}.category-content-row`);
+        const icon = linhaCategoria.querySelector('.categoria-accordion-icon');
+
+        if (termoNormalizado !== "" && itensVisiveisNestaCategoria && !linhaCategoria.classList.contains('expanded')) {
+            linhaCategoria.classList.add('expanded');
+            if(icon) icon.style.transform = 'rotate(90deg)';
+            accordionContentRows.forEach(acr => {
+                 if (!acr.classList.contains('hidden-by-search') && !acr.classList.contains('hidden-by-etapa')) {
+                      acr.classList.remove('hidden');
+                 }
+            });
+        } else if (termoNormalizado === "" && linhaCategoria.classList.contains('expanded')) {
+            // Ao limpar a busca, não recolhemos mais automaticamente, para manter o estado do usuário.
+            // Apenas tratamos o caso em que a categoria inteira é escondida pela busca.
+            if (deveEsconder) { // Se a categoria inteira for escondida, também remove 'expanded'
+                 linhaCategoria.classList.remove('expanded');
+                 if(icon) icon.style.transform = 'rotate(0deg)';
+                 accordionContentRows.forEach(acr => acr.classList.add('hidden'));
+            }
+        }
+    });
+}
+
+
+//----------------------------------------------------------------------------------------------------
+// FUNÇÃO DE INICIALIZAÇÃO PRINCIPAL
+//----------------------------------------------------------------------------------------------------
+  function renderizarCabecalhoTabelaPrincipalInterno() {
+    const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
+    if (!tabela) { console.error("Tabela principal não encontrada."); return; }
+    const thead = tabela.querySelector('thead');
+    if (!thead) { console.error("Thead da tabela principal não encontrado."); return; }
+    thead.innerHTML = '';
+
+    if (!CotacaoIndividualScript_cabecalhosVisiveis || CotacaoIndividualScript_cabecalhosVisiveis.length === 0) {
+        const tr = thead.insertRow();
+        const th = tr.insertCell();
+        th.textContent = "Nenhuma coluna para exibir";
+        return;
+    }
+    const tr = thead.insertRow();
+    CotacaoIndividualScript_cabecalhosVisiveis.forEach(textoCabecalho => {
+      const th = document.createElement('th');
+      th.textContent = textoCabecalho;
+      tr.appendChild(th);
+    });
+  }
+
+function initCotacaoIndividualScript() {
+  console.log("initCotacaoIndividualScript: Iniciando configuração da página.");
+
+  function definirCabecalhosVisiveisInterno() {
+    if (typeof COLUNAS_A_OCULTAR !== 'undefined' && Array.isArray(COLUNAS_A_OCULTAR)) {
+        CotacaoIndividualScript_colunasAOcultar = COLUNAS_A_OCULTAR;
+    } else {
+        CotacaoIndividualScript_colunasAOcultar = CotacaoIndividualScript_COLUNAS_A_OCULTAR_DEFAULT;
+    }
+    if (CABECALHOS_COTACOES_TODOS && CABECALHOS_COTACOES_TODOS.length > 0) {
+        CotacaoIndividualScript_cabecalhosVisiveis = CABECALHOS_COTACOES_TODOS.filter(
+            header => !CotacaoIndividualScript_colunasAOcultar.includes(header)
+        );
+    } else {
+        CotacaoIndividualScript_cabecalhosVisiveis = [];
+    }
+  }
+  
+  function agruparEClassificarProdutosInterno(todosOsProdutosDaCotacao) {
+    if (!todosOsProdutosDaCotacao || todosOsProdutosDaCotacao.length === 0) return [];
+    const gruposTemp = {};
+    todosOsProdutosDaCotacao.forEach(linhaProduto => {
+        const nomeProdutoPrincipal = linhaProduto["Produto"];
+        const categoriaProduto = linhaProduto["Categoria"] || "Sem Categoria";
+        const chaveGrupo = `${categoriaProduto}|${nomeProdutoPrincipal}`;
+        
+        if (!gruposTemp[chaveGrupo]) {
+            gruposTemp[chaveGrupo] = {
+                produtoNome: nomeProdutoPrincipal,
+                categoria: categoriaProduto,
+                subProdutos: [],
+                estoqueMinimoProdutoPrincipal: linhaProduto.hasOwnProperty("EstoqueMinimoProdutoPrincipal") ? linhaProduto["EstoqueMinimoProdutoPrincipal"] : null
+            };
+        }
+        gruposTemp[chaveGrupo].subProdutos.push(linhaProduto);
+    });
+    let arrayDeGrupos = Object.values(gruposTemp);
+    arrayDeGrupos.sort((a, b) => {
+        const catA = String(a.categoria).toLowerCase(); const catB = String(b.categoria).toLowerCase();
+        if (catA < catB) return -1; if (catA > catB) return 1;
+        const nomeA = String(a.produtoNome).toLowerCase(); const nomeB = String(b.produtoNome).toLowerCase();
+        if (nomeA < nomeB) return -1; if (nomeA > nomeB) return 1;
+        return 0;
+    });
+    arrayDeGrupos.forEach(grupo => {
+        grupo.subProdutos.sort((a, b) => {
+            const subNomeAOriginal = String(a["_subProdutoOriginalPersistido"] || a["SubProduto"] || "").toLowerCase();
+            const subNomeBOriginal = String(b["_subProdutoOriginalPersistido"] || b["SubProduto"] || "").toLowerCase();
+            if (subNomeAOriginal < subNomeBOriginal) return -1;
+            if (subNomeAOriginal > subNomeBOriginal) return 1;
+            return 0;
+        });
+    });
+    return arrayDeGrupos;
+  }
+
+    window.CotacaoIndividualScript_restaurarVisualizacaoPadrao = function(forcarRenderizacao = false) {
+    // LIMPA O MODO DE ETAPA ATUAL
+    CotacaoIndividualScript_modoEtapaAtual = null;
+
+    // 1. CHAMA A FUNÇÃO PARA RENDERIZAR O CABEÇALHO PADRÃO (ESSA É A CORREÇÃO PRINCIPAL)
+    renderizarCabecalhoTabelaPrincipalInterno();
+
+    // 2. MOSTRA/ESCONDE OS CONTAINERS CORRETOS
+    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
+    if (document.getElementById('EtapasScript_realizarCotacaoContainer')) {
+      document.getElementById('EtapasScript_realizarCotacaoContainer').classList.add('hidden');
+    }
+    // INÍCIO DA MODIFICAÇÃO
+    if (document.getElementById('EtapasScript_definirCondicoesPagamentoContainer')) {
+      document.getElementById('EtapasScript_definirCondicoesPagamentoContainer').classList.add('hidden');
+    }
+    // FIM DA MODIFICAÇÃO
+
+    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
+    if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
+
+    // LIMPA O CAMPO DE BUSCA
+    const searchInputTop = document.getElementById(CotacaoIndividualScript_ID_SEARCH_INPUT_TOP);
+      if(searchInputTop && searchInputTop.value !== "") {
+      searchInputTop.value = "";
+    }
+
+    // 3. RENDERIZA O CORPO DA TABELA COM OS DADOS ORIGINAIS
+    const gruposDeProdutos = agruparEClassificarProdutosInterno(CotacaoIndividualScript_dadosOriginaisCotacao);
+    renderizarGruposDeProdutosInterno(gruposDeProdutos); 
+
+    // CHAMA O FILTRO UMA VEZ PARA GARANTIR QUE OS ACORDEÕES ESTEJAM NO ESTADO CORRETO
+    CotacaoIndividualScript_filtrarTabelaPrincipal();
+  }
+
+  function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
+      const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
+      if (!tabela) { console.error("Tabela não encontrada."); return; }
+      const tbody = tabela.querySelector('tbody');
+      if (!tbody) { console.error("Tbody não encontrado."); return; }
+      tbody.innerHTML = '';
+
+      if (!gruposDeProdutos || gruposDeProdutos.length === 0) {
+          const tr = tbody.insertRow();
+          const td = tr.insertCell();
+          td.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
+          td.className = 'text-center p-8 text-gray-500';
+          td.textContent = 'Nenhum produto agrupado para esta cotação.';
+          return;
+      }
+      let categoriaAtualRenderizada = null;
+
+      const colunasEditaveis = ["SubProduto", "Tamanho", "UN", "Fator", "Preço", "Comprar"];
+
+      gruposDeProdutos.forEach((grupo) => {
+          const categoriaSanitizedParaClasse = String(grupo.categoria).replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || 'sem-categoria';
+          const categoriaTargetClass = `content-for-category-${categoriaSanitizedParaClasse}`;
+
+          if (grupo.categoria !== categoriaAtualRenderizada) {
+              const categoriaRow = tbody.insertRow();
+              categoriaRow.className = 'categoria-accordion-header-row';
+              categoriaRow.dataset.targetClass = categoriaTargetClass;
+              categoriaRow.dataset.categoriaNome = grupo.categoria;
+
+              const categoriaCell = categoriaRow.insertCell();
+              categoriaCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length > 0 ? CotacaoIndividualScript_cabecalhosVisiveis.length : 1;
+              const categoriaHeaderContent = document.createElement('div');
+              categoriaHeaderContent.className = 'categoria-header-content';
+              const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+              icon.setAttribute("class", "categoria-accordion-icon");
+              icon.setAttribute("viewBox", "0 0 20 20"); icon.setAttribute("fill", "currentColor");
+              icon.innerHTML = `<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />`;
+              categoriaHeaderContent.appendChild(icon);
+              const titleSpan = document.createElement('span');
+              titleSpan.textContent = `Categoria: ${grupo.categoria}`;
+              categoriaHeaderContent.appendChild(titleSpan);
+              categoriaCell.appendChild(categoriaHeaderContent);
+              categoriaRow.addEventListener('click', function() {
+                  this.classList.toggle('expanded');
+                  const isExpanded = this.classList.contains('expanded');
+                  if (icon) icon.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+                  const targetRows = tbody.querySelectorAll(`.${this.dataset.targetClass}`);
+                  targetRows.forEach(row => {
+                      if (!row.classList.contains('hidden-by-search') && !row.classList.contains('hidden-by-etapa')) {
+                          row.classList.toggle('hidden', !isExpanded);
+                      }
+                  });
+              });
+              categoriaAtualRenderizada = grupo.categoria;
+          }
+
+          const produtoSeparatorRow = tbody.insertRow();
+          produtoSeparatorRow.className = `produto-group-separator-row category-content-row ${categoriaTargetClass} hidden`;
+          produtoSeparatorRow.dataset.produtoNome = grupo.produtoNome;
+          produtoSeparatorRow.dataset.categoria = grupo.categoria;
+
+          const produtoCell = produtoSeparatorRow.insertCell();
+          produtoCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length > 0 ? CotacaoIndividualScript_cabecalhosVisiveis.length : 1;
+
+          if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
+              const estoqueMinProdutoPrincipal = (grupo.estoqueMinimoProdutoPrincipal !== undefined && grupo.estoqueMinimoProdutoPrincipal !== null) ? grupo.estoqueMinimoProdutoPrincipal : 'N/A';
+              produtoCell.textContent = `Produto: ${grupo.produtoNome} (Estoque Mínimo: ${estoqueMinProdutoPrincipal})`;
+          } else {
+              // Será preenchido por EtapasScript_ativarModoContagemEstoque
+          }
+
+          if (grupo.subProdutos && grupo.subProdutos.length > 0) {
+              grupo.subProdutos.forEach(subProduto => {
+                  const subRow = tbody.insertRow();
+                  subRow.dataset.subprodutoOriginalPersistido = subProduto["_subProdutoOriginalPersistido"] || subProduto["SubProduto"];
+                  subRow.dataset.produto = subProduto['Produto'];
+                  subRow.dataset.fornecedor = subProduto['Fornecedor'];
+                  subRow.dataset.subprodutoAtual = subProduto['SubProduto'];
+                  subRow.dataset.categoria = grupo.categoria;
+
+                  subRow.className = `sub-produto-row category-content-row ${categoriaTargetClass} hidden`;
+                  if (CotacaoIndividualScript_modoEtapaAtual === 'contagem_estoque') {
+                      subRow.classList.add('hidden-by-etapa');
+                  }
+
+                  CotacaoIndividualScript_cabecalhosVisiveis.forEach(cabecalhoVisivel => {
+                      const td = subRow.insertCell();
+                      const classeCor = CotacaoIndividualScript_getClasseCorColuna(cabecalhoVisivel);
+                      if (classeCor) td.classList.add(classeCor);
+                      let valor = subProduto[cabecalhoVisivel];
+                      let valorFormatado = (valor === null || valor === undefined) ? "" : valor;
+                      
+                      // Formatação específica para valores numéricos
+                      if (typeof valorFormatado === 'number') {
+                          if (cabecalhoVisivel === 'Preço por Fator') {
+                              valorFormatado = valorFormatado.toFixed(4).replace('.', ',');
+                          } else if (['Valor Total', 'Economia em Cotação'].includes(cabecalhoVisivel)) {
+                              valorFormatado = valorFormatado.toFixed(2).replace('.', ',');
+                          }
+                      }
+                      
+                      td.textContent = valorFormatado;
+                      td.dataset.coluna = cabecalhoVisivel;
+                      td.dataset.valorOriginal = (valor === null || valor === undefined) ? "" : valor;
+
+                      // Adiciona a classe e o listener para edição inline
+                      if (colunasEditaveis.includes(cabecalhoVisivel)) {
+                          td.classList.add('editable-price-cell'); // Reusa estilo do cursor
+                          td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
+                      }
+                  });
+              });
+          } else {
+              if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
+                  const noSubRow = tbody.insertRow();
+                  noSubRow.className = `sub-produto-row category-content-row ${categoriaTargetClass} hidden`;
+                  const td = noSubRow.insertCell();
+                  td.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length > 0 ? CotacaoIndividualScript_cabecalhosVisiveis.length : 1;
+                  td.className = 'text-center p-4 text-gray-500 italic';
+                  td.textContent = 'Nenhum subproduto para este item.';
+              }
+          }
+      });
+  }
+  
+  window.CotacaoIndividualScript_carregarDadosCotacao = async function(idCotacao) {
+    const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
+    if (tbody) {
+        tbody.innerHTML = `<tr><td id="${CotacaoIndividualScript_ID_TABELA_LOADING_MSG_CELL}" colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" class="text-center p-8 text-gray-500">
+                                <div class="flex justify-center items-center">
+                                    <svg class="custom-spinner" viewBox="0 0 50 50" style="width: 32px; height: 32px;"><circle cx="25" cy="25" r="20" fill="none" stroke="#D1D5DB" stroke-width="5"></circle><circle cx="25" cy="25" r="20" fill="none" stroke="#1D4ED8" stroke-width="5" stroke-linecap="round" stroke-dasharray="31.41592653589793, 125.66370614359172" stroke-dashoffset="0"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="1s" values="0 25 25;360 25 25" keyTimes="0;1"></animateTransform></circle></svg>
+                                    <span class="ml-3 text-gray-700">Carregando dados da cotação...</span>
+                                </div></td></tr>`;
+    }
+    return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(function(resposta) {
+            if (resposta && resposta.success) {
+              CotacaoIndividualScript_dadosOriginaisCotacao = (resposta.dados || []).map(item => {
+                item._subProdutoOriginalPersistido = item.SubProduto;
+                return item;
+              });
+              const gruposDeProdutos = agruparEClassificarProdutosInterno(CotacaoIndividualScript_dadosOriginaisCotacao);
+              renderizarGruposDeProdutosInterno(gruposDeProdutos);
+              
+              const spanIdCotacao = document.getElementById(CotacaoIndividualScript_ID_COTACAO_EXIBIDO);
+              if (spanIdCotacao) spanIdCotacao.textContent = idCotacao;
+
+              const dataAberturaContainer = document.getElementById(CotacaoIndividualScript_ID_DATA_ABERTURA_EXIBIDA);
+              if (dataAberturaContainer && CotacaoIndividualScript_dadosOriginaisCotacao.length > 0) {
+                  const primeiraLinha = CotacaoIndividualScript_dadosOriginaisCotacao[0];
+                  if (primeiraLinha && primeiraLinha['Data Abertura']) {
+                      try {
+                          const dataObj = new Date(primeiraLinha['Data Abertura']);
+                          if (!isNaN(dataObj.getTime())) {
+                              dataAberturaContainer.textContent = `Data de Abertura: ${dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+                          } else {
+                              dataAberturaContainer.textContent = `Data de Abertura: ${primeiraLinha['Data Abertura']}`;
+                          }
+                      } catch (e) {
+                          dataAberturaContainer.textContent = `Data de Abertura: ${primeiraLinha['Data Abertura']}`;
+                      }
+                  } else {
+                      dataAberturaContainer.textContent = '';
+                  }
+              }
+              resolve(); 
+            } else {
+              const msgErro = (resposta && resposta.message) ? resposta.message : "Falha ao carregar dados da cotação.";
+              CotacaoIndividualScript_exibirFeedback(msgErro, true);
+              if (tbody) tbody.innerHTML = `<tr><td colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" class="text-center p-8 text-red-500">${msgErro}</td></tr>`;
+              reject(new Error(msgErro)); 
+            }
+          })
+          .withFailureHandler(function(error) {
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao carregar cotação: " + error.message, true);
+            if (tbody) tbody.innerHTML = `<tr><td colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" class="text-center p-8 text-red-500">Erro de comunicação.</td></tr>`;
+            reject(error); 
+          })
+          .CotacaoIndividualController_obterDetalhesDaCotacao(idCotacao);
+    });
+  }
+
+function initDropdownsInterno() {
+    const dropdowns = [
+        { btnId: CotacaoIndividualScript_ID_MENU_ETAPAS_BTN, contentId: CotacaoIndividualScript_ID_MENU_ETAPAS_DROPDOWN },
+        { btnId: CotacaoIndividualScript_ID_MENU_RELATORIOS_BTN, contentId: CotacaoIndividualScript_ID_MENU_RELATORIOS_DROPDOWN },
+        { btnId: CotacaoIndividualScript_ID_MENU_FUNCOES_BTN, contentId: CotacaoIndividualScript_ID_MENU_FUNCOES_DROPDOWN }
+    ];
+
+    dropdowns.forEach(ddInfo => {
+        const btn = document.getElementById(ddInfo.btnId);
+        const content = document.getElementById(ddInfo.contentId);
+
+        if (btn && content) {
+            btn.addEventListener('click', function(event) {
+                event.stopPropagation();
+                document.querySelectorAll('.dropdown-menu-content.show').forEach(openDropdown => {
+                    if (openDropdown !== content) {
+                        openDropdown.classList.remove('show');
+                        const otherBtnId = openDropdown.id.replace('Dropdown', 'Btn');
+                        const otherBtn = document.getElementById(otherBtnId);
+                        if(otherBtn) otherBtn.classList.remove('open');
+                    }
+                });
+                content.classList.toggle('show');
+                btn.classList.toggle('open');
+                const icon = btn.querySelector('.dropdown-arrow');
+                if (icon) icon.style.transform = content.classList.contains('show') ? 'rotate(180deg)' : 'rotate(0deg)';
+            });
+            content.querySelectorAll('a').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const action = this.dataset.action;
+                    console.log("Menu item clicado:", action, "ID da Cotação:", CotacaoIndividualScript_cotacaoIdAtual);
+                    
+                    content.classList.remove('show');
+                    btn.classList.remove('open');
+                    const icon = btn.querySelector('.dropdown-arrow');
+                    if (icon) icon.style.transform = 'rotate(0deg)';
+
+                    const modoAnterior = CotacaoIndividualScript_modoEtapaAtual;
+                    const novoModoPotencial = action.startsWith('etapa_') ? action.substring(6) : (action.startsWith('funcao_') ? action.substring(7) : (action.startsWith('relatorio_') ? action.substring(10) : null));
+
+                    // Lógica para desativar o modo anterior se não for um relatório (que abre em nova guia)
+                    if (modoAnterior && !action.startsWith('relatorio_')) {
+                         if (novoModoPotencial && modoAnterior !== novoModoPotencial || !novoModoPotencial) {
+                            if (modoAnterior === 'contagem_estoque' && typeof EtapasScript_desativarModoContagemEstoque === 'function') EtapasScript_desativarModoContagemEstoque();
+                            else if (modoAnterior === 'retirar_produtos' && typeof EtapasScript_desativarModoRetirarProdutos === 'function') EtapasScript_desativarModoRetirarProdutos();
+                            else if (modoAnterior === 'gerenciar_cotacoes_portal' && typeof FuncoesScript_desativarModoGerenciarCotacoesPortal === 'function') FuncoesScript_desativarModoGerenciarCotacoesPortal();
+                            else if (modoAnterior === 'realizar_cotacao' && typeof EtapasScript_desativarModoRealizarCotacao === 'function') EtapasScript_desativarModoRealizarCotacao();
+                            else if (modoAnterior === 'definir_empresa' && typeof EtapasScript_desativarModoDefinirEmpresa === 'function') EtapasScript_desativarModoDefinirEmpresa();
+                            else if (modoAnterior === 'definir_condicoes_pagamento' && typeof EtapasScript_desativarModoDefinirCondicoesPagamento === 'function') EtapasScript_desativarModoDefinirCondicoesPagamento();
+                            else if (modoAnterior === 'pedido_direto' && typeof FuncoesScript_desativarModoPedidoDireto === 'function') FuncoesScript_desativarModoPedidoDireto();
+                        }
+                    }
+                    
+                    switch(action) {
+                        case 'etapa_contagem_estoque':
+                            if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque' && typeof EtapasScript_ativarModoContagemEstoque === 'function') EtapasScript_ativarModoContagemEstoque();
+                            break;
+                        case 'etapa_retirar_produtos':
+                            if (CotacaoIndividualScript_modoEtapaAtual !== 'retirar_produtos' && typeof EtapasScript_ativarModoRetirarProdutos === 'function') EtapasScript_ativarModoRetirarProdutos();
+                            break;
+                        case 'etapa_enviar_fornecedores':
+                            if (typeof EtapasScript_iniciarEnvioParaFornecedores === 'function') EtapasScript_iniciarEnvioParaFornecedores();
+                            break;
+                        case 'etapa_realizar_cotacao':
+                             if (CotacaoIndividualScript_modoEtapaAtual !== 'realizar_cotacao' && typeof EtapasScript_ativarModoRealizarCotacao === 'function') EtapasScript_ativarModoRealizarCotacao();
+                            break;
+                        case 'etapa_definir_empresa':
+                            if (CotacaoIndividualScript_modoEtapaAtual !== 'definir_empresa' && typeof EtapasScript_ativarModoDefinirEmpresa === 'function') EtapasScript_ativarModoDefinirEmpresa();
+                            break;
+                        case 'etapa_definir_condicoes_pagamento':
+                            if (CotacaoIndividualScript_modoEtapaAtual !== 'definir_condicoes_pagamento' && typeof EtapasScript_ativarModoDefinirCondicoesPagamento === 'function') EtapasScript_ativarModoDefinirCondicoesPagamento();
+                            break;
+                        case 'etapa_imprimir_pedidos':
+                             if (typeof EtapasScript_abrirPaginaImpressao === 'function') EtapasScript_abrirPaginaImpressao();
+                            break;
+                        case 'funcao_gerenciar_cotacoes':
+                            if (CotacaoIndividualScript_modoEtapaAtual !== 'gerenciar_cotacoes_portal' && typeof FuncoesScript_ativarModoGerenciarCotacoesPortal === 'function') FuncoesScript_ativarModoGerenciarCotacoesPortal();
+                            break;
+                        case 'funcao_pedido_direto':
+                            if (CotacaoIndividualScript_modoEtapaAtual !== 'pedido_direto' && typeof FuncoesScript_ativarModoPedidoDireto === 'function') FuncoesScript_ativarModoPedidoDireto();
+                            break;
+                        case 'funcao_acrescentar_itens':
+                            if (typeof FuncoesScript_ativarModoAcrescentarItens === 'function') FuncoesScript_ativarModoAcrescentarItens();
+                            break;
+                        case 'relatorio_analise_compra':
+                            if (typeof RelatoriosScript_abrirRelatorioAnaliseCompra === 'function') {
+                                RelatoriosScript_abrirRelatorioAnaliseCompra(CotacaoIndividualScript_cotacaoIdAtual);
+                            } else {
+                                console.error("Função RelatoriosScript_abrirRelatorioAnaliseCompra não definida.");
+                            }
+                            break;
+                        default:
+                            if (!action.startsWith('relatorio_')) { // Não restaura se for um relatório pendente
+                                CotacaoIndividualScript_restaurarVisualizacaoPadrao(true); 
+                                CotacaoIndividualScript_modoEtapaAtual = null;
+                            }
+                            CotacaoIndividualScript_exibirFeedback(`Ação do menu: ${this.textContent} (ID: ${action}) selecionada. Implementação pendente.`, false, 4000);
+                    }
+                });
+            });
+        }
+    });
+    window.addEventListener('click', function() {
+        document.querySelectorAll('.dropdown-menu-content.show').forEach(openDropdown => {
+            openDropdown.classList.remove('show');
+            const btnId = openDropdown.id.replace('Dropdown', 'Btn');
+            const btn = document.getElementById(btnId);
+            if(btn) {
+                btn.classList.remove('open');
+                const icon = btn.querySelector('.dropdown-arrow');
+                if (icon) icon.style.transform = 'rotate(0deg)';
+            }
+        });
+    });
+}
+
+
+  async function inicializarPaginaPrincipal() {
+    console.log("CotacaoIndividualScript: Iniciando lógica principal da página...");
+    CotacaoIndividualScript_ocultarFeedback();
+    
+    const searchInputTop = document.getElementById(CotacaoIndividualScript_ID_SEARCH_INPUT_TOP);
+    if (searchInputTop) {
+        searchInputTop.addEventListener('input', CotacaoIndividualScript_filtrarTabelaPrincipal);
+    }
+    
+    let paramsUrl;
+    try {
+        paramsUrl = await CotacaoIndividualScript_obterParametrosUrl();
+    } catch (error) {
+        console.error("CotacaoIndividualScript_inicializarPagina: Erro ao obter parâmetros da URL:", error);
+        CotacaoIndividualScript_exibirFeedback("Erro crítico ao carregar parâmetros da página.", true, 0);
+        paramsUrl = {};
+    }
+
+    CotacaoIndividualScript_cotacaoIdAtual = paramsUrl && paramsUrl.idCotacao ? paramsUrl.idCotacao : null;
+    CotacaoIndividualScript_modoPagina = paramsUrl && paramsUrl.modo ? paramsUrl.modo : 'editar';
+
+    const spanIdCotacao = document.getElementById(CotacaoIndividualScript_ID_COTACAO_EXIBIDO);
+
+    definirCabecalhosVisiveisInterno();
+    renderizarCabecalhoTabelaPrincipalInterno();
+
+    if (CotacaoIndividualScript_modoPagina === 'novo') {
+        if (spanIdCotacao) spanIdCotacao.textContent = "Nova Cotação";
+        document.title = "Nova Cotação - CotaçãoPRO";
+        const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" class="text-center p-8 text-gray-500">Adicione produtos à nova cotação. (Funcionalidade pendente)</td></tr>`;
+        CotacaoIndividualScript_exibirFeedback("Modo 'Nova Cotação'. Adição de produtos pendente.", false, 6000);
+    } else if (CotacaoIndividualScript_cotacaoIdAtual) {
+        if (spanIdCotacao) spanIdCotacao.textContent = CotacaoIndividualScript_cotacaoIdAtual;
+        document.title = `Cotação: ${CotacaoIndividualScript_cotacaoIdAtual}`;
+        await window.CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual);
+    } else {
+        if (spanIdCotacao) spanIdCotacao.textContent = "Inválida";
+        document.title = "Cotação Inválida - CotaçãoPRO";
+        CotacaoIndividualScript_exibirFeedback("ID da Cotação não fornecido ou inválido.", true, 0);
+        const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" class="text-center p-8 text-red-500">Erro: ID da Cotação não fornecido.</td></tr>`;
+    }
+    
+        // Vincular eventos para o novo modal "Acrescentar Itens"
+    const btnFecharModalItens = document.getElementById('CotacaoIndividualScript_btnFecharModalAcrescentarItens');
+    const btnCancelarModalItens = document.getElementById('CotacaoIndividualScript_btnCancelarModalAcrescentarItens');
+    const btnAcrescentarModal = document.getElementById('CotacaoIndividualScript_btnAcrescentarItensModal');
+    const selectTipoCriacaoItens = document.getElementById('CotacaoIndividualScript_selectTipoCriacaoItens');
+    const modalOverlayItens = document.getElementById('CotacaoIndividualScript_modalAcrescentarItensOverlay');
+    const buscaFornecedorInputItens = document.getElementById('CotacaoIndividualScript_inputBuscaFornecedorItens');
+    const buscaProdutoInputItens = document.getElementById('CotacaoIndividualScript_inputBuscaProdutoItens');
+
+    if(btnFecharModalItens) btnFecharModalItens.addEventListener('click', FuncoesScript_fecharModalAcrescentarItens);
+    if(btnCancelarModalItens) btnCancelarModalItens.addEventListener('click', FuncoesScript_fecharModalAcrescentarItens);
+    if(btnAcrescentarModal) btnAcrescentarModal.addEventListener('click', FuncoesScript_lidarComAcrescentarItens);
+    
+    if(selectTipoCriacaoItens) {
+        selectTipoCriacaoItens.addEventListener('change', function() {
+            if (typeof FuncoesScript_gerenciarVisibilidadeSecoesOpcoesItens === 'function') {
+                FuncoesScript_gerenciarVisibilidadeSecoesOpcoesItens(this.value);
+            }
+        });
+    }
+
+    if(modalOverlayItens) {
+        modalOverlayItens.addEventListener('click', function(event) {
+            if (event.target === modalOverlayItens) { 
+                FuncoesScript_fecharModalAcrescentarItens();
+            }
+        });
+    }
+
+    if(buscaFornecedorInputItens){
+        buscaFornecedorInputItens.addEventListener('keyup', function(){
+            if(typeof FuncoesScript_filtrarCheckboxesItens === 'function') {
+                FuncoesScript_filtrarCheckboxesItens('CotacaoIndividualScript_checkboxContainerFornecedoresItens', this.value);
+            }
+        });
+    }
+
+    if(buscaProdutoInputItens){
+        buscaProdutoInputItens.addEventListener('keyup', function(){
+            if(typeof FuncoesScript_filtrarCheckboxesItens === 'function') {
+                FuncoesScript_filtrarCheckboxesItens('CotacaoIndividualScript_checkboxContainerProdutosItens', this.value);
+            }
+        });
+    }
+   
+    initDropdownsInterno();
+  } 
+
+  google.script.run.withSuccessHandler(function(constantes) {
+      if (constantes && constantes.CABECALHOS_COTACOES) {
+          CABECALHOS_COTACOES_TODOS = constantes.CABECALHOS_COTACOES;
+          CotacaoIndividualScript_COLUNAS_PARA_ABA_SUBPRODUTOS_CLIENTE = constantes.COLUNAS_PARA_ABA_SUBPRODUTOS || ["SubProduto", "Tamanho", "UN", "Fator"];
+          inicializarPaginaPrincipal();
+      } else {
+          const erroMsg = (constantes && constantes.message) ? constantes.message : "Não foi possível carregar configuração de cabeçalhos.";
+          console.error("Erro ao carregar CABECALHOS_COTACOES do servidor:", erroMsg);
+          CotacaoIndividualScript_exibirFeedback(`Erro crítico: ${erroMsg}`, true, 0);
+          inicializarPaginaPrincipal(); 
+      }
+  }).withFailureHandler(function(err) {
+      console.error("Falha crítica ao buscar constantes do servidor:", err);
+      CotacaoIndividualScript_exibirFeedback("Erro crítico ao buscar configuração do servidor: " + err.message, true, 0);
+      inicializarPaginaPrincipal(); 
+  }).App_obterConstantes();
+
+} 
+</script>

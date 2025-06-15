@@ -1,0 +1,222 @@
+<script>
+//####################################################################################################
+// MÓDULO: IMPRIMIR PEDIDOS (CLIENT-SIDE) - ImprimirPedidosScript.html
+// Funções da página de impressão de pedidos.
+//####################################################################################################
+
+let dadosImpressaoGlobais = null;
+
+document.addEventListener('DOMContentLoaded', initImprimirPedidosScript);
+
+function initImprimirPedidosScript() {
+    console.log("ImprimirPedidosScript: Iniciando página de impressão.");
+    const loadingOverlay = document.getElementById('ImprimirPedidosScript_loadingOverlay');
+    const containerPrincipal = document.getElementById('ImprimirPedidosScript_containerPrincipal');
+    const printButton = document.getElementById('print-button');
+    const checklistButton = document.getElementById('checklist-button');
+
+    if(printButton) {
+        printButton.addEventListener('click', ImprimirPedidosScript_executarImpressao);
+    }
+    if(checklistButton) {
+        checklistButton.addEventListener('click', ImprimirPedidosScript_executarImpressaoChecklist);
+    }
+
+    try {
+        google.script.url.getLocation(function(location) {
+            if (!location || !location.parameter || !location.parameter.idCotacao) {
+                loadingOverlay.classList.add('hidden');
+                containerPrincipal.innerHTML = '<h1>Erro Crítico</h1><p>O ID da Cotação não foi encontrado na URL.</p>';
+                return;
+            }
+
+            const idCotacao = location.parameter.idCotacao;
+            console.log("ID da cotação encontrado com sucesso:", idCotacao);
+
+            google.script.run
+                .withSuccessHandler(response => {
+                    loadingOverlay.classList.add('hidden');
+                    if (response && response.success) {
+                        dadosImpressaoGlobais = response.dados;
+                        ImprimirPedidosScript_renderizarPedidos(dadosImpressaoGlobais);
+                    } else {
+                        containerPrincipal.innerHTML = `<h1>Erro ao Carregar Dados</h1><p>${response.message || 'Ocorreu um erro desconhecido.'}</p>`;
+                    }
+                })
+                .withFailureHandler(error => {
+                    loadingOverlay.classList.add('hidden');
+                    containerPrincipal.innerHTML = `<h1>Erro de Comunicação</h1><p>${error.message}</p>`;
+                })
+                .EtapasController_obterDadosParaImpressao(idCotacao);
+        });
+    } catch (e) {
+        loadingOverlay.classList.add('hidden');
+        containerPrincipal.innerHTML = `<h1>Erro Inesperado</h1><p>${e.message}</p>`;
+        console.error(e);
+    }
+}
+
+function ImprimirPedidosScript_renderizarPedidos(dadosAgrupados) {
+    const containerPrincipal = document.getElementById('ImprimirPedidosScript_containerPrincipal');
+    containerPrincipal.innerHTML = '';
+
+    if (!dadosAgrupados || Object.keys(dadosAgrupados).length === 0) {
+        containerPrincipal.innerHTML = '<h1>Nenhum pedido para exibir</h1><p>Não há itens a comprar nesta cotação.</p>';
+        return;
+    }
+    
+    for (const nomeFornecedor in dadosAgrupados) {
+        const pedidosDoFornecedor = dadosAgrupados[nomeFornecedor];
+        pedidosDoFornecedor.forEach(pedido => {
+            const pedidoContainer = document.createElement('div');
+            pedidoContainer.className = 'pedido-container';
+            
+            pedidoContainer.innerHTML = `
+                <div class="pedido-header-fornecedor">
+                    <h2>${pedido.fornecedor}</h2>
+                    <div class="info-grid">
+                        <div>
+                            <strong>EMPRESA PARA FATURAMENTO:</strong>
+                            <span>${pedido.empresaFaturada}</span>
+                        </div>
+                        <div>
+                            <strong>CNPJ:</strong>
+                            <span>${pedido.cnpj || 'Não informado'}</span>
+                        </div>
+                        <div>
+                            <strong>CONDIÇÃO DE PAGAMENTO:</strong>
+                            <span>${pedido.condicaoPagamento || 'Não informada'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            const tabela = document.createElement('table');
+            tabela.className = 'itens-table';
+            tabela.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>PRODUTO (SUBPRODUTO)</th>
+                        <th class="col-un">UN</th>
+                        <th class="col-qtd">QTD.</th>
+                        <th class="col-valor">VALOR UNIT.</th>
+                        <th class="col-valor">VALOR TOTAL</th>
+                    </tr>
+                </thead>
+            `;
+            const tbody = document.createElement('tbody');
+            pedido.itens.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.subProduto}</td>
+                    <td class="col-un">${item.un}</td>
+                    <td class="col-qtd">${item.qtd}</td>
+                    <td class="col-valor">${formatarMoeda(item.valorUnit)}</td>
+                    <td class="col-valor">${formatarMoeda(item.valorTotal)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            tabela.appendChild(tbody);
+            pedidoContainer.appendChild(tabela);
+            
+            const footerTotal = document.createElement('div');
+            footerTotal.className = 'total-pedido-footer';
+            footerTotal.textContent = `TOTAL DO PEDIDO: ${formatarMoeda(pedido.totalPedido)}`;
+            pedidoContainer.appendChild(footerTotal);
+
+            containerPrincipal.appendChild(pedidoContainer);
+        });
+    }
+}
+
+/**
+ * Função de impressão para o PEDIDO COMPLETO.
+ */
+function ImprimirPedidosScript_executarImpressao() {
+    // CORREÇÃO: Busca o estilo pela ID da tag <style>
+    const stylesHtml = document.getElementById('page-styles').outerHTML;
+    const contentHtml = document.getElementById('ImprimirPedidosScript_containerPrincipal').innerHTML;
+    
+    const printWindow = window.open('', '', 'height=700,width=900');
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Imprimir Pedidos</title>${stylesHtml}</head><body>${contentHtml}</body></html>`);
+    printWindow.document.close();
+    setTimeout(function() {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+    }, 250);
+}
+
+/**
+ * Função de impressão para o CHECKLIST.
+ */
+function ImprimirPedidosScript_executarImpressaoChecklist() {
+    // CORREÇÃO: Busca o estilo pela ID da tag <style>
+    const stylesHtml = document.getElementById('page-styles').outerHTML;
+    const checklistHtml = ImprimirPedidosScript_gerarHtmlParaChecklist(); 
+    
+    const printWindow = window.open('', '', 'height=700,width=900');
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Imprimir Checklist de Separação</title>${stylesHtml}</head><body>${checklistHtml}</body></html>`);
+    printWindow.document.close();
+    setTimeout(function() {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+    }, 250);
+}
+
+/**
+ * Gera uma string de HTML para a versão de checklist (lista única).
+ */
+function ImprimirPedidosScript_gerarHtmlParaChecklist() {
+    if (!dadosImpressaoGlobais || Object.keys(dadosImpressaoGlobais).length === 0) {
+        return "<h1>Nenhum item para o checklist.</h1>";
+    }
+
+    let htmlString = '<div class="page-container">';
+    htmlString += '<h2>Checklist Geral de Separação</h2>';
+
+    htmlString += `<table class="itens-table">
+        <thead>
+            <tr>
+                <th style="width: 25%;">FORNECEDOR</th>
+                <th>PRODUTO (SUBPRODUTO)</th>
+                <th class="col-un">UN</th>
+                <th class="col-qtd">QTD.</th>
+                <th class="col-check">CONFERIDO</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    for (const nomeFornecedor in dadosImpressaoGlobais) {
+        const pedidosDoFornecedor = dadosImpressaoGlobais[nomeFornecedor];
+        
+        pedidosDoFornecedor.forEach(pedido => {
+            pedido.itens.forEach(item => {
+                htmlString += `
+                    <tr>
+                        <td>${pedido.fornecedor}</td>
+                        <td>${item.subProduto}</td>
+                        <td class="col-un">${item.un}</td>
+                        <td class="col-qtd">${item.qtd}</td>
+                        <td class="col-check" style="font-family: monospace;">[ &nbsp; ]</td>
+                    </tr>
+                `;
+            });
+        });
+    }
+    
+    htmlString += '</tbody></table></div>';
+    return htmlString;
+}
+
+/**
+ * Formata um número como moeda BRL.
+ */
+function formatarMoeda(valor) {
+    const numero = Number(valor) || 0;
+    return numero.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    });
+}
+</script>

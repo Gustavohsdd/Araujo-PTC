@@ -1,0 +1,1214 @@
+<script>
+console.log("CONFIRMADO: Arquivo EtapasScript.html carregado com sucesso - Versão 3 (Corrigida)");
+
+//####################################################################################################
+// MÓDULO: ETAPAS (CLIENT-SIDE)
+// Funções relacionadas às etapas da cotação: Contagem de Estoque, Retirar Produtos, Enviar para Fornecedores.
+//####################################################################################################
+
+/**
+ * @file EtapasScript.html
+ * @description Lógica client-side para as funcionalidades do menu "Etapas".
+ */
+
+//----------------------------------------------------------------------------------------------------
+// ETAPA 1: CONTAGEM DE ESTOQUE
+//----------------------------------------------------------------------------------------------------
+
+/**
+ * Prepara e ativa a visualização para a etapa de Contagem de Estoque.
+ */
+function EtapasScript_ativarModoContagemEstoque() {
+    console.log("EtapasScript: Ativando modo Contagem de Estoque.");
+    CotacaoIndividualScript_modoEtapaAtual = 'contagem_estoque';
+
+    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
+    
+    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
+    if (btnSalvarContagem) {
+        btnSalvarContagem.classList.remove('hidden');
+        btnSalvarContagem.removeEventListener('click', EtapasScript_salvarContagemEstoqueEtapa);
+        btnSalvarContagem.addEventListener('click', EtapasScript_salvarContagemEstoqueEtapa);
+    }
+
+
+    if (CotacaoIndividualScript_dadosOriginaisCotacao.length === 0) {
+        CotacaoIndividualScript_mostrarLoadingOverlay(false);
+        CotacaoIndividualScript_exibirFeedback("Dados da cotação ainda não carregados. Tente novamente em instantes.", true, 5000);
+        CotacaoIndividualScript_modoEtapaAtual = null;
+        if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
+        return;
+    }
+
+    const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
+    if (!tbody) {
+        console.error("EtapasScript_ativarModoContagemEstoque: Tbody não encontrado.");
+        CotacaoIndividualScript_mostrarLoadingOverlay(false);
+        if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
+        return;
+    }
+
+    tbody.querySelectorAll('.sub-produto-row').forEach(row => {
+        row.classList.add('hidden-by-etapa');
+    });
+
+    tbody.querySelectorAll('.produto-group-separator-row').forEach(row => {
+        const produtoNome = row.dataset.produtoNome;
+        const primeiroItemDoProdutoPrincipal = CotacaoIndividualScript_dadosOriginaisCotacao.find(item => item.Produto === produtoNome);
+
+        if (!primeiroItemDoProdutoPrincipal) {
+            console.warn("EtapasScript_ativarModoContagemEstoque: Dados originais não encontrados para produto:", produtoNome);
+            return;
+        }
+
+        const cell = row.cells[0];
+        if (!cell) return;
+        cell.innerHTML = ''; 
+
+        const containerPrincipal = document.createElement('div');
+        containerPrincipal.className = 'contagem-container-principal';
+
+        const produtoInfoSpan = document.createElement('span');
+        produtoInfoSpan.className = 'produto-principal-info';
+        const estMinOriginal = (primeiroItemDoProdutoPrincipal.EstoqueMinimoProdutoPrincipal !== null && primeiroItemDoProdutoPrincipal.EstoqueMinimoProdutoPrincipal !== undefined)
+            ? primeiroItemDoProdutoPrincipal.EstoqueMinimoProdutoPrincipal
+            : 'N/A';
+        produtoInfoSpan.textContent = `Produto: ${primeiroItemDoProdutoPrincipal.Produto} (Est. Mín. Atual: ${estMinOriginal})`;
+        containerPrincipal.appendChild(produtoInfoSpan);
+
+        const camposEdicaoContainer = document.createElement('div');
+        camposEdicaoContainer.className = 'contagem-fields-container';
+
+        const blocoEstMin = document.createElement('div');
+        blocoEstMin.className = 'contagem-field-block';
+        const labelEstMin = document.createElement('label');
+        labelEstMin.textContent = "Novo Est. Mínimo (Prod.):";
+        labelEstMin.className = 'campo-contagem-label';
+        const inputEstMin = document.createElement('input');
+        inputEstMin.type = 'number';
+        inputEstMin.className = 'input-contagem input-estoque-min-prod-principal';
+        inputEstMin.dataset.produtoNome = primeiroItemDoProdutoPrincipal.Produto;
+        inputEstMin.value = estMinOriginal !== 'N/A' ? estMinOriginal : '';
+        blocoEstMin.appendChild(labelEstMin);
+        blocoEstMin.appendChild(inputEstMin);
+        camposEdicaoContainer.appendChild(blocoEstMin);
+
+        const dadosEstoqueCompraSalvos = CotacaoIndividualScript_parsearStringEstoqueComprar(primeiroItemDoProdutoPrincipal["Estoque Atual"]);
+
+        const blocoEstContado = document.createElement('div');
+        blocoEstContado.className = 'contagem-field-block';
+        const labelEstAtual = document.createElement('label');
+        labelEstAtual.textContent = "Estoque Contado:";
+        labelEstAtual.className = 'campo-contagem-label';
+        const inputEstAtual = document.createElement('input');
+        inputEstAtual.type = 'number';
+        inputEstAtual.className = 'input-contagem input-estoque-contado-prod-principal';
+        inputEstAtual.dataset.produtoNome = primeiroItemDoProdutoPrincipal.Produto;
+        inputEstAtual.value = dadosEstoqueCompraSalvos.estoqueAtual !== null ? dadosEstoqueCompraSalvos.estoqueAtual : '';
+        blocoEstContado.appendChild(labelEstAtual);
+        blocoEstContado.appendChild(inputEstAtual);
+        camposEdicaoContainer.appendChild(blocoEstContado);
+
+        const blocoComprar = document.createElement('div');
+        blocoComprar.className = 'contagem-field-block';
+        const labelComprar = document.createElement('label');
+        labelComprar.textContent = "Comprar (Sugestão):";
+        labelComprar.className = 'campo-contagem-label';
+        const inputComprar = document.createElement('input');
+        inputComprar.type = 'number';
+        inputComprar.className = 'input-contagem input-comprar-sugestao-prod-principal';
+        inputComprar.dataset.produtoNome = primeiroItemDoProdutoPrincipal.Produto;
+        inputComprar.value = dadosEstoqueCompraSalvos.comprar !== null ? dadosEstoqueCompraSalvos.comprar : '';
+        blocoComprar.appendChild(labelComprar);
+        blocoComprar.appendChild(inputComprar);
+        camposEdicaoContainer.appendChild(blocoComprar);
+
+        containerPrincipal.appendChild(camposEdicaoContainer);
+        cell.appendChild(containerPrincipal);
+    });
+
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Atualizando status para Contagem...");
+    google.script.run
+        .withSuccessHandler(function(statusResponse) {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            if (statusResponse && statusResponse.success) {
+                CotacaoIndividualScript_exibirFeedback("Status atualizado. Modo 'Contagem de Estoque' ativado. Preencha os campos e clique em Salvar.", false, 7000);
+            } else {
+                CotacaoIndividualScript_exibirFeedback(statusResponse.message || "Falha ao atualizar status da cotação.", true, 7000);
+                CotacaoIndividualScript_modoEtapaAtual = null;
+                if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
+                CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
+            }
+        })
+        .withFailureHandler(function(err) {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao atualizar status: " + err.message, true, 7000);
+            console.error("Erro ao atualizar status para Contagem:", err);
+            CotacaoIndividualScript_modoEtapaAtual = null;
+            if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
+            CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
+        })
+        .EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Contagem de Estoque");
+}
+
+/**
+ * Desativa o modo de Contagem de Estoque e restaura a visualização padrão da tabela.
+ */
+function EtapasScript_desativarModoContagemEstoque() {
+    console.log("EtapasScript: Desativando modo Contagem de Estoque.");
+    CotacaoIndividualScript_modoEtapaAtual = null;
+    
+    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
+    if (btnSalvarContagem) {
+        btnSalvarContagem.classList.add('hidden');
+    }
+    
+    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
+    CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
+}
+
+/**
+ * Coleta os dados dos campos de contagem de estoque e os envia para o servidor.
+ */
+function EtapasScript_salvarContagemEstoqueEtapa() {
+    console.log("EtapasScript_salvarContagemEstoqueEtapa: Salvando dados da contagem de estoque...");
+    CotacaoIndividualScript_ocultarFeedback();
+    const dadosParaSalvar = [];
+    const todasLinhasProdutoPrincipal = document.querySelectorAll('.produto-group-separator-row');
+
+    todasLinhasProdutoPrincipal.forEach(row => {
+        const produtoNome = row.dataset.produtoNome;
+        if (!produtoNome) return;
+
+        const inputEstMinElem = row.querySelector(`.input-estoque-min-prod-principal[data-produto-nome="${produtoNome}"]`);
+        const inputEstContadoElem = row.querySelector(`.input-estoque-contado-prod-principal[data-produto-nome="${produtoNome}"]`);
+        const inputComprarSugElem = row.querySelector(`.input-comprar-sugestao-prod-principal[data-produto-nome="${produtoNome}"]`);
+
+        const novoEstoqueMinimo = inputEstMinElem && inputEstMinElem.value !== '' ? parseFloat(inputEstMinElem.value) : null;
+        const estoqueContado = inputEstContadoElem && inputEstContadoElem.value !== '' ? parseFloat(inputEstContadoElem.value) : null;
+        const comprarSugestao = inputComprarSugElem && inputComprarSugElem.value !== '' ? parseFloat(inputComprarSugElem.value) : null;
+
+        dadosParaSalvar.push({
+            nomeProdutoPrincipal: produtoNome,
+            novoEstoqueMinimoProdutoPrincipal: novoEstoqueMinimo,
+            estoqueAtualContagem: estoqueContado,
+            comprarSugestao: comprarSugestao
+        });
+    });
+
+    if (dadosParaSalvar.length > 0) {
+        CotacaoIndividualScript_exibirFeedback("Salvando contagem de estoque...", false, 0);
+        CotacaoIndividualScript_mostrarLoadingOverlay(true, "Salvando Contagem...");
+        console.log("EtapasScript_salvarContagemEstoqueEtapa: Dados da contagem para salvar:", dadosParaSalvar);
+
+        google.script.run
+            .withSuccessHandler(function(response) {
+                CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                if (response && response.success) {
+                    CotacaoIndividualScript_exibirFeedback(response.message || "Contagem de estoque salva com sucesso!", false, 5000);
+                    
+                    dadosParaSalvar.forEach(itemSalvo => {
+                        CotacaoIndividualScript_dadosOriginaisCotacao.forEach(itemOriginal => {
+                            if (itemOriginal.Produto === itemSalvo.nomeProdutoPrincipal &&
+                                itemSalvo.novoEstoqueMinimoProdutoPrincipal !== null &&
+                                itemSalvo.novoEstoqueMinimoProdutoPrincipal !== undefined) {
+                                itemOriginal.EstoqueMinimoProdutoPrincipal = itemSalvo.novoEstoqueMinimoProdutoPrincipal;
+                            }
+                            if (itemOriginal.Produto === itemSalvo.nomeProdutoPrincipal) {
+                                const estContado = itemSalvo.estoqueAtualContagem;
+                                const comprSug = itemSalvo.comprarSugestao;
+                                itemOriginal["Estoque Atual"] = `Estoque Atual: ${estContado !== null ? estContado : 'N/A'} / Comprar: ${comprSug !== null ? comprSug : 'N/A'}`;
+                            }
+                        });
+                    });
+                    EtapasScript_desativarModoContagemEstoque(); 
+                } else {
+                    CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao salvar contagem de estoque.", true, 7000);
+                }
+            })
+            .withFailureHandler(function(error) {
+                CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao salvar contagem: " + error.message, true, 7000);
+                console.error("EtapasScript_salvarContagemEstoqueEtapa: Erro ao salvar contagem:", error);
+            })
+            .EtapasController_salvarContagemEstoque(CotacaoIndividualScript_cotacaoIdAtual, dadosParaSalvar);
+    } else {
+        CotacaoIndividualScript_exibirFeedback("Nenhum dado de contagem para salvar.", false, 3000);
+        CotacaoIndividualScript_mostrarLoadingOverlay(false);
+    }
+}
+
+
+//----------------------------------------------------------------------------------------------------
+// ETAPA 2: RETIRAR PRODUTOS DESNECESSÁRIOS
+//----------------------------------------------------------------------------------------------------
+
+function EtapasScript_identificarProdutosParaRetirada() {
+    const produtosParaRetirada = { crit1: [], crit2: [], crit3: [] };
+    const produtosPrincipaisAdicionados = { crit1: new Set(), crit2: new Set(), crit3: new Set() };
+
+    if (!CotacaoIndividualScript_dadosOriginaisCotacao || CotacaoIndividualScript_dadosOriginaisCotacao.length === 0) {
+        console.warn("EtapasScript_identificarProdutosParaRetirada: Nenhum dado original da cotação.");
+        return produtosParaRetirada;
+    }
+
+    CotacaoIndividualScript_dadosOriginaisCotacao.forEach(subProduto => {
+        const nomeProdutoPrincipal = subProduto.Produto;
+        const estoqueMinProdutoPrincipal = (subProduto.EstoqueMinimoProdutoPrincipal !== null &&
+            subProduto.EstoqueMinimoProdutoPrincipal !== undefined &&
+            String(subProduto.EstoqueMinimoProdutoPrincipal).trim() !== "")
+            ? parseFloat(String(subProduto.EstoqueMinimoProdutoPrincipal).replace(",", "."))
+            : null;
+
+        const dadosEstoqueCompra = CotacaoIndividualScript_parsearStringEstoqueComprar(subProduto["Estoque Atual"]);
+        const estoqueAtualParseado = dadosEstoqueCompra.estoqueAtual;
+        const comprarParseado = dadosEstoqueCompra.comprar;
+        const rawEstoqueAtualString = subProduto["Estoque Atual"] ? String(subProduto["Estoque Atual"]).trim() : "";
+
+        if (estoqueAtualParseado !== null && !isNaN(estoqueAtualParseado) &&
+            estoqueMinProdutoPrincipal !== null && !isNaN(estoqueMinProdutoPrincipal) &&
+            estoqueAtualParseado >= estoqueMinProdutoPrincipal) {
+            if (!produtosPrincipaisAdicionados.crit1.has(nomeProdutoPrincipal)) {
+                produtosParaRetirada.crit1.push({ nomeProdutoPrincipal: nomeProdutoPrincipal, motivo: `Est. Atual (${estoqueAtualParseado}) >= Est. Mín. Prod. (${estoqueMinProdutoPrincipal})`, subProdutoOriginal: subProduto });
+                produtosPrincipaisAdicionados.crit1.add(nomeProdutoPrincipal);
+            }
+        }
+
+        const celulaEstoqueAtualVazia = rawEstoqueAtualString === "";
+        if (celulaEstoqueAtualVazia || (estoqueAtualParseado === null && comprarParseado === null)) {
+            if (!produtosPrincipaisAdicionados.crit1.has(nomeProdutoPrincipal) && !produtosPrincipaisAdicionados.crit2.has(nomeProdutoPrincipal)) {
+                produtosParaRetirada.crit2.push({ nomeProdutoPrincipal: nomeProdutoPrincipal, motivo: celulaEstoqueAtualVazia ? "Coluna 'Estoque Atual' vazia" : "Estoque Atual e Comprar são N/A", subProdutoOriginal: subProduto });
+                produtosPrincipaisAdicionados.crit2.add(nomeProdutoPrincipal);
+            }
+        }
+
+        const estMinPrincipalConsideradoVazioOuNA = (estoqueMinProdutoPrincipal === null || String(subProduto.EstoqueMinimoProdutoPrincipal).trim() === "" || String(subProduto.EstoqueMinimoProdutoPrincipal).toUpperCase() === "N/A");
+        if (estMinPrincipalConsideradoVazioOuNA && (celulaEstoqueAtualVazia || (estoqueAtualParseado === null && comprarParseado === null))) {
+            if (!produtosPrincipaisAdicionados.crit1.has(nomeProdutoPrincipal) && !produtosPrincipaisAdicionados.crit2.has(nomeProdutoPrincipal) && !produtosPrincipaisAdicionados.crit3.has(nomeProdutoPrincipal)) {
+                produtosParaRetirada.crit3.push({ nomeProdutoPrincipal: nomeProdutoPrincipal, motivo: "Est.Mín(Prod.Principal) N/A/vazio E (Coluna Est.Atual vazia OU Est.Atual/Comprar N/A)", subProdutoOriginal: subProduto });
+                produtosPrincipaisAdicionados.crit3.add(nomeProdutoPrincipal);
+            }
+        }
+    });
+    console.log("EtapasScript_identificarProdutosParaRetirada: Produtos para retirada (principais):", produtosParaRetirada);
+    return produtosParaRetirada;
+}
+
+function EtapasScript_renderizarAcordeaoRetirarProdutos(containerId, titulo, produtosPrincipais, idSufixo) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+
+    const headerId = `header-retirar-${idSufixo}`;
+    const contentId = `content-retirar-${idSufixo}`;
+
+    const header = document.createElement('div');
+    header.className = 'retirar-accordion-header';
+    header.id = headerId;
+    header.innerHTML = `<span>${titulo} (${produtosPrincipais.length} Produtos Principais)</span>
+                            <svg class="retirar-accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>`;
+
+    const content = document.createElement('div');
+    content.className = 'retirar-accordion-content';
+    content.id = contentId;
+
+    if (produtosPrincipais.length === 0) {
+        content.innerHTML = `<div class="p-2 text-sm text-gray-500">Nenhum produto encontrado para este critério.</div>`;
+    } else {
+        const divSelecionarTodos = document.createElement('div');
+        divSelecionarTodos.className = 'flex items-center p-2 border-b border-gray-200 mb-2';
+        const checkboxTodos = document.createElement('input');
+        checkboxTodos.type = 'checkbox';
+        checkboxTodos.id = `select-all-retirar-${idSufixo}`;
+        checkboxTodos.className = 'mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500';
+        checkboxTodos.addEventListener('change', function() {
+            content.querySelectorAll('.checkbox-retirar-item-principal').forEach(cb => cb.checked = this.checked);
+        });
+        const labelTodos = document.createElement('label');
+        labelTodos.htmlFor = `select-all-retirar-${idSufixo}`;
+        labelTodos.textContent = 'Selecionar Todos os Produtos Principais neste Grupo';
+        labelTodos.className = 'font-medium text-sm text-gray-700';
+        divSelecionarTodos.appendChild(checkboxTodos);
+        divSelecionarTodos.appendChild(labelTodos);
+        content.appendChild(divSelecionarTodos);
+
+        produtosPrincipais.forEach((produtoPrincipalInfo) => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'retirar-subproduto-item py-1';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'checkbox-retirar-item-principal';
+            checkbox.dataset.produtoPrincipal = produtoPrincipalInfo.nomeProdutoPrincipal;
+
+            const label = document.createElement('label');
+            label.textContent = `${produtoPrincipalInfo.nomeProdutoPrincipal} - Motivo: ${produtoPrincipalInfo.motivo}`;
+
+            itemDiv.appendChild(checkbox);
+            itemDiv.appendChild(label);
+            content.appendChild(itemDiv);
+        });
+    }
+
+    container.appendChild(header);
+    container.appendChild(content);
+
+    header.addEventListener('click', () => {
+        header.classList.toggle('expanded');
+        content.classList.toggle('expanded');
+        const icon = header.querySelector('.retirar-accordion-icon');
+        if (icon) {
+            icon.style.transform = header.classList.contains('expanded') ? 'rotate(90deg)' : 'rotate(0deg)';
+        }
+    });
+}
+
+function EtapasScript_renderizarSecaoRetirarProdutosCompleta() {
+    const { crit1, crit2, crit3 } = EtapasScript_identificarProdutosParaRetirada();
+
+    EtapasScript_renderizarAcordeaoRetirarProdutos(CotacaoIndividualScript_ID_ACORDEAO_CRIT1, "Quantidade maior que o necessário.", crit1, "crit1");
+    EtapasScript_renderizarAcordeaoRetirarProdutos(CotacaoIndividualScript_ID_ACORDEAO_CRIT2, "Não foi marcado para comprar.", crit2, "crit2");
+    EtapasScript_renderizarAcordeaoRetirarProdutos(CotacaoIndividualScript_ID_ACORDEAO_CRIT3, "Produtos inativos ou sem dados.", crit3, "crit3");
+
+    const btnExcluir = document.getElementById(CotacaoIndividualScript_ID_BTN_EXCLUIR_SELECIONADOS_RETIRAR);
+    if (btnExcluir) {
+        btnExcluir.removeEventListener('click', EtapasScript_manipularExclusaoProdutosRetirar);
+        btnExcluir.addEventListener('click', EtapasScript_manipularExclusaoProdutosRetirar);
+    }
+}
+
+function EtapasScript_manipularExclusaoProdutosRetirar() {
+    const produtosPrincipaisParaExcluir = [];
+    document.querySelectorAll('#' + CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER + ' .checkbox-retirar-item-principal:checked').forEach(cb => {
+        if (!produtosPrincipaisParaExcluir.includes(cb.dataset.produtoPrincipal)) {
+            produtosPrincipaisParaExcluir.push(cb.dataset.produtoPrincipal);
+        }
+    });
+
+    if (produtosPrincipaisParaExcluir.length === 0) {
+        CotacaoIndividualScript_exibirFeedback("Nenhum produto principal selecionado para exclusão.", true, 3000);
+        return;
+    }
+
+    console.log("EtapasScript_manipularExclusaoProdutosRetirar: Produtos Principais para excluir:", produtosPrincipaisParaExcluir);
+    CotacaoIndividualScript_exibirFeedback(`Excluindo ${produtosPrincipaisParaExcluir.length} produto(s) principal(is)...`, false, 0);
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Excluindo produtos...");
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            if (response && response.success) {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Produtos selecionados foram retirados da cotação.", false, 5000);
+                CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual).then(() => {
+                    EtapasScript_desativarModoRetirarProdutos();
+                }).catch(err => {
+                    console.error("Falha ao recarregar dados após exclusão:", err);
+                    EtapasScript_desativarModoRetirarProdutos();
+                });
+            } else {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao retirar produtos da cotação.", true, 7000);
+            }
+        })
+        .withFailureHandler(function(error) {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao excluir produtos: " + error.message, true, 7000);
+            console.error("EtapasScript_manipularExclusaoProdutosRetirar: Erro:", error);
+        })
+        .EtapasController_retirarProdutosCotacao(CotacaoIndividualScript_cotacaoIdAtual, produtosPrincipaisParaExcluir);
+}
+
+
+function EtapasScript_ativarModoRetirarProdutos() {
+    console.log("EtapasScript: Ativando modo Retirar Produtos.");
+    if (CotacaoIndividualScript_dadosOriginaisCotacao.length === 0) {
+        CotacaoIndividualScript_exibirFeedback("Dados da cotação ainda não carregados. Tente novamente.", true, 5000);
+        return;
+    }
+    CotacaoIndividualScript_modoEtapaAtual = 'retirar_produtos';
+    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.remove('hidden');
+    
+    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
+    if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
+
+    EtapasScript_renderizarSecaoRetirarProdutosCompleta();
+    CotacaoIndividualScript_exibirFeedback("Modo 'Retirar Produtos Desnecessários' ativado. Selecione os produtos e clique em 'Confirmar Remoção e Voltar'.", false, 6000);
+}
+
+function EtapasScript_desativarModoRetirarProdutos() {
+    console.log("EtapasScript: Desativando modo Retirar Produtos.");
+    CotacaoIndividualScript_modoEtapaAtual = null;
+    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true); 
+}
+
+
+//----------------------------------------------------------------------------------------------------
+// ETAPA 3: ENVIAR PARA FORNECEDORES
+//----------------------------------------------------------------------------------------------------
+
+function EtapasScript_iniciarEnvioParaFornecedores() {
+    console.log("EtapasScript: Iniciando envio para fornecedores.");
+    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true); 
+    CotacaoIndividualScript_modoEtapaAtual = null; 
+
+    if (!CotacaoIndividualScript_cotacaoIdAtual) {
+        CotacaoIndividualScript_exibirFeedback("ID da Cotação não definido. Não é possível enviar para fornecedores.", true, 5000);
+        return;
+    }
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Preparando envio para fornecedores...");
+
+    google.script.run
+        .withSuccessHandler(function(statusResponse) {
+            if (statusResponse && statusResponse.success) {
+                CotacaoIndividualScript_exibirFeedback("Status da cotação atualizado para 'Aguardando Preços'. Gerando links...", false, 0);
+
+                google.script.run
+                    .withSuccessHandler(function(linkResponse) {
+                        CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                        if (linkResponse && linkResponse.success) {
+                            CotacaoIndividualScript_exibirFeedback(linkResponse.message || "Links para fornecedores gerados/atualizados com sucesso!", false, 7000);
+                            if (linkResponse.detalhesLinks && linkResponse.detalhesLinks.length > 0) {
+                                console.log("EtapasScript_iniciarEnvioParaFornecedores: Detalhes dos Links Gerados:", linkResponse.detalhesLinks);
+                            }
+                        } else {
+                            CotacaoIndividualScript_exibirFeedback(linkResponse.message || "Falha ao gerar/atualizar links para fornecedores.", true, 7000);
+                        }
+                    })
+                    .withFailureHandler(function(linkError) {
+                        CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                        CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao gerar links: " + linkError.message, true, 7000);
+                        console.error("EtapasScript_iniciarEnvioParaFornecedores: Erro ao gerar links:", linkError);
+                    })
+                    .EtapasController_gerarLinksParaFornecedoresParaEtapaEnvio(CotacaoIndividualScript_cotacaoIdAtual);
+
+            } else {
+                CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                CotacaoIndividualScript_exibirFeedback(statusResponse.message || "Falha ao atualizar status da cotação para 'Aguardando Preços'.", true, 7000);
+            }
+        })
+        .withFailureHandler(function(statusError) {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao atualizar status: " + statusError.message, true, 7000);
+            console.error("EtapasScript_iniciarEnvioParaFornecedores: Erro ao atualizar status:", statusError);
+        })
+        .EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Aguardando Preços");
+}
+
+
+//================================================================================================
+// ETAPA 4: REALIZAR COTAÇÃO
+//================================================================================================
+
+function EtapasScript_ativarModoRealizarCotacao() {
+    console.log("EtapasScript: Ativando modo Realizar Cotação.");
+    CotacaoIndividualScript_modoEtapaAtual = 'realizar_cotacao';
+
+    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
+    const realizarCotacaoContainer = document.getElementById('EtapasScript_realizarCotacaoContainer');
+    realizarCotacaoContainer.classList.remove('hidden');
+
+    document.getElementById('EtapasScript_btnVoltarEtapa4').addEventListener('click', EtapasScript_desativarModoRealizarCotacao);
+    document.getElementById('EtapasScript_btnExcluirSubprodutosSemPreco').addEventListener('click', EtapasScript_manipularExclusaoSubprodutosSemPreco);
+
+    const subprodutosSemPreco = EtapasScript_identificarSubprodutosSemPreco();
+    EtapasScript_renderizarListaSubprodutosSemPreco(subprodutosSemPreco);
+
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Atualizando status...");
+    google.script.run
+        .withSuccessHandler(response => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            if (response && response.success) {
+                CotacaoIndividualScript_exibirFeedback("Status atualizado para 'Realizando Cotação'.", false, 4000);
+            } else {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao atualizar status.", true, 5000);
+            }
+        })
+        .withFailureHandler(err => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao atualizar status: " + err.message, true);
+        })
+        .EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Realizando Cotação");
+}
+
+function EtapasScript_desativarModoRealizarCotacao() {
+    console.log("EtapasScript: Desativando modo Realizar Cotação.");
+    CotacaoIndividualScript_modoEtapaAtual = null;
+    document.getElementById('EtapasScript_realizarCotacaoContainer').classList.add('hidden');
+    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
+    CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
+}
+
+function EtapasScript_identificarSubprodutosSemPreco() {
+    if (!CotacaoIndividualScript_dadosOriginaisCotacao) return [];
+    return CotacaoIndividualScript_dadosOriginaisCotacao.filter(item => {
+        const preco = item['Preço'];
+        return preco === null || preco === undefined || String(preco).trim() === '' || parseFloat(String(preco).replace(',', '.')) === 0;
+    });
+}
+
+function EtapasScript_renderizarListaSubprodutosSemPreco(subprodutos) {
+    const container = document.getElementById('EtapasScript_listaSubprodutosSemPreco');
+    container.innerHTML = '';
+
+    if (subprodutos.length === 0) {
+        container.innerHTML = `<div class="p-4 text-center text-gray-500">Ótimo! Nenhum subproduto sem preço foi encontrado.</div>`;
+        document.getElementById('EtapasScript_btnExcluirSubprodutosSemPreco').textContent = "Iniciar Edição";
+        return;
+    }
+
+    document.getElementById('EtapasScript_btnExcluirSubprodutosSemPreco').textContent = "Excluir Selecionados e Iniciar Edição";
+
+    subprodutos.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'retirar-subproduto-item py-1';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'checkbox-retirar-subproduto-sem-preco';
+        checkbox.dataset.produto = item.Produto;
+        checkbox.dataset.subproduto = item.SubProduto;
+        checkbox.dataset.fornecedor = item.Fornecedor;
+
+        const label = document.createElement('label');
+        label.textContent = ` ${item.Produto} -> ${item.SubProduto} (Fornecedor: ${item.Fornecedor})`;
+        label.prepend(checkbox);
+
+        itemDiv.appendChild(label);
+        container.appendChild(itemDiv);
+    });
+}
+
+function EtapasScript_manipularExclusaoSubprodutosSemPreco() {
+    const subprodutosParaExcluir = [];
+    document.querySelectorAll('.checkbox-retirar-subproduto-sem-preco:checked').forEach(cb => {
+        subprodutosParaExcluir.push({
+            Produto: cb.dataset.produto,
+            SubProdutoChave: cb.dataset.subproduto,
+            Fornecedor: cb.dataset.fornecedor
+        });
+    });
+
+    if (subprodutosParaExcluir.length > 0) {
+        CotacaoIndividualScript_mostrarLoadingOverlay(true, "Excluindo subprodutos...");
+        google.script.run
+            .withSuccessHandler(response => {
+                if (response && response.success) {
+                    CotacaoIndividualScript_exibirFeedback(response.message, false, 4000);
+                    CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual)
+                        .then(() => {
+                            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                            EtapasScript_iniciarEdicao();
+                        });
+                } else {
+                    CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                    CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao excluir.", true, 5000);
+                }
+            })
+            .withFailureHandler(err => {
+                CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao excluir: " + err.message, true);
+            })
+            .EtapasController_retirarSubProdutosCotacao(CotacaoIndividualScript_cotacaoIdAtual, subprodutosParaExcluir);
+    } else {
+        EtapasScript_iniciarEdicao();
+    }
+}
+
+function EtapasScript_iniciarEdicao() {
+    document.getElementById('EtapasScript_realizarCotacaoContainer').classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
+    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
+    CotacaoIndividualScript_exibirFeedback("Modo de edição ativado. Clique em uma célula para editar.", false, 6000);
+}
+
+//================================================================================================
+// ETAPA 5: DEFINIR EMPRESA PARA FATURAMENTO
+//================================================================================================
+
+let EtapasScript_empresasParaFaturamento = [];
+let EtapasScript_pedidosMinimosFornecedores = {};
+
+function EtapasScript_formatarMoeda(numero) {
+    if (typeof numero !== 'number') {
+        numero = parseFloat(numero) || 0;
+    }
+    const formatado = numero.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `R$ ${formatado}`;
+}
+
+function EtapasScript_ativarModoDefinirEmpresa() {
+    console.log("EtapasScript: Ativando modo Definir Empresa para Faturamento.");
+    CotacaoIndividualScript_modoEtapaAtual = 'definir_empresa';
+
+    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
+    document.getElementById('EtapasScript_realizarCotacaoContainer').classList.add('hidden');
+    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
+    
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Carregando dados para faturamento...");
+
+    google.script.run.EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Definindo Empresa para Faturamento");
+
+    google.script.run
+        .withSuccessHandler(response => {
+            if (response && response.success) {
+                EtapasScript_empresasParaFaturamento = response.empresas || [];
+                EtapasScript_pedidosMinimosFornecedores = response.pedidosMinimos || {};
+
+                const itensParaComprar = CotacaoIndividualScript_dadosOriginaisCotacao.filter(item => {
+                    const comprarValor = parseFloat(String(item['Comprar'] || '0').replace(',', '.'));
+                    return comprarValor > 0;
+                });
+                
+                const dadosAgrupadosPorFornecedor = agruparPorChave(itensParaComprar, 'Fornecedor');
+                
+                EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupadosPorFornecedor);
+
+                CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                CotacaoIndividualScript_exibirFeedback("Selecione a empresa para faturamento de cada item.", false, 5000);
+            } else {
+                CotacaoIndividualScript_mostrarLoadingOverlay(false);
+                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao carregar dados da Etapa 5.", true);
+                EtapasScript_desativarModoDefinirEmpresa();
+            }
+        })
+        .withFailureHandler(err => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação: " + err.message, true);
+            EtapasScript_desativarModoDefinirEmpresa();
+        })
+        .EtapasController_obterDadosParaEtapaFaturamento();
+}
+
+function EtapasScript_desativarModoDefinirEmpresa() {
+    console.log("EtapasScript: Desativando modo Definir Empresa.");
+    
+    const tableContainer = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER);
+    const controlsContainer = tableContainer.querySelector('.etapa5-controls');
+    if (controlsContainer) {
+        controlsContainer.remove();
+    }
+
+    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
+    CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
+}
+
+function EtapasScript_atualizarDashboardGlobal() {
+    const dashboardContainer = document.getElementById('etapa5-global-dashboard');
+    if (!dashboardContainer) return;
+
+    const totaisGlobais = {};
+    const todasLinhasDeProduto = document.querySelectorAll('tbody .sub-produto-row');
+
+    todasLinhasDeProduto.forEach(row => {
+        const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
+        const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
+
+        if (empresaCell && valorTotalCell) {
+            const empresa = empresaCell.textContent.trim() || "Não Definido";
+            const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+
+            if (!totaisGlobais[empresa]) {
+                totaisGlobais[empresa] = 0;
+            }
+            totaisGlobais[empresa] += valor;
+        }
+    });
+
+    let dashboardHTML = '<h4>Totais Globais por Empresa</h4>';
+    if (Object.keys(totaisGlobais).length === 0) {
+        dashboardHTML += '<span>Nenhum item a ser faturado.</span>';
+    } else {
+        for (const empresa in totaisGlobais) {
+            if (empresa !== "Não Definido") {
+                 dashboardHTML += `<div class="global-total-item">
+                                    <span>${empresa}:</span>
+                                    <strong>${EtapasScript_formatarMoeda(totaisGlobais[empresa])}</strong>
+                                  </div>`;
+            }
+        }
+    }
+    dashboardContainer.innerHTML = dashboardHTML;
+}
+
+function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
+    const tableContainer = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER);
+    const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
+    const thead = tabela.querySelector('thead');
+    const tbody = tabela.querySelector('tbody');
+    tbody.innerHTML = '';
+    thead.innerHTML = '';
+
+    tableContainer.querySelectorAll('.etapa5-controls').forEach(el => el.remove());
+    
+    const controlsContainer = document.createElement('div');
+    controlsContainer.className = 'etapa5-controls';
+    controlsContainer.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;';
+    
+    const backButton = document.createElement('button');
+    backButton.innerHTML = '&#8592; Voltar para Visualização Padrão';
+    backButton.className = 'btn-menu-superior dropdown-menu-button btn-voltar-etapa5';
+    backButton.addEventListener('click', EtapasScript_desativarModoDefinirEmpresa);
+    
+    const globalDashboard = document.createElement('div');
+    globalDashboard.id = 'etapa5-global-dashboard';
+    globalDashboard.style.cssText = 'border: 1px solid #e2e8f0; padding: 0.5rem 1rem; border-radius: 0.375rem; min-width: 300px;';
+
+    controlsContainer.appendChild(backButton);
+    controlsContainer.appendChild(globalDashboard);
+    tableContainer.prepend(controlsContainer);
+
+    const colunasOcultasVisualmente = [
+        "ID da Cotação", "Data Abertura", "Status da Cotação", "Estoque Mínimo", 
+        "Estoque Atual", "NCM", "CST", "CFOP", "Categoria", "Fornecedor", "Fator", 
+        "Preço por Fator", "Produto", "Tamanho", "Economia em Cotação", 
+        "Condição de Pagamento"
+    ];
+    const colunasInvisiveisParaCalculo = ["Fator", "Preço por Fator", "Economia em Cotação"];
+    const cabecalhosVisiveis = CABECALHOS_COTACOES_TODOS.filter(h => !colunasOcultasVisualmente.includes(h));
+    const colunasEditaveis = ["SubProduto", "UN", "Preço", "Comprar"];
+
+    const trHeader = thead.insertRow();
+    cabecalhosVisiveis.forEach(texto => {
+        const th = document.createElement('th');
+        th.textContent = texto;
+        trHeader.appendChild(th);
+    });
+
+    for (const fornecedor in dadosAgrupados) {
+        const subProdutos = dadosAgrupados[fornecedor];
+        const fornecedorClass = `for-${fornecedor.replace(/[^a-zA-Z0-9]/g, '')}`;
+        
+        const fornecedorRow = tbody.insertRow();
+        fornecedorRow.className = 'categoria-accordion-header-row';
+        fornecedorRow.id = `fornecedor-row-${fornecedorClass}`;
+        const fornecedorCell = fornecedorRow.insertCell();
+        fornecedorCell.colSpan = cabecalhosVisiveis.length;
+        
+        fornecedorCell.innerHTML = `
+            <div class="categoria-header-content" style="display: flex; justify-content: space-between; width: 100%; align-items: center; cursor: pointer;">
+                <div>
+                    <svg class="categoria-accordion-icon" viewBox="0 0 20 20" fill="currentColor" style="width: 1.25rem; height: 1.25rem; transition: transform 0.2s; transform: rotate(0deg);"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                    <span>Fornecedor: <strong>${fornecedor}</strong></span>
+                </div>
+                <div id="total-header-${fornecedorClass}"></div>
+            </div>
+        `;
+
+        const dashboardRow = tbody.insertRow();
+        dashboardRow.className = `etapa5-content-row ${fornecedorClass}`;
+        const dashboardCell = dashboardRow.insertCell();
+        dashboardCell.colSpan = cabecalhosVisiveis.length;
+        dashboardCell.style.cssText = 'padding: 8px 25px; background-color: #f0f9ff;';
+        dashboardCell.innerHTML = `<div class="mini-dashboard" data-fornecedor="${fornecedor}"></div>`;
+
+        subProdutos.forEach(subProduto => {
+            const subRow = tbody.insertRow();
+            subRow.className = `sub-produto-row etapa5-content-row ${fornecedorClass}`;
+            subRow.dataset.produto = subProduto['Produto'];
+            subRow.dataset.fornecedor = subProduto['Fornecedor'];
+            subRow.dataset.subprodutoOriginalPersistido = subProduto['_subProdutoOriginalPersistido'];
+
+            CABECALHOS_COTACOES_TODOS.forEach(cabecalho => {
+                if (colunasOcultasVisualmente.includes(cabecalho) && !colunasInvisiveisParaCalculo.includes(cabecalho)) return;
+
+                const td = subRow.insertCell();
+                let valor = subProduto[cabecalho];
+                if (typeof valor === 'number') {
+                     if (['Valor Total', 'Preço', 'Preço por Fator', 'Economia em Cotação'].includes(cabecalho)) {
+                         valor = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                     }
+                }
+                td.textContent = (valor === null || valor === undefined) ? "" : valor;
+                td.dataset.coluna = cabecalho;
+                td.dataset.valorOriginal = subProduto[cabecalho] || "";
+                
+                if (!cabecalhosVisiveis.includes(cabecalho)) td.style.display = 'none';
+
+                const classeCor = window.CotacaoIndividualScript_getClasseCorColuna(cabecalho);
+                if (classeCor) td.classList.add(classeCor);
+
+                if (cabecalho === 'Empresa Faturada') {
+                    td.classList.add('editable-price-cell');
+                    td.addEventListener('click', (e) => CotacaoIndividualScript_transformarCelulaEmSelect(e, EtapasScript_empresasParaFaturamento));
+                } else if (colunasEditaveis.includes(cabecalho)) {
+                    td.classList.add('editable-price-cell');
+                    td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
+                }
+            });
+        });
+
+        EtapasScript_atualizarDashboardFornecedor(fornecedor);
+        document.querySelectorAll(`tr.${fornecedorClass}`).forEach(row => row.classList.add('hidden'));
+    
+        fornecedorRow.addEventListener('click', function(e) {
+            e.stopPropagation();
+
+            const isCurrentlyExpanded = this.classList.contains('expanded');
+            const contentRows = document.querySelectorAll(`tr.${fornecedorClass}`);
+            const icon = this.querySelector('.categoria-accordion-icon');
+
+            if (isCurrentlyExpanded) {
+                this.classList.remove('expanded');
+                if (icon) icon.style.transform = 'rotate(0deg)';
+                contentRows.forEach(row => {
+                    row.classList.add('hidden');
+                });
+            } else {
+                this.classList.add('expanded');
+                if (icon) icon.style.transform = 'rotate(90deg)';
+                contentRows.forEach(row => {
+                    row.classList.remove('hidden');
+                });
+                
+                EtapasScript_atualizarDashboardFornecedor(fornecedor);
+            }
+        });
+    }
+
+    EtapasScript_atualizarDashboardGlobal();
+}
+
+function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
+    const fornecedorClass = `for-${fornecedor.replace(/[^a-zA-Z0-9]/g, '')}`;
+    const dashboardDiv = document.querySelector(`.mini-dashboard[data-fornecedor="${fornecedor}"]`);
+    const totalHeaderDiv = document.getElementById(`total-header-${fornecedorClass}`);
+    const fornecedorRow = document.getElementById(`fornecedor-row-${fornecedorClass}`);
+
+    if (!dashboardDiv || !totalHeaderDiv || !fornecedorRow) return;
+
+    const totaisPorEmpresa = {};
+    let valorTotalFornecedor = 0;
+    const linhasFornecedor = document.querySelectorAll(`tr[data-fornecedor="${fornecedor}"].sub-produto-row`);
+
+    linhasFornecedor.forEach(row => {
+        const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
+        const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
+        
+        if (empresaCell && valorTotalCell) {
+            const empresa = empresaCell.textContent.trim() || "Não Definido";
+            const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+
+            if (!totaisPorEmpresa[empresa]) {
+                totaisPorEmpresa[empresa] = 0;
+            }
+            totaisPorEmpresa[empresa] += valor;
+            valorTotalFornecedor += valor;
+        }
+    });
+
+    const pedidoMinimo = EtapasScript_pedidosMinimosFornecedores[String(fornecedor).trim()] || 0;
+    totalHeaderDiv.innerHTML = `
+        <span>Total do Pedido: <strong>${EtapasScript_formatarMoeda(valorTotalFornecedor)}</strong></span>
+        ${pedidoMinimo > 0 ? `<span style="margin-left: 15px;">(Mínimo por Empresa: ${EtapasScript_formatarMoeda(pedidoMinimo)})</span>` : ''}
+    `;
+
+    let dashboardHTML = '<strong>Totais por Empresa de Faturamento:</strong> ';
+    let todosAtingiramMinimo = true;
+
+    if (Object.keys(totaisPorEmpresa).length === 0 || (Object.keys(totaisPorEmpresa).length === 1 && totaisPorEmpresa["Não Definido"])) {
+        dashboardHTML += '<span style="margin-left: 10px;">Nenhuma empresa definida para os itens.</span>';
+        if (pedidoMinimo > 0) todosAtingiramMinimo = false;
+    } else {
+        for (const empresa in totaisPorEmpresa) {
+            if (empresa === "Não Definido") continue;
+            
+            const totalEmpresa = totaisPorEmpresa[empresa];
+            const atingiuMinimoEmpresa = totalEmpresa >= pedidoMinimo;
+
+            if (!atingiuMinimoEmpresa && pedidoMinimo > 0) {
+                todosAtingiramMinimo = false;
+                dashboardHTML += `<span style="margin-left: 15px; background-color: #e0e7ff; padding: 2px 6px; border-radius: 4px; color: red; font-weight: bold;">
+                                      ${empresa}: ${EtapasScript_formatarMoeda(totalEmpresa)} (Mínimo não atingido!)
+                                  </span>`;
+            } else {
+                 dashboardHTML += `<span style="margin-left: 15px; background-color: #e0e7ff; padding: 2px 6px; border-radius: 4px;">
+                                      ${empresa}: ${EtapasScript_formatarMoeda(totalEmpresa)}
+                                  </span>`;
+            }
+        }
+    }
+    dashboardDiv.innerHTML = dashboardHTML;
+
+    if (!todosAtingiramMinimo && pedidoMinimo > 0) {
+        fornecedorRow.style.backgroundColor = '#FEE2E2';
+    } else {
+        fornecedorRow.style.backgroundColor = '';
+    }
+}
+
+function agruparPorChave(array, chave) {
+    return array.reduce((resultado, item) => {
+        (resultado[item[chave]] = resultado[item[chave]] || []).push(item);
+        return resultado;
+    }, {});
+}
+
+//================================================================================================
+// ETAPA 6: DEFINIR CONDIÇÕES DE PAGAMENTO
+//================================================================================================
+
+let EtapasScript_debounceTimer = null;
+
+function EtapasScript_ativarModoDefinirCondicoesPagamento() {
+    console.log("EtapasScript: Ativando modo Definir Condições de Pagamento (v2).");
+    CotacaoIndividualScript_modoEtapaAtual = 'definir_condicoes_pagamento';
+
+    const itensParaComprar = CotacaoIndividualScript_dadosOriginaisCotacao.filter(item => 
+        (parseFloat(String(item['Comprar'] || '0').replace(',', '.')) || 0) > 0
+    );
+
+    const itemSemEmpresa = itensParaComprar.find(item => !item['Empresa Faturada']);
+    if (itemSemEmpresa) {
+        CotacaoIndividualScript_exibirFeedback("Erro: Existem itens para comprar sem 'Empresa Faturada'. Complete a Etapa 5.", true, 8000);
+        CotacaoIndividualScript_modoEtapaAtual = null;
+        return;
+    }
+
+    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.add('hidden');
+    const containerEtapa6 = document.getElementById('EtapasScript_definirCondicoesPagamentoContainer');
+    containerEtapa6.classList.remove('hidden');
+
+    document.getElementById('EtapasScript_btnVoltarEtapa6').addEventListener('click', EtapasScript_desativarModoDefinirCondicoesPagamento);
+    document.getElementById('EtapasScript_btnSalvarCondicoesPagamento').addEventListener('click', EtapasScript_salvarDadosCondicoesPagamento);
+
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Carregando dados de pagamento...");
+    google.script.run
+        .withSuccessHandler(response => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            if (response && response.success) {
+                EtapasScript_renderizarInterfaceCondicoesPagamento(itensParaComprar, response.condicoes || {});
+                google.script.run.EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Definindo Condições de Pagamento");
+            } else {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao carregar dados.", true);
+                EtapasScript_desativarModoDefinirCondicoesPagamento();
+            }
+        })
+        .withFailureHandler(err => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação: " + err.message, true);
+        })
+        .EtapasController_obterDadosParaEtapaCondicoes();
+}
+
+function EtapasScript_desativarModoDefinirCondicoesPagamento() {
+    console.log("EtapasScript: Tentando desativar modo Definir Condições de Pagamento.");
+
+    let todosPreenchidos = true;
+    const todosOsInputs = document.querySelectorAll('#etapa6-pedidos-list .etapa6-pagamento-input');
+    
+    if (todosOsInputs.length > 0) {
+        todosOsInputs.forEach(input => {
+            if (input.value.trim() === '') {
+                todosPreenchidos = false;
+            }
+        });
+    }
+
+    if (!todosPreenchidos) {
+        const confirmarSaida = confirm("Atenção: Existem condições de pagamento não preenchidas. Deseja realmente sair e descartar as alterações não salvas?");
+        if (!confirmarSaida) {
+            console.log("Saída cancelada pelo usuário.");
+            return;
+        }
+    }
+
+    document.getElementById('EtapasScript_definirCondicoesPagamentoContainer').classList.add('hidden');
+    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
+    CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
+}
+
+function EtapasScript_renderizarInterfaceCondicoesPagamento(itensParaComprar, condicoesFornecedores) {
+    const pedidosListContainer = document.getElementById('etapa6-pedidos-list');
+    const template = document.getElementById('etapa6-pedido-item-template');
+    pedidosListContainer.innerHTML = '';
+
+    const agrupado = itensParaComprar.reduce((acc, item) => {
+        const fornecedor = item['Fornecedor'];
+        const empresa = item['Empresa Faturada'];
+        const chave = `${fornecedor}__${empresa}`;
+
+        if (!acc[chave]) {
+            acc[chave] = { fornecedor, empresa, total: 0, condicaoSalva: item['Condição de Pagamento'] || '' };
+        }
+        acc[chave].total += (parseFloat(String(item['Preço'] || 0).replace(',', '.')) || 0) * (parseFloat(String(item['Comprar'] || 0).replace(',', '.')) || 0);
+        return acc;
+    }, {});
+
+    const listaPedidos = Object.values(agrupado);
+
+    if (listaPedidos.length === 0) {
+        pedidosListContainer.innerHTML = '<p style="color: #6b7280; text-align: center;">Nenhum item a ser pago nesta cotação.</p>';
+        return;
+    }
+
+    listaPedidos.forEach((pedido, index) => {
+        const clone = template.content.cloneNode(true);
+        const uniqueId = `etapa6-pedido-${index}`;
+        
+        const condicoesSugeridas = condicoesFornecedores[pedido.fornecedor] || 'N/A';
+        
+        clone.querySelector('.fornecedor-nome').textContent = pedido.fornecedor;
+        clone.querySelector('.empresa-nome').textContent = pedido.empresa;
+        clone.querySelector('.valor-total').textContent = EtapasScript_formatarMoeda(pedido.total);
+        clone.querySelector('.condicoes-sugeridas').textContent = condicoesSugeridas.replace(/[,;]/g, ' / ');
+
+        const inputCond = clone.querySelector('input[type="text"]');
+        inputCond.id = `cond-pagto-${uniqueId}`;
+        inputCond.value = pedido.condicaoSalva;
+        
+        const itemDiv = clone.querySelector('.etapa6-pedido-item');
+        itemDiv.dataset.fornecedor = pedido.fornecedor;
+        itemDiv.dataset.empresa = pedido.empresa;
+        itemDiv.dataset.total = pedido.total;
+        
+        inputCond.addEventListener('input', () => {
+            clearTimeout(EtapasScript_debounceTimer);
+            EtapasScript_debounceTimer = setTimeout(EtapasScript_atualizarFluxoCaixaGeral, 300);
+        });
+
+        pedidosListContainer.appendChild(clone);
+    });
+    
+    EtapasScript_atualizarFluxoCaixaGeral();
+}
+
+function EtapasScript_atualizarFluxoCaixaGeral() {
+    const todosOsPedidos = document.querySelectorAll('#etapa6-pedidos-list .etapa6-pedido-item');
+    const totaisDiarios = {};
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    todosOsPedidos.forEach(item => {
+        const valorTotal = parseFloat(item.dataset.total);
+        const condicao = item.querySelector('input[type="text"]').value;
+        
+        if (!condicao || isNaN(valorTotal) || valorTotal <= 0) return;
+
+        const prazos = String(condicao).split(/[/,; ]+/).map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p) && p >= 0);
+        if (prazos.length === 0) return;
+        
+        const valorParcela = valorTotal / prazos.length;
+
+        prazos.forEach(dias => {
+            const dataVencimento = new Date(hoje.getTime());
+            dataVencimento.setDate(hoje.getDate() + dias);
+            const chaveData = dataVencimento.toISOString().split('T')[0];
+            
+            totaisDiarios[chaveData] = (totaisDiarios[chaveData] || 0) + valorParcela;
+        });
+    });
+
+    const chavesOrdenadas = Object.keys(totaisDiarios).sort();
+    const tbody = document.getElementById('etapa6-fluxo-preview-tbody');
+    tbody.innerHTML = '';
+
+    if (chavesOrdenadas.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: #6b7280;">Nenhuma condição de pagamento válida informada.</td></tr>';
+        return;
+    }
+
+    chavesOrdenadas.forEach(chaveData => {
+        const [ano, mes, dia] = chaveData.split('-');
+        const dataLabel = `${dia}/${mes}/${ano}`;
+        const valorDia = totaisDiarios[chaveData];
+        
+        const row = tbody.insertRow();
+        row.insertCell().textContent = dataLabel;
+        row.insertCell().textContent = EtapasScript_formatarMoeda(valorDia);
+    });
+}
+
+function EtapasScript_salvarDadosCondicoesPagamento() {
+    console.log("EtapasScript: Tentando salvar condições de pagamento (v2)...");
+    const dadosParaSalvar = [];
+    const todosOsPedidos = document.querySelectorAll('#etapa6-pedidos-list .etapa6-pedido-item');
+    let primeiroCampoVazio = null;
+
+    for (const item of todosOsPedidos) {
+        const fornecedor = item.dataset.fornecedor;
+        const empresa = item.dataset.empresa;
+        const condicaoInput = item.querySelector('input[type="text"]');
+        const condicao = condicaoInput.value.trim();
+
+        if (condicao === '') {
+            primeiroCampoVazio = condicaoInput;
+            break; 
+        }
+
+        dadosParaSalvar.push({ fornecedor, empresa, condicao });
+    }
+
+    if (primeiroCampoVazio) {
+        CotacaoIndividualScript_exibirFeedback("Erro: Todas as condições de pagamento devem ser preenchidas antes de salvar.", true, 5000);
+        primeiroCampoVazio.focus();
+        primeiroCampoVazio.style.borderColor = 'red';
+        setTimeout(() => {
+             if (primeiroCampoVazio) primeiroCampoVazio.style.borderColor = '#d1d5db';
+        }, 3000);
+        return;
+    }
+
+    if (dadosParaSalvar.length === 0) {
+        CotacaoIndividualScript_exibirFeedback("Não há pedidos para salvar.", false, 4000);
+        return;
+    }
+
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Salvando condições...");
+    google.script.run
+        .withSuccessHandler(response => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            if (response && response.success) {
+                CotacaoIndividualScript_exibirFeedback(response.message, false, 6000);
+                CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual);
+            } else {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao salvar condições de pagamento.", true, 8000);
+            }
+        })
+        .withFailureHandler(err => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao salvar: " + err.message, true);
+        })
+        .EtapasController_salvarCondicoesPagamento(CotacaoIndividualScript_cotacaoIdAtual, dadosParaSalvar);
+}
+
+//================================================================================================
+// ETAPA 7: IMPRIMIR PEDIDOS
+//================================================================================================
+
+/**
+ * Solicita a URL da página de impressão e a abre em uma nova aba.
+ */
+function EtapasScript_abrirPaginaImpressao() {
+    console.log("EtapasScript: Solicitando abertura da página de impressão.");
+    
+    if (!CotacaoIndividualScript_cotacaoIdAtual) {
+        CotacaoIndividualScript_exibirFeedback("Erro: ID da Cotação não encontrado.", true, 5000);
+        return;
+    }
+    
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Gerando link de impressão...");
+
+    google.script.run
+        .withSuccessHandler(response => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            if (response.success && response.url) {
+                window.open(response.url, '_blank');
+            } else {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Não foi possível gerar a URL para a página de impressão.", true, 7000);
+            }
+        })
+        .withFailureHandler(error => {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao gerar link: " + error.message, true);
+        })
+        .App_obterUrlWebApp({ view: 'ImprimirPedidosView', idCotacao: CotacaoIndividualScript_cotacaoIdAtual });
+}
+
+</script>

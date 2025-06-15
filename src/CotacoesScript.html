@@ -1,0 +1,607 @@
+<script>
+function initCotacoesScript() {
+  // IDs dos Elementos do DOM
+  const CotacoesScript_ID_LISTA_STATUS_COTACOES = 'CotacoesScript_listaStatusCotacoes';
+  const CotacoesScript_ID_MENSAGEM_FEEDBACK_GLOBAL = 'CotacoesScript_mensagemFeedbackGlobal';
+  const CotacoesScript_ID_PAINEL_ACOES_GLOBAL = 'CotacoesScript_painelAcoesGlobal';
+  const CotacoesScript_ID_BTN_NOVA_COTACAO_GLOBAL = 'CotacoesScript_btnNovaCotacaoGlobal';
+
+  // IDs do Modal de Nova Cotação
+  const CotacoesScript_ID_MODAL_NOVA_COTACAO_OVERLAY = 'CotacoesScript_modalNovaCotacaoOverlay';
+  const CotacoesScript_ID_BTN_FECHAR_MODAL_NOVA_COTACAO = 'CotacoesScript_btnFecharModalNovaCotacao';
+  const CotacoesScript_ID_BTN_CANCELAR_MODAL_NOVA_COTACAO = 'CotacoesScript_btnCancelarModalNovaCotacao';
+  const CotacoesScript_ID_BTN_CRIAR_COTACAO_MODAL = 'CotacoesScript_btnCriarCotacaoModal';
+  const CotacoesScript_ID_SELECT_TIPO_CRIACAO = 'CotacoesScript_selectTipoCriacao';
+  const CotacoesScript_ID_FEEDBACK_MODAL = 'CotacoesScript_feedbackModal';
+
+  const CotacoesScript_ID_SECAO_CATEGORIA = 'CotacoesScript_secaoOpcoesCategoria';
+  const CotacoesScript_ID_SECAO_FORNECEDOR = 'CotacoesScript_secaoOpcoesFornecedor';
+  const CotacoesScript_ID_SECAO_CURVA_ABC = 'CotacoesScript_secaoOpcoesCurvaABC';
+  const CotacoesScript_ID_SECAO_PRODUTO_ESPECIFICO = 'CotacoesScript_secaoOpcoesProdutoEspecifico';
+
+  const CotacoesScript_ID_CHECKBOX_CONTAINER_CATEGORIAS = 'CotacoesScript_checkboxContainerCategorias';
+  const CotacoesScript_ID_CHECKBOX_CONTAINER_FORNECEDORES = 'CotacoesScript_checkboxContainerFornecedores';
+  const CotacoesScript_ID_RADIO_CONTAINER_CURVA_ABC = 'CotacoesScript_radioContainerCurvaABC';
+  const CotacoesScript_ID_CHECKBOX_CONTAINER_PRODUTOS = 'CotacoesScript_checkboxContainerProdutos';
+
+  // IDs dos campos de busca no modal
+  const CotacoesScript_ID_INPUT_BUSCA_FORNECEDOR = 'CotacoesScript_inputBuscaFornecedor';
+  const CotacoesScript_ID_INPUT_BUSCA_PRODUTO = 'CotacoesScript_inputBuscaProduto';
+
+
+  const CotacoesScript_ORDEM_STATUS = [
+    "Nova Cotação", 
+    "Contagem de Estoque", "Aguardando Preços", "Realizando Cotação", "Negociando Preços",
+    "Definindo Empresa para Faturamento", "Definindo Condições de Pagamento",
+    "Aguardando Faturamento", "Faturado", "Recebido Parcialmente", "Finalizado", "Cancelado"
+  ];
+  // console.log("CotacoesScript_ORDEM_STATUS:", CotacoesScript_ORDEM_STATUS);
+
+  let CotacoesScript_dadosOpcoesCriacao = null; 
+
+  function CotacoesScript_exibirFeedback(containerId, mensagem, isError = false, duracao = 5000) {
+    const feedbackDiv = document.getElementById(containerId);
+    if (feedbackDiv) {
+      const innerDiv = document.createElement('div');
+      innerDiv.className = `p-3 rounded-md text-sm ${isError ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-blue-100 text-blue-700 border border-blue-300'}`;
+      innerDiv.textContent = mensagem;
+      feedbackDiv.innerHTML = '';
+      feedbackDiv.appendChild(innerDiv);
+      if (duracao > 0) {
+        setTimeout(() => {
+          if (feedbackDiv.contains(innerDiv)) {
+            feedbackDiv.innerHTML = '';
+          }
+        }, duracao);
+      }
+    }
+  }
+
+  function CotacoesScript_exibirFeedbackGlobal(mensagem, isError = false, duracao = 7000) {
+    CotacoesScript_exibirFeedback(CotacoesScript_ID_MENSAGEM_FEEDBACK_GLOBAL, mensagem, isError, duracao);
+  }
+  
+  function CotacoesScript_exibirFeedbackModal(mensagem, isError = false, duracao = 5000) {
+      CotacoesScript_exibirFeedback(CotacoesScript_ID_FEEDBACK_MODAL, mensagem, isError, duracao);
+  }
+
+  function CotacoesScript_toggleAccordion(headerButton) {
+    const contentId = headerButton.getAttribute('aria-controls');
+    const content = document.getElementById(contentId);
+    const isOpen = headerButton.getAttribute('aria-expanded') === 'true';
+
+    headerButton.setAttribute('aria-expanded', !isOpen);
+    headerButton.classList.toggle('active', !isOpen);
+    if (content) {
+      content.classList.toggle('hidden', isOpen);
+    }
+  }
+
+  function CotacoesScript_vincularEventosAcordeoes() {
+    const accordionHeaders = document.querySelectorAll(`#${CotacoesScript_ID_LISTA_STATUS_COTACOES} .accordion-header`);
+    accordionHeaders.forEach(header => {
+      header.removeEventListener('click', CotacoesScript_handleAccordionClick); 
+      header.addEventListener('click', CotacoesScript_handleAccordionClick);
+    });
+  }
+
+  function CotacoesScript_handleAccordionClick() {
+      CotacoesScript_toggleAccordion(this);
+  }
+
+  function CotacoesScript_renderizarResumoCotacao(cotacaoResumo) {
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'cotacao-summary-item';
+    itemDiv.dataset.cotacaoId = cotacaoResumo.ID_da_Cotacao;
+
+    const infoContainer = document.createElement('div');
+    infoContainer.className = 'cotacao-info';
+
+    const idDiv = document.createElement('div');
+    idDiv.className = 'cotacao-id';
+    idDiv.textContent = `Cotação ID: ${cotacaoResumo.ID_da_Cotacao}`;
+    infoContainer.appendChild(idDiv);
+
+    const dataDiv = document.createElement('div');
+    dataDiv.className = 'cotacao-data';
+    dataDiv.textContent = `Aberta em: ${cotacaoResumo.Data_Abertura_Formatada || "Data não informada"}`;
+    infoContainer.appendChild(dataDiv);
+
+    if (cotacaoResumo.Categorias_Unicas_String) {
+      const categoriasDiv = document.createElement('div');
+      categoriasDiv.className = 'cotacao-categorias';
+      categoriasDiv.textContent = `Categorias: ${cotacaoResumo.Categorias_Unicas_String}`;
+      infoContainer.appendChild(categoriasDiv);
+    }
+    itemDiv.appendChild(infoContainer);
+
+    const botaoContainer = document.createElement('div');
+    const btnAbrir = document.createElement('button');
+    btnAbrir.className = 'btn-painel-acao btn-abrir-cotacao';
+    btnAbrir.dataset.cotacaoId = cotacaoResumo.ID_da_Cotacao;
+    
+    btnAbrir.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                          </svg>
+                          <span>Abrir Cotação</span>`;
+    
+    btnAbrir.addEventListener('click', (event) => {
+        event.stopPropagation(); 
+        const idDaCotacao = cotacaoResumo.ID_da_Cotacao;
+        CotacoesScript_exibirFeedbackGlobal(`Abrindo cotação ${idDaCotacao}...`, false, 2000);
+
+        google.script.run
+            .withSuccessHandler(function(urlRecebida) {
+                if (urlRecebida && !urlRecebida.error) {
+                    window.open(urlRecebida, '_blank'); 
+                } else {
+                    const erroMsg = urlRecebida && urlRecebida.message ? urlRecebida.message : "Não foi possível obter a URL da cotação.";
+                    CotacoesScript_exibirFeedbackGlobal(erroMsg, true);
+                }
+            })
+            .withFailureHandler(function(error) {
+                CotacoesScript_exibirFeedbackGlobal("Erro de comunicação ao tentar abrir cotação: " + error.message, true);
+            })
+            .App_obterUrlCotacaoIndividual(idDaCotacao, 'editar');
+    });
+
+    botaoContainer.appendChild(btnAbrir);
+    itemDiv.appendChild(botaoContainer); 
+
+    return itemDiv;
+  }
+
+  function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
+    // console.log("CotacoesScript_popularAcordeoes: Iniciando com dados agrupados:", JSON.parse(JSON.stringify(cotacoesAgrupadasPorStatus))); 
+
+    CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
+      // console.log(`CotacoesScript_popularAcordeoes: Processando status original: "${statusNomeOriginal}"`); 
+
+      let chaveParaIdHtmlBase = statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
+      
+      // Caso especial para "Nova Cotação" para corresponder ao ID HTML normalizado
+      if (statusNomeOriginal === "Nova Cotação") {
+        chaveParaIdHtmlBase = "nova-cotacao"; 
+      }
+      // Para outros status com caracteres especiais, a conversão toLowerCase().replace(/\s+/g, '-') deve gerar os IDs corretos.
+      // Ex: "Aguardando Preços" -> "aguardando-preços"
+      // Ex: "Realizando Cotação" -> "realizando-cotação"
+      
+      const contentDivId = `content-${chaveParaIdHtmlBase}`;
+      
+      // Para o countSpanId, o padrão no HTML é CotacoesScript_count_ + nome_do_status_em_lowercase_com_underscores
+      let chaveParaCountSpan = statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
+      if (statusNomeOriginal === "Nova Cotação") {
+        chaveParaCountSpan = "nova_cotacao"; // Consistente com o HTML: CotacoesScript_count_nova_cotacao
+      }
+      // Ex: "Aguardando Preços" -> "aguardando_preços" -> CotacoesScript_count_aguardando_preços
+      // Ex: "Realizando Cotação" -> "realizando_cotação" -> CotacoesScript_count_realizando_cotação
+      const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
+
+      const contentDiv = document.getElementById(contentDivId);
+      const countSpan = document.getElementById(countSpanId);
+
+      // console.log(`  > Buscando elementos com ID do conteúdo: "${contentDivId}", ID do contador: "${countSpanId}"`); 
+      if (!contentDiv) {
+        console.warn(`  > Div de conteúdo para "${statusNomeOriginal}" (ID esperado: ${contentDivId}) NÃO ENCONTRADA no HTML.`);
+      }
+      if (!countSpan) {
+        console.warn(`  > Span de contagem para "${statusNomeOriginal}" (ID esperado: ${countSpanId}) NÃO ENCONTRADO no HTML.`);
+      }
+
+      if (contentDiv) {
+        contentDiv.innerHTML = ''; 
+        const cotacoesDoStatus = cotacoesAgrupadasPorStatus[statusNomeOriginal] || []; 
+        // console.log(`  > Para status "${statusNomeOriginal}", encontradas ${cotacoesDoStatus.length} cotações nos dados agrupados.`); 
+
+        if (countSpan) {
+          countSpan.textContent = `(${cotacoesDoStatus.length})`;
+        }
+
+        if (cotacoesDoStatus.length > 0) {
+          cotacoesDoStatus.sort((a, b) => {
+            const dateA = a.Data_Abertura_Original ? new Date(a.Data_Abertura_Original) : new Date(0);
+            const dateB = b.Data_Abertura_Original ? new Date(b.Data_Abertura_Original) : new Date(0);
+            return dateB - dateA; 
+          });
+          cotacoesDoStatus.forEach(cotacaoResumo => {
+            const itemHtml = CotacoesScript_renderizarResumoCotacao(cotacaoResumo);
+            contentDiv.appendChild(itemHtml);
+          });
+        } else {
+          contentDiv.innerHTML = '<p class="no-cotacoes-message">Nenhuma cotação neste status.</p>';
+        }
+      }
+    });
+    CotacoesScript_vincularEventosAcordeoes(); 
+  }
+
+  function CotacoesScript_processarDadosRecebidos(arrayDeResumosDeCotacao) {
+    // console.log("CotacoesScript_processarDadosRecebidos: Dados brutos recebidos do servidor:", JSON.parse(JSON.stringify(arrayDeResumosDeCotacao))); 
+    if (!arrayDeResumosDeCotacao || arrayDeResumosDeCotacao.length === 0) {
+      // console.log("CotacoesScript_processarDadosRecebidos: Nenhum resumo de cotação recebido.");
+      return {};
+    }
+    const cotacoesAgrupadasPorStatus = {};
+    arrayDeResumosDeCotacao.forEach(resumoCotacao => {
+      const status = resumoCotacao.Status_da_Cotacao || "Status Desconhecido";
+       // console.log(`  > Processando item com status: "${status}" (ID Cotação: ${resumoCotacao.ID_da_Cotacao})`);
+      if (!cotacoesAgrupadasPorStatus[status]) {
+        cotacoesAgrupadasPorStatus[status] = [];
+      }
+      cotacoesAgrupadasPorStatus[status].push(resumoCotacao);
+    });
+    // console.log("CotacoesScript_processarDadosRecebidos: Resumos agrupados por status final:", JSON.parse(JSON.stringify(cotacoesAgrupadasPorStatus))); 
+    return cotacoesAgrupadasPorStatus;
+  }
+
+  function CotacoesScript_carregarTodasCotacoes() {
+    // console.log("CotacoesScript_carregarTodasCotacoes: Iniciando carregamento...");
+    CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
+        let chaveParaIdHtmlBase = statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
+        if (statusNomeOriginal === "Nova Cotação") {
+            chaveParaIdHtmlBase = "nova-cotacao";
+        }
+        
+        const contentDivId = `content-${chaveParaIdHtmlBase}`;
+        const contentDiv = document.getElementById(contentDivId);
+        if (contentDiv) {
+            contentDiv.innerHTML = `<div class="loading-spinner-container">
+                                        <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <span>Carregando cotações...</span>
+                                      </div>`;
+        }
+        let chaveParaCountSpan = statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
+        if (statusNomeOriginal === "Nova Cotação") {
+            chaveParaCountSpan = "nova_cotacao";
+        }
+        const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
+        const countSpan = document.getElementById(countSpanId);
+        if(countSpan) countSpan.textContent = "(...)";
+    });
+
+    google.script.run
+      .withSuccessHandler(function(resposta) {
+        // console.log("CotacoesScript_carregarTodasCotacoes: Resposta do servidor:", JSON.parse(JSON.stringify(resposta))); 
+        if (resposta && resposta.success && Array.isArray(resposta.dados)) { 
+          const cotacoesAgrupadas = CotacoesScript_processarDadosRecebidos(resposta.dados);
+          CotacoesScript_popularAcordeoes(cotacoesAgrupadas);
+        } else {
+          let errorMsg = "Falha ao carregar resumos das cotações. Resposta inválida do servidor.";
+          if(resposta && typeof resposta.message === 'string') errorMsg = resposta.message;
+          else if (!resposta) errorMsg = "Resposta do servidor foi nula ou indefinida.";
+          else if (resposta && resposta.success && !Array.isArray(resposta.dados)) {
+             errorMsg = "Dados recebidos do servidor não estão no formato esperado (não é um array).";
+             console.error("Dados recebidos:", resposta.dados);
+          }
+          CotacoesScript_exibirFeedbackGlobal(errorMsg, true);
+          CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
+              let chaveParaIdHtmlBase = statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
+              if (statusNomeOriginal === "Nova Cotação") {
+                  chaveParaIdHtmlBase = "nova-cotacao";
+              }
+              const contentDivId = `content-${chaveParaIdHtmlBase}`;
+              const contentDiv = document.getElementById(contentDivId);
+              if (contentDiv) {
+                  contentDiv.innerHTML = '<p class="no-cotacoes-message text-red-500">Erro ao carregar cotações.</p>';
+              }
+              let chaveParaCountSpan = statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
+              if (statusNomeOriginal === "Nova Cotação") {
+                  chaveParaCountSpan = "nova_cotacao";
+              }
+              const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
+              const countSpan = document.getElementById(countSpanId);
+              if(countSpan) countSpan.textContent = "(0)";
+          });
+        }
+      })
+      .withFailureHandler(function(error) {
+        CotacoesScript_exibirFeedbackGlobal("Erro de comunicação ao carregar cotações: " + error.message, true);
+        CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
+            let chaveParaIdHtmlBase = statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
+            if (statusNomeOriginal === "Nova Cotação") {
+                chaveParaIdHtmlBase = "nova-cotacao";
+            }
+            const contentDivId = `content-${chaveParaIdHtmlBase}`;
+            const contentDiv = document.getElementById(contentDivId);
+            if (contentDiv) {
+                contentDiv.innerHTML = '<p class="no-cotacoes-message text-red-500">Erro de comunicação.</p>';
+            }
+            let chaveParaCountSpan = statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
+            if (statusNomeOriginal === "Nova Cotação") {
+                chaveParaCountSpan = "nova_cotacao";
+            }
+            const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
+            const countSpan = document.getElementById(countSpanId);
+            if(countSpan) countSpan.textContent = "(0)";
+        });
+      })
+      .CotacoesController_obterResumosDeCotacoes();
+  }
+
+  function CotacoesScript_abrirModalNovaCotacao() {
+    const modalOverlay = document.getElementById(CotacoesScript_ID_MODAL_NOVA_COTACAO_OVERLAY);
+    if (modalOverlay) {
+        modalOverlay.classList.add('active');
+        document.getElementById(CotacoesScript_ID_SELECT_TIPO_CRIACAO).value = ""; 
+        CotacoesScript_gerenciarVisibilidadeSecoesOpcoes(""); 
+
+        const buscaFornecedorInput = document.getElementById(CotacoesScript_ID_INPUT_BUSCA_FORNECEDOR);
+        if(buscaFornecedorInput) buscaFornecedorInput.value = "";
+        const buscaProdutoInput = document.getElementById(CotacoesScript_ID_INPUT_BUSCA_PRODUTO);
+        if(buscaProdutoInput) buscaProdutoInput.value = "";
+
+
+        if (!CotacoesScript_dadosOpcoesCriacao) { 
+            CotacoesScript_setLoadingStateOpcoesModal(true);
+            google.script.run
+                .withSuccessHandler(CotacoesScript_popularOpcoesModal)
+                .withFailureHandler(CotacoesScript_falhaCarregarOpcoesModal)
+                .CotacoesController_obterOpcoesNovaCotacao();
+        } else {
+            CotacoesScript_popularOpcoesModal(CotacoesScript_dadosOpcoesCriacao); 
+            CotacoesScript_filtrarCheckboxes(CotacoesScript_ID_CHECKBOX_CONTAINER_FORNECEDORES, "");
+            CotacoesScript_filtrarCheckboxes(CotacoesScript_ID_CHECKBOX_CONTAINER_PRODUTOS, "");
+        }
+    }
+  }
+
+  function CotacoesScript_fecharModalNovaCotacao() {
+    const modalOverlay = document.getElementById(CotacoesScript_ID_MODAL_NOVA_COTACAO_OVERLAY);
+    if (modalOverlay) {
+        modalOverlay.classList.remove('active');
+        document.getElementById(CotacoesScript_ID_FEEDBACK_MODAL).innerHTML = ''; 
+    }
+  }
+
+  function CotacoesScript_setLoadingStateOpcoesModal(isLoading) {
+      const placeholderText = isLoading ? "Carregando..." : "Nenhuma opção disponível.";
+      const containers = [
+          {id: CotacoesScript_ID_CHECKBOX_CONTAINER_CATEGORIAS, hasSearch: false},
+          {id: CotacoesScript_ID_CHECKBOX_CONTAINER_FORNECEDORES, hasSearch: true},
+          {id: CotacoesScript_ID_CHECKBOX_CONTAINER_PRODUTOS, hasSearch: true}
+      ];
+      containers.forEach(containerInfo => {
+          const containerElement = document.getElementById(containerInfo.id);
+          if(containerElement) {
+            if (containerInfo.hasSearch) {
+                 // Apenas o conteúdo do container de checkboxes é alterado
+                 containerElement.innerHTML = `<p class="text-gray-500 text-sm">${placeholderText}</p>`;
+            } else {
+                // Se não houver input de busca (ex: categorias), define o conteúdo do container normalmente
+                containerElement.innerHTML = `<p class="text-gray-500 text-sm">${placeholderText}</p>`;
+            }
+          }
+      });
+  }
+  
+  function CotacoesScript_popularOpcoesModal(resposta) {
+      CotacoesScript_setLoadingStateOpcoesModal(false); 
+      if (resposta && resposta.success && resposta.dados) {
+          CotacoesScript_dadosOpcoesCriacao = resposta; 
+          const { categorias, fornecedores, produtos } = resposta.dados;
+
+          CotacoesScript_popularCheckboxes(CotacoesScript_ID_CHECKBOX_CONTAINER_CATEGORIAS, categorias, 'cat');
+          CotacoesScript_popularCheckboxes(CotacoesScript_ID_CHECKBOX_CONTAINER_FORNECEDORES, fornecedores, 'forn', true); 
+          CotacoesScript_popularCheckboxes(CotacoesScript_ID_CHECKBOX_CONTAINER_PRODUTOS, produtos, 'prod', true);    
+      } else {
+          const msg = resposta && resposta.message ? resposta.message : "Falha ao carregar dados para as opções.";
+          CotacoesScript_exibirFeedbackModal(msg, true);
+          CotacoesScript_setLoadingStateOpcoesModal(false); 
+      }
+  }
+
+  function CotacoesScript_falhaCarregarOpcoesModal(error) {
+      CotacoesScript_exibirFeedbackModal("Erro de comunicação ao buscar opções: " + error.message, true);
+      CotacoesScript_setLoadingStateOpcoesModal(false); 
+  }
+
+  // Função para filtrar checkboxes
+  function CotacoesScript_filtrarCheckboxes(containerId, termoBusca) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const termoLowerCase = String(termoBusca).toLowerCase(); // Garante que termoBusca seja string
+    const labels = container.getElementsByTagName('label');
+
+    for (let i = 0; i < labels.length; i++) {
+        const label = labels[i];
+        const textoLabel = label.textContent || label.innerText || "";
+        if (textoLabel.toLowerCase().includes(termoLowerCase)) {
+            label.style.display = "flex"; // Mostra (usando flex como no estilo original)
+        } else {
+            label.style.display = "none"; // Esconde
+        }
+    }
+  }
+
+
+  function CotacoesScript_popularCheckboxes(containerId, items, namePrefix, usarNomeComoValor = false) { 
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = ''; 
+
+      if (!items || items.length === 0) {
+          container.innerHTML = '<p class="text-gray-500 text-sm">Nenhuma opção disponível.</p>';
+          return;
+      }
+
+      items.forEach((item, index) => {
+          const itemValue = typeof item === 'object' ? (usarNomeComoValor ? item.nome : item.id) : item; 
+          const itemName = typeof item === 'object' ? item.nome : item;
+
+          const label = document.createElement('label');
+          // Mantém display: flex para alinhamento correto
+          label.style.display = 'flex'; 
+          label.className = 'items-center space-x-2 text-sm text-gray-700 py-1';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.name = `${namePrefix}_${index}`;
+          checkbox.value = itemValue;
+          checkbox.className = 'form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500';
+          
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(" " + itemName));
+          container.appendChild(label);
+      });
+  }
+
+  function CotacoesScript_gerenciarVisibilidadeSecoesOpcoes(tipoSelecionado) {
+    const secoes = [
+        CotacoesScript_ID_SECAO_CATEGORIA, CotacoesScript_ID_SECAO_FORNECEDOR,
+        CotacoesScript_ID_SECAO_CURVA_ABC, CotacoesScript_ID_SECAO_PRODUTO_ESPECIFICO
+    ];
+    secoes.forEach(idSecao => {
+        const elSecao = document.getElementById(idSecao);
+        if (elSecao) elSecao.classList.remove('active');
+    });
+
+    let secaoAtivaId = null;
+    switch (tipoSelecionado) {
+        case 'categoria': secaoAtivaId = CotacoesScript_ID_SECAO_CATEGORIA; break;
+        case 'fornecedor': secaoAtivaId = CotacoesScript_ID_SECAO_FORNECEDOR; break;
+        case 'curvaABC': secaoAtivaId = CotacoesScript_ID_SECAO_CURVA_ABC; break;
+        case 'produtoEspecifico': secaoAtivaId = CotacoesScript_ID_SECAO_PRODUTO_ESPECIFICO; break;
+    }
+
+    if (secaoAtivaId) {
+        const elSecaoAtiva = document.getElementById(secaoAtivaId);
+        if (elSecaoAtiva) elSecaoAtiva.classList.add('active');
+    }
+  }
+  
+  function CotacoesScript_coletarSelecoesModal() {
+    const tipoCriacao = document.getElementById(CotacoesScript_ID_SELECT_TIPO_CRIACAO).value;
+    let selecoes = [];
+    let containerId = '';
+    let inputType = 'checkbox';
+
+    switch (tipoCriacao) {
+        case 'categoria':
+            containerId = CotacoesScript_ID_CHECKBOX_CONTAINER_CATEGORIAS;
+            break;
+        case 'fornecedor':
+            containerId = CotacoesScript_ID_CHECKBOX_CONTAINER_FORNECEDORES;
+            break;
+        case 'curvaABC':
+            inputType = 'radio';
+            const radiosCurva = document.querySelectorAll(`#${CotacoesScript_ID_SECAO_CURVA_ABC} input[name="curvaABC"]:checked`);
+            if (radiosCurva.length > 0) {
+                selecoes.push(radiosCurva[0].value);
+            }
+            break;
+        case 'produtoEspecifico':
+            containerId = CotacoesScript_ID_CHECKBOX_CONTAINER_PRODUTOS;
+            break;
+        default:
+            CotacoesScript_exibirFeedbackModal("Selecione um tipo de criação.", true);
+            return null;
+    }
+
+    if (inputType === 'checkbox' && containerId) {
+        const checkboxes = document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`);
+        checkboxes.forEach(cb => selecoes.push(cb.value));
+    }
+    
+    if (selecoes.length === 0 && tipoCriacao !== '') { 
+        CotacoesScript_exibirFeedbackModal("Nenhuma opção selecionada para o tipo escolhido.", true);
+        return null;
+    }
+    
+    return { tipo: tipoCriacao, selecoes: selecoes };
+  }
+
+  function CotacoesScript_lidarComCriacaoNovaCotacao() {
+    const dadosCriacao = CotacoesScript_coletarSelecoesModal();
+    if (!dadosCriacao) {
+      return; 
+    }
+    if (!dadosCriacao.tipo) {
+        CotacoesScript_exibirFeedbackModal("Por favor, selecione um tipo de criação.", true);
+        return;
+    }
+    if (dadosCriacao.selecoes.length === 0) {
+        CotacoesScript_exibirFeedbackModal("Por favor, selecione ao menos uma opção para o tipo '" + dadosCriacao.tipo + "'.", true);
+        return;
+    }
+
+    CotacoesScript_exibirFeedbackModal("Criando cotação, por favor aguarde...", false, 0); 
+    document.getElementById(CotacoesScript_ID_BTN_CRIAR_COTACAO_MODAL).disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function(resposta) {
+        document.getElementById(CotacoesScript_ID_BTN_CRIAR_COTACAO_MODAL).disabled = false;
+        if (resposta && resposta.success) {
+          CotacoesScript_exibirFeedbackGlobal(`Cotação ID ${resposta.idCotacao} criada com ${resposta.numItens} item(ns)!`, false);
+          CotacoesScript_fecharModalNovaCotacao();
+          CotacoesScript_carregarTodasCotacoes(); 
+        } else {
+          const msg = resposta && resposta.message ? resposta.message : "Falha ao criar cotação.";
+          CotacoesScript_exibirFeedbackModal(msg, true);
+        }
+      })
+      .withFailureHandler(function(error) {
+        document.getElementById(CotacoesScript_ID_BTN_CRIAR_COTACAO_MODAL).disabled = false;
+        CotacoesScript_exibirFeedbackModal("Erro de comunicação ao criar cotação: " + error.message, true);
+      })
+      .CotacoesController_criarNovaCotacao(dadosCriacao);
+  }
+
+  function CotacoesScript_inicializar() {
+    // console.log("CotacoesScript_inicializar: Script sendo inicializado."); 
+    CotacoesScript_vincularEventosAcordeoes();
+    
+    const btnNovaCotacaoGlobal = document.getElementById(CotacoesScript_ID_BTN_NOVA_COTACAO_GLOBAL);
+    if (btnNovaCotacaoGlobal) {
+      btnNovaCotacaoGlobal.addEventListener('click', CotacoesScript_abrirModalNovaCotacao);
+    }
+
+    const btnFecharModal = document.getElementById(CotacoesScript_ID_BTN_FECHAR_MODAL_NOVA_COTACAO);
+    const btnCancelarModal = document.getElementById(CotacoesScript_ID_BTN_CANCELAR_MODAL_NOVA_COTACAO);
+    const btnCriarCotacaoModal = document.getElementById(CotacoesScript_ID_BTN_CRIAR_COTACAO_MODAL);
+    const selectTipoCriacao = document.getElementById(CotacoesScript_ID_SELECT_TIPO_CRIACAO);
+    const modalOverlay = document.getElementById(CotacoesScript_ID_MODAL_NOVA_COTACAO_OVERLAY);
+
+
+    if(btnFecharModal) btnFecharModal.addEventListener('click', CotacoesScript_fecharModalNovaCotacao);
+    if(btnCancelarModal) btnCancelarModal.addEventListener('click', CotacoesScript_fecharModalNovaCotacao);
+    if(btnCriarCotacaoModal) btnCriarCotacaoModal.addEventListener('click', CotacoesScript_lidarComCriacaoNovaCotacao);
+    
+    if(selectTipoCriacao) {
+        selectTipoCriacao.addEventListener('change', function() {
+            CotacoesScript_gerenciarVisibilidadeSecoesOpcoes(this.value);
+        });
+    }
+    if (modalOverlay) {
+        modalOverlay.addEventListener('click', function(event) {
+            if (event.target === modalOverlay) { 
+                CotacoesScript_fecharModalNovaCotacao();
+            }
+        });
+    }
+
+    const buscaFornecedorInput = document.getElementById(CotacoesScript_ID_INPUT_BUSCA_FORNECEDOR);
+    if(buscaFornecedorInput){
+        buscaFornecedorInput.addEventListener('keyup', function(){
+            CotacoesScript_filtrarCheckboxes(CotacoesScript_ID_CHECKBOX_CONTAINER_FORNECEDORES, this.value);
+        });
+    }
+
+    const buscaProdutoInput = document.getElementById(CotacoesScript_ID_INPUT_BUSCA_PRODUTO);
+    if(buscaProdutoInput){
+        buscaProdutoInput.addEventListener('keyup', function(){
+            CotacoesScript_filtrarCheckboxes(CotacoesScript_ID_CHECKBOX_CONTAINER_PRODUTOS, this.value);
+        });
+    }
+
+
+    CotacoesScript_carregarTodasCotacoes();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', CotacoesScript_inicializar);
+  } else {
+    CotacoesScript_inicializar();
+  }
+}
+</script>

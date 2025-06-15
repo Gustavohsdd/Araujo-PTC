@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Análise de Compra</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f4f7f6; margin: 0; padding: 2rem; color: #334155; }
+        .report-container { max-width: 1200px; margin: auto; }
+        h1 { color: #1D4ED8; border-bottom: 2px solid #BFDBFE; padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+        .product-card { background-color: white; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 1.5rem; overflow: hidden; }
+        
+        .product-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #DBEAFE;
+            color: #1E40AF;
+            padding: 0.75rem 1.25rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .avg-interval-header {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #1e3a8a;
+            background-color: #eff6ff;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            white-space: nowrap;
+        }
+        /* -- INÍCIO DA ALTERAÇÃO: Layout para 3 colunas -- */
+        .product-body { 
+            padding: 1.25rem; 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem; 
+        }
+        /* -- FIM DA ALTERAÇÃO -- */
+        .analysis-section { background-color: #f9fafb; border-radius: 0.375rem; padding: 0.75rem; border: 1px solid #e5e7eb; }
+        .analysis-section h3 { font-size: 1rem; font-weight: 600; color: #111827; margin-top: 0; margin-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #e5e7eb; font-size: 0.875rem;}
+
+        th { font-weight: 500; color: #6b7280; }
+        tr:last-child td { border-bottom: none; }
+        .metric-value { font-weight: 600; color: #1D4ED8; }
+        .loading, .empty-state { text-align: center; padding: 3rem; font-size: 1.25rem; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <h1>Relatório de Análise de Compra - Cotação #<span id="cotacao-id-display"></span></h1>
+        <div id="report-content">
+            <div class="loading">Carregando dados do relatório...</div>
+        </div>
+    </div>
+
+    <template id="product-card-template">
+        <div class="product-card">
+            <div class="product-header">
+                <span class="product-name-text"></span>
+                <span class="avg-interval-header"></span>
+            </div>
+            <div class="product-body">
+                <div class="analysis-section" data-section="price-history">
+                    <h3>Histórico de Preço (Últimos 6 Pedidos)</h3>
+                    <table>
+                        <thead><tr><th>Data</th><th>Preço Unitário</th><th>Preço/Fator</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <!-- INÍCIO DA ALTERAÇÃO: Simplificação do quadro de variação -->
+                <div class="analysis-section" data-section="price-variation">
+                    <h3>Variação por Fator (Últimos 6 Meses)</h3>
+                     <table>
+                        <tbody>
+                            <tr><td>Menor Valor por Fator</td><td class="metric-value" data-metric="min-price-factor"></td></tr>
+                            <tr><td>Maior Valor por Fator</td><td class="metric-value" data-metric="max-price-factor"></td></tr>
+                            <tr><td>Média Ponderada por Fator</td><td class="metric-value" data-metric="avg-price-factor"></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- FIM DA ALTERAÇÃO -->
+                <div class="analysis-section" data-section="purchase-volume">
+                    <h3>Volume por Pedido</h3>
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        <table>
+                            <thead><tr><th>Data</th><th>Quantidade</th><th>UN</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+      var REPORT_COTACAO_ID = '<?= idCotacao ?>';
+    </script>
+    <?!= App_incluirHtml('RelatorioAnaliseCompraScript', true) ?>
+</body>
+</html>

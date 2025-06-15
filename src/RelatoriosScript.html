@@ -1,0 +1,42 @@
+<script>
+/**
+ * @file RelatoriosScript.html
+ * @description Script intermediário na página de Cotação Individual para lançar relatórios.
+ */
+
+/**
+ * Abre o Relatório de Análise de Compra em uma nova guia.
+ * @param {string} idCotacao O ID da cotação atual.
+ */
+function RelatoriosScript_abrirRelatorioAnaliseCompra(idCotacao) {
+    if (!idCotacao) {
+        if(typeof CotacaoIndividualScript_exibirFeedback === 'function') {
+            CotacaoIndividualScript_exibirFeedback("Não é possível abrir o relatório: ID da cotação não encontrado.", true);
+        }
+        return;
+    }
+    
+    console.log(`RelatoriosScript: Solicitando URL para Relatório de Análise de Compra, ID: ${idCotacao}`);
+
+    // Usa a função genérica para construir a URL no servidor
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response.success && response.url) {
+                window.open(response.url, '_blank');
+            } else {
+                if(typeof CotacaoIndividualScript_exibirFeedback === 'function') {
+                    CotacaoIndividualScript_exibirFeedback(response.message || "Não foi possível gerar a URL do relatório.", true);
+                }
+            }
+        })
+        .withFailureHandler(function(error) {
+             if(typeof CotacaoIndividualScript_exibirFeedback === 'function') {
+                CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao abrir relatório: " + error.message, true);
+            }
+        })
+        .App_obterUrlWebApp({
+            view: 'RelatorioAnaliseCompraView',
+            idCotacao: idCotacao
+        });
+}
+</script>
