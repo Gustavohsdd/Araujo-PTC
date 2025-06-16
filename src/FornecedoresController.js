@@ -187,13 +187,8 @@ function FornecedoresController_criarNovoFornecedor(dadosNovoFornecedor) {
 */
 function FornecedoresController_atualizarFornecedor(fornecedorParaAtualizar) {
   try {
-    if (!fornecedorParaAtualizar || !fornecedorParaAtualizar["ID"]) {
-      throw new Error("ID do fornecedor é obrigatório para atualização.");
-    }
-
     const idParaAtualizar = String(fornecedorParaAtualizar["ID"]);
-    const nomeAtualizado = fornecedorParaAtualizar[CABECALHOS_FORNECEDORES[2]];
-    const cnpjAtualizado = fornecedorParaAtualizar[CABECALHOS_FORNECEDORES[3]];
+    if (!idParaAtualizar) throw new Error("ID do fornecedor é obrigatório para atualização.");
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const abaFornecedores = ss.getSheetByName(ABA_FORNECEDORES);
@@ -201,95 +196,63 @@ function FornecedoresController_atualizarFornecedor(fornecedorParaAtualizar) {
 
     const range = abaFornecedores.getDataRange();
     const todasAsLinhas = range.getValues();
-    const cabecalhosDaPlanilha = todasAsLinhas[0].map(String);
+    const cabPlan = todasAsLinhas[0].map(String);
 
-    const idColunaIndex = cabecalhosDaPlanilha.indexOf(CABECALHOS_FORNECEDORES[1]);
-    const nomeFornecedorColunaIndex = cabecalhosDaPlanilha.indexOf(CABECALHOS_FORNECEDORES[2]);
-    const cnpjColunaIndex = cabecalhosDaPlanilha.indexOf(CABECALHOS_FORNECEDORES[3]);
-
-    if (idColunaIndex === -1) throw new Error("Coluna 'ID' não encontrada.");
-    if (nomeFornecedorColunaIndex === -1) throw new Error("Coluna 'Fornecedor' não encontrada.");
-    if (cnpjColunaIndex === -1) throw new Error("Coluna 'CNPJ' não encontrada.");
-
-    let linhaParaAtualizarIndexNaPlanilha = -1;
-
+    // Índices
+    const idxId = cabPlan.indexOf("ID");
+    const idxNome = cabPlan.indexOf("Fornecedor");
+    
+    // Encontrar linha e capturar nome antigo
+    let linhaPlan = -1;
     for (let i = 1; i < todasAsLinhas.length; i++) {
-      const idLinhaAtual = String(todasAsLinhas[i][idColunaIndex]);
-      if (idLinhaAtual === idParaAtualizar) {
-        linhaParaAtualizarIndexNaPlanilha = i + 1;
-      } else {
-        const nomeLinhaAtual = todasAsLinhas[i][nomeFornecedorColunaIndex];
-        const cnpjLinhaAtual = todasAsLinhas[i][cnpjColunaIndex];
-        if (nomeAtualizado && FornecedoresController_normalizarTextoComparacao(nomeLinhaAtual) === FornecedoresController_normalizarTextoComparacao(nomeAtualizado)) {
-          throw new Error(`O nome de fornecedor '${nomeAtualizado}' já está cadastrado para outro ID (${idLinhaAtual}).`);
-        }
-        if (cnpjAtualizado && FornecedoresController_normalizarCnpjComparacao(cnpjLinhaAtual) === FornecedoresController_normalizarCnpjComparacao(cnpjAtualizado) && FornecedoresController_normalizarCnpjComparacao(cnpjAtualizado) !== "") {
-          throw new Error(`O CNPJ '${cnpjAtualizado}' já está cadastrado para outro ID (${idLinhaAtual}).`);
-        }
+      if (String(todasAsLinhas[i][idxId]) === idParaAtualizar) {
+        linhaPlan = i + 1; // 1-based
+        break;
+      }
+    }
+    if (linhaPlan === -1) throw new Error(`Fornecedor com ID '${idParaAtualizar}' não encontrado.`);
+    const nomeAntigo = String(todasAsLinhas[linhaPlan - 1][idxNome]);
+    const nomeAtualizado = fornecedorParaAtualizar["Fornecedor"];
+    if (!nomeAtualizado) throw new Error("Nome do Fornecedor é obrigatório.");
+
+    // Verificar duplicidade em outros IDs
+    function _norm(txt) { return txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
+    const nomeAtualNorm = _norm(nomeAtualizado);
+    for (let i = 1; i < todasAsLinhas.length; i++) {
+      if ((i + 1) !== linhaPlan && _norm(String(todasAsLinhas[i][idxNome])) === nomeAtualNorm) {
+        throw new Error(`O nome '${nomeAtualizado}' já está cadastrado para outro ID.`);
       }
     }
 
-    if (linhaParaAtualizarIndexNaPlanilha === -1) {
-      throw new Error(`Fornecedor com ID '${idParaAtualizar}' não encontrado para atualização.`);
-    }
-
-    const valorOriginalLinha = todasAsLinhas[linhaParaAtualizarIndexNaPlanilha - 1];
-    const linhaFinalParaSalvar = [];
-    let alteracoesReais = 0;
-
-    for (let k = 0; k < cabecalhosDaPlanilha.length; k++) {
-      const nomeCabecalhoPlanilha = cabecalhosDaPlanilha[k];
-      let valorOriginalCelula = valorOriginalLinha[k];
-
-      if (nomeCabecalhoPlanilha === CABECALHOS_FORNECEDORES[0]) { // "Data de Cadastro"
-        linhaFinalParaSalvar.push(valorOriginalCelula instanceof Date ? valorOriginalCelula : new Date(valorOriginalCelula)); // Mantém a data original se válida
-      } else if (nomeCabecalhoPlanilha === CABECALHOS_FORNECEDORES[1]) { // "ID"
-        linhaFinalParaSalvar.push(idParaAtualizar);
-      } else if (fornecedorParaAtualizar.hasOwnProperty(nomeCabecalhoPlanilha)) {
-        let valorDoForm = fornecedorParaAtualizar[nomeCabecalhoPlanilha];
-        if (nomeCabecalhoPlanilha === CABECALHOS_FORNECEDORES[12]) { // "Pedido Mínimo (R$)"
-          if (typeof valorDoForm === 'string') {
-            valorDoForm = valorDoForm.replace('R$', '').replace(/\./g, '').replace(',', '.').trim();
-          }
-          valorDoForm = parseFloat(valorDoForm);
-          if (isNaN(valorDoForm)) valorDoForm = valorOriginalCelula;
-        }
-        linhaFinalParaSalvar.push(valorDoForm);
-        
-        let originalComparavel = valorOriginalCelula;
-        let formComparavel = valorDoForm;
-        if (valorOriginalCelula instanceof Date && nomeCabecalhoPlanilha !== CABECALHOS_FORNECEDORES[0]) { // Para outras datas
-             originalComparavel = Utilities.formatDate(valorOriginalCelula, Session.getScriptTimeZone(), "dd/MM/yyyy");
-             formComparavel = valorDoForm; // Assumindo que do form vem como string "dd/MM/yyyy" se for data
-        } else if (nomeCabecalhoPlanilha === CABECALHOS_FORNECEDORES[12]) {
-            originalComparavel = parseFloat(String(valorOriginalCelula).replace('R$', '').replace(/\./g, '').replace(',', '.').trim());
-            if(isNaN(originalComparavel)) originalComparavel = 0;
-            formComparavel = parseFloat(String(valorDoForm)); // valorDoForm já é float aqui
-            if(isNaN(formComparavel)) formComparavel = 0;
-        }
-
-        if (String(originalComparavel) !== String(formComparavel)) {
-          if (nomeCabecalhoPlanilha === CABECALHOS_FORNECEDORES[12] && (originalComparavel === 0 || isNaN(originalComparavel)) && formComparavel === 0) {
-            // Não conta como alteração se ambos são zero para pedido mínimo
-          } else {
-            alteracoesReais++;
-          }
-        }
-      } else {
-        linhaFinalParaSalvar.push(valorOriginalCelula);
+    // Montar linha final
+    const novaLinha = cabPlan.map((cab, k) => {
+      if (k === cabPlan.indexOf("Data de Cadastro") || k === idxId) {
+        return todasAsLinhas[linhaPlan - 1][k];
       }
-    }
+      return fornecedorParaAtualizar[cab] !== undefined ? fornecedorParaAtualizar[cab] : todasAsLinhas[linhaPlan - 1][k];
+    });
 
-    if (alteracoesReais > 0) {
-      abaFornecedores.getRange(linhaParaAtualizarIndexNaPlanilha, 1, 1, linhaFinalParaSalvar.length).setValues([linhaFinalParaSalvar]);
+    // Atualizar na planilha
+    abaFornecedores.getRange(linhaPlan, 1, 1, novaLinha.length).setValues([novaLinha]);
+    SpreadsheetApp.flush();
+
+    // --- NOVO: Propagar novo nome para SubProdutos vinculados ---
+    const abaSub = ss.getSheetByName(ABA_SUBPRODUTOS);
+    if (abaSub) {
+      const dadosSub = abaSub.getDataRange().getValues();
+      const idxSubFor = CABECALHOS_SUBPRODUTOS.indexOf("Fornecedor");
+      for (let j = 1; j < dadosSub.length; j++) {
+        if (String(dadosSub[j][idxSubFor]) === nomeAntigo) {
+          abaSub.getRange(j + 1, idxSubFor + 1).setValue(nomeAtualizado);
+        }
+      }
       SpreadsheetApp.flush();
-      return { success: true, message: "Fornecedor atualizado com sucesso!" };
-    } else {
-      return { success: true, message: "Nenhum dado foi modificado." };
     }
+
+    return { success: true, message: "Fornecedor atualizado e SubProdutos propagados com sucesso!" };
 
   } catch (e) {
-    console.error("ERRO em FornecedoresController_atualizarFornecedor: " + e.toString() + " Stack: " + e.stack);
+    console.error("ERRO em FornecedoresController_atualizarFornecedor: " + e.toString());
     return { success: false, message: e.message };
   }
 }

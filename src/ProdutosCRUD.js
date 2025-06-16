@@ -127,67 +127,73 @@ function ProdutosCRUD_atualizarProduto(dadosProdutoAtualizar) {
     const nomeProdutoAtualizado = dadosProdutoAtualizar[nomeDoCampoProduto];
     if (!nomeProdutoAtualizado) throw new Error(`O campo '${nomeDoCampoProduto}' é obrigatório.`);
     
-    const nomeProdutoAtualizadoNormalizado = ProdutosCRUD_normalizarTextoComparacao(nomeProdutoAtualizado);
+    // Normalizações
+    function _norm(texto) {
+      return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    }
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const abaProdutos = ss.getSheetByName(ProdutosCRUD_ABA_PRODUTOS);
-    if (!abaProdutos) throw new Error(`Aba '${ProdutosCRUD_ABA_PRODUTOS}' não encontrada.`);
+    const abaProdutos = ss.getSheetByName(ABA_PRODUTOS);
+    if (!abaProdutos) throw new Error(`Aba '${ABA_PRODUTOS}' não encontrada.`);
     
     const range = abaProdutos.getDataRange();
     const todasAsLinhas = range.getValues();
-
-    if (ProdutosCRUD_IDX_PRODUTO_ID === -1 || ProdutosCRUD_IDX_PRODUTO_NOME === -1) {
-        throw new Error("Colunas 'ID' ou 'Produto' não encontradas na definição de cabeçalhos.");
-    }
     
-    let linhaParaAtualizarIndexNaPlanilha = -1;
+    // Índices
+    const idxId = ProdutosCRUD_IDX_PRODUTO_ID;
+    const idxNome = ProdutosCRUD_IDX_PRODUTO_NOME;
+    
+    // Encontrar linha do produto e capturar nome antigo
+    let linhaIndex = -1;
     for (let i = 1; i < todasAsLinhas.length; i++) {
-      const idLinhaAtual = String(todasAsLinhas[i][ProdutosCRUD_IDX_PRODUTO_ID]);
-      if (idLinhaAtual === String(idParaAtualizar)) {
-        linhaParaAtualizarIndexNaPlanilha = i;
-      } else {
-        const nomeExistenteNormalizado = ProdutosCRUD_normalizarTextoComparacao(String(todasAsLinhas[i][ProdutosCRUD_IDX_PRODUTO_NOME]));
-        if (nomeExistenteNormalizado === nomeProdutoAtualizadoNormalizado) {
-          throw new Error(`O nome de produto '${nomeProdutoAtualizado}' já está cadastrado para outro ID (${idLinhaAtual}).`);
-        }
+      if (String(todasAsLinhas[i][idxId]) === String(idParaAtualizar)) {
+        linhaIndex = i;
+        break;
+      }
+    }
+    if (linhaIndex === -1) throw new Error(`Produto com ID '${idParaAtualizar}' não encontrado.`);
+    const nomeProdutoAntigo = String(todasAsLinhas[linhaIndex][idxNome]);
+    
+    // Verificar duplicidade de nome em outros IDs
+    const nomeAtualNorm = _norm(nomeProdutoAtualizado);
+    for (let i = 1; i < todasAsLinhas.length; i++) {
+      if (i === linhaIndex) continue;
+      if (_norm(String(todasAsLinhas[i][idxNome])) === nomeAtualNorm) {
+        throw new Error(`O nome de produto '${nomeProdutoAtualizado}' já está cadastrado para outro ID.`);
       }
     }
 
-    if (linhaParaAtualizarIndexNaPlanilha === -1) {
-      throw new Error(`Produto com ID '${idParaAtualizar}' não encontrado para atualização.`);
-    }
-
-    const linhaOriginalValores = todasAsLinhas[linhaParaAtualizarIndexNaPlanilha];
-    const linhaAtualizadaValores = [];
-    let alteracoesReais = 0;
-
-    ProdutosCRUD_CABECALHOS_PRODUTOS.forEach((nomeCabecalho, k) => {
-      if (nomeCabecalho === CABECALHOS_PRODUTOS[ProdutosCRUD_IDX_PRODUTO_DATA_CADASTRO] || nomeCabecalho === CABECALHOS_PRODUTOS[ProdutosCRUD_IDX_PRODUTO_ID]) {
-        linhaAtualizadaValores.push(linhaOriginalValores[k]);
-      } else {
-        const valorNovo = dadosProdutoAtualizar[nomeCabecalho];
-        const valorAntigo = linhaOriginalValores[k];
-        const valorParaSalvar = valorNovo !== undefined ? valorNovo : valorAntigo;
-        linhaAtualizadaValores.push(valorParaSalvar);
-        let comparavelAntigo = typeof valorAntigo === 'string' ? ProdutosCRUD_normalizarTextoComparacao(String(valorAntigo)) : valorAntigo;
-        let comparavelNovo = typeof valorParaSalvar === 'string' ? ProdutosCRUD_normalizarTextoComparacao(String(valorParaSalvar)) : valorParaSalvar;
-        comparavelAntigo = (comparavelAntigo === null || comparavelAntigo === undefined) ? "" : String(comparavelAntigo);
-        comparavelNovo = (comparavelNovo === null || comparavelNovo === undefined) ? "" : String(comparavelNovo);
-        if (comparavelAntigo !== comparavelNovo) {
-          alteracoesReais++;
-        }
+    // Montar nova linha
+    const cabProduto = ProdutosCRUD_CABECALHOS_PRODUTOS;
+    const linhaOriginal = todasAsLinhas[linhaIndex];
+    const linhaAtualizada = cabProduto.map((cab, k) => {
+      if (k === ProdutosCRUD_IDX_PRODUTO_DATA_CADASTRO || k === ProdutosCRUD_IDX_PRODUTO_ID) {
+        return linhaOriginal[k];
       }
+      return (dadosProdutoAtualizar[cab] !== undefined) ? dadosProdutoAtualizar[cab] : linhaOriginal[k];
     });
 
-    if (alteracoesReais > 0) {
-      abaProdutos.getRange(linhaParaAtualizarIndexNaPlanilha + 1, 1, 1, linhaAtualizadaValores.length).setValues([linhaAtualizadaValores]);
+    // Atualizar na planilha
+    abaProdutos.getRange(linhaIndex + 1, 1, 1, linhaAtualizada.length).setValues([linhaAtualizada]);
+    SpreadsheetApp.flush();
+
+    // --- NOVO: Propagar novo nome para SubProdutos vinculados ---
+    const abaSub = ss.getSheetByName(ABA_SUBPRODUTOS);
+    if (abaSub) {
+      const dadosSub = abaSub.getDataRange().getValues();
+      const idxSubProdVinc = CABECALHOS_SUBPRODUTOS.indexOf("Produto Vinculado");
+      for (let j = 1; j < dadosSub.length; j++) {
+        if (String(dadosSub[j][idxSubProdVinc]) === nomeProdutoAntigo) {
+          abaSub.getRange(j + 1, idxSubProdVinc + 1).setValue(nomeProdutoAtualizado);
+        }
+      }
       SpreadsheetApp.flush();
-      return { success: true, message: "Produto atualizado com sucesso!" };
-    } else {
-      return { success: true, message: "Nenhum dado foi modificado." };
     }
+
+    return { success: true, message: "Produto atualizado com sucesso e nomes de SubProdutos propagados!" };
+
   } catch (e) {
-    console.error("ERRO em ProdutosCRUD_atualizarProduto: " + e.toString() + " Stack: " + (e.stack || 'N/A'));
+    console.error("ERRO em ProdutosCRUD_atualizarProduto: " + e.toString());
     return { success: false, message: e.message };
   }
 }
