@@ -152,70 +152,62 @@ function initCotacoesScript() {
     return itemDiv;
   }
 
-  function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
-    // console.log("CotacoesScript_popularAcordeoes: Iniciando com dados agrupados:", JSON.parse(JSON.stringify(cotacoesAgrupadasPorStatus))); 
+  // CotacoesScript.html
+function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
+  // Para cada status definido na ordem, verifica se há cotações
+  CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
+    // Normaliza o ID do content e do count span
+    const chaveParaIdHtmlBase = statusNomeOriginal === 'Nova Cotação'
+      ? 'nova-cotacao'
+      : statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
+    const contentDivId = `content-${chaveParaIdHtmlBase}`;
 
-    CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
-      // console.log(`CotacoesScript_popularAcordeoes: Processando status original: "${statusNomeOriginal}"`); 
+    const chaveParaCountSpan = statusNomeOriginal === 'Nova Cotação'
+      ? 'nova_cotacao'
+      : statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
+    const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
 
-      let chaveParaIdHtmlBase = statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
-      
-      // Caso especial para "Nova Cotação" para corresponder ao ID HTML normalizado
-      if (statusNomeOriginal === "Nova Cotação") {
-        chaveParaIdHtmlBase = "nova-cotacao"; 
-      }
-      // Para outros status com caracteres especiais, a conversão toLowerCase().replace(/\s+/g, '-') deve gerar os IDs corretos.
-      // Ex: "Aguardando Preços" -> "aguardando-preços"
-      // Ex: "Realizando Cotação" -> "realizando-cotação"
-      
-      const contentDivId = `content-${chaveParaIdHtmlBase}`;
-      
-      // Para o countSpanId, o padrão no HTML é CotacoesScript_count_ + nome_do_status_em_lowercase_com_underscores
-      let chaveParaCountSpan = statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
-      if (statusNomeOriginal === "Nova Cotação") {
-        chaveParaCountSpan = "nova_cotacao"; // Consistente com o HTML: CotacoesScript_count_nova_cotacao
-      }
-      // Ex: "Aguardando Preços" -> "aguardando_preços" -> CotacoesScript_count_aguardando_preços
-      // Ex: "Realizando Cotação" -> "realizando_cotação" -> CotacoesScript_count_realizando_cotação
-      const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
+    // Obtém elementos do DOM
+    const contentDiv = document.getElementById(contentDivId);
+    const countSpan = document.getElementById(countSpanId);
+    const accordionItem = document.querySelector(`.accordion-item[data-status="${statusNomeOriginal}"]`);
 
-      const contentDiv = document.getElementById(contentDivId);
-      const countSpan = document.getElementById(countSpanId);
+    // Cotação(s) para este status
+    const cotacoesDoStatus = cotacoesAgrupadasPorStatus[statusNomeOriginal] || [];
 
-      // console.log(`  > Buscando elementos com ID do conteúdo: "${contentDivId}", ID do contador: "${countSpanId}"`); 
-      if (!contentDiv) {
-        console.warn(`  > Div de conteúdo para "${statusNomeOriginal}" (ID esperado: ${contentDivId}) NÃO ENCONTRADA no HTML.`);
-      }
-      if (!countSpan) {
-        console.warn(`  > Span de contagem para "${statusNomeOriginal}" (ID esperado: ${countSpanId}) NÃO ENCONTRADO no HTML.`);
-      }
+    // Se não houver nenhuma cotação, oculta o acordeão e pula para o próximo status
+    if (cotacoesDoStatus.length === 0) {
+      if (accordionItem) accordionItem.style.display = 'none';
+      return;
+    }
 
-      if (contentDiv) {
-        contentDiv.innerHTML = ''; 
-        const cotacoesDoStatus = cotacoesAgrupadasPorStatus[statusNomeOriginal] || []; 
-        // console.log(`  > Para status "${statusNomeOriginal}", encontradas ${cotacoesDoStatus.length} cotações nos dados agrupados.`); 
+    // Caso contrário, garante que o acordeão esteja visível
+    if (accordionItem) accordionItem.style.display = '';
 
-        if (countSpan) {
-          countSpan.textContent = `(${cotacoesDoStatus.length})`;
-        }
+    // Limpa e popula o container de conteúdo
+    if (contentDiv) {
+      contentDiv.innerHTML = '';
+      if (countSpan) countSpan.textContent = `(${cotacoesDoStatus.length})`;
 
-        if (cotacoesDoStatus.length > 0) {
-          cotacoesDoStatus.sort((a, b) => {
-            const dateA = a.Data_Abertura_Original ? new Date(a.Data_Abertura_Original) : new Date(0);
-            const dateB = b.Data_Abertura_Original ? new Date(b.Data_Abertura_Original) : new Date(0);
-            return dateB - dateA; 
-          });
-          cotacoesDoStatus.forEach(cotacaoResumo => {
-            const itemHtml = CotacoesScript_renderizarResumoCotacao(cotacaoResumo);
-            contentDiv.appendChild(itemHtml);
-          });
-        } else {
-          contentDiv.innerHTML = '<p class="no-cotacoes-message">Nenhuma cotação neste status.</p>';
-        }
-      }
-    });
-    CotacoesScript_vincularEventosAcordeoes(); 
-  }
+      // Ordena da mais recente para a mais antiga
+      cotacoesDoStatus.sort((a, b) => {
+        const dateA = a.Data_Abertura_Original ? new Date(a.Data_Abertura_Original) : new Date(0);
+        const dateB = b.Data_Abertura_Original ? new Date(b.Data_Abertura_Original) : new Date(0);
+        return dateB - dateA;
+      });
+
+      // Renderiza cada resumo de cotação
+      cotacoesDoStatus.forEach(cotacaoResumo => {
+        const itemHtml = CotacoesScript_renderizarResumoCotacao(cotacaoResumo);
+        contentDiv.appendChild(itemHtml);
+      });
+    }
+  });
+
+  // Re-vincula os eventos de clique nos cabeçalhos (necessário após remoção/adição)
+  CotacoesScript_vincularEventosAcordeoes();
+}
+
 
   function CotacoesScript_processarDadosRecebidos(arrayDeResumosDeCotacao) {
     // console.log("CotacoesScript_processarDadosRecebidos: Dados brutos recebidos do servidor:", JSON.parse(JSON.stringify(arrayDeResumosDeCotacao))); 

@@ -767,4 +767,28 @@ async function FuncoesScript_lidarComAcrescentarItens() {
         }
     }
 }
+
+/**
+ * Abre uma nova guia para a Contagem de Estoque Mobile.
+ */
+function FuncoesScript_abrirContagemEstoqueMobile() {
+    console.log("FuncoesScript: Abrindo Contagem de Estoque Mobile...");
+    // CotacaoIndividualScript_cotacaoIdAtual é definido no script principal
+    const id = CotacaoIndividualScript_cotacaoIdAtual;
+    if (!id) {
+        CotacaoIndividualScript_exibirFeedback("ID da Cotação não definido.", true);
+        return;
+    }
+    // Solicita ao servidor a URL da nova view
+    google.script.run
+        .withSuccessHandler(function(url) {
+            window.open(url, '_blank');
+        })
+        .withFailureHandler(function(err) {
+            console.error("Erro ao obter URL da contagem mobile:", err);
+            CotacaoIndividualScript_exibirFeedback("Falha ao abrir Contagem Mobile.", true);
+        })
+        .App_obterUrlContagemDeEstoque(id);
+}
+
 </script>

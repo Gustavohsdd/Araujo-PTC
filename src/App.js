@@ -1,14 +1,15 @@
 // @ts-nocheck
 
 // Constantes globais de App.gs (VIEWS_PERMITIDAS, VIEW_FILENAME_MAP)
-const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual"]; 
+const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual", "contagemdeestoque"]; 
 
 const App_VIEW_FILENAME_MAP = {
   "fornecedores": "FornecedoresView",
   "produtos": "ProdutosView",
   "subprodutos": "SubProdutosView",
   "cotacoes": "CotacoesView",
-  "cotacaoIndividual": "CotacaoIndividualView" 
+  "cotacaoIndividual": "CotacaoIndividualView",
+  "contagemdeestoque": "ContagemDeEstoqueView",
 };
 
 const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL'); 
@@ -62,6 +63,14 @@ function doGet(e) {
       templateCotacao.modo = e.parameter.modo || 'editar';
       return templateCotacao.evaluate()
         .setTitle("Cotação: " + e.parameter.idCotacao + " - CotaçãoPRO")
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+
+    case 'contagemdeestoque':
+      Logger.log("App.js: Carregando ContagemDeEstoqueView.");
+      let templateContagem = HtmlService.createTemplateFromFile('ContagemDeEstoqueView');
+      templateContagem.idCotacao = e.parameter.idCotacao || null;
+      return templateContagem.evaluate()
+        .setTitle("Contagem de Estoque - Cotação " + (e.parameter.idCotacao || ""))
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 
     case 'ImprimirPedidosView':
@@ -160,6 +169,17 @@ function App_obterUrlCotacaoIndividual(idCotacao, modo) {
   }
   console.log("App_obterUrlCotacaoIndividual: Gerada URL:", urlComParametros);
   return urlComParametros;
+}
+
+/**
+ * Retorna a URL para a página de Contagem de Estoque Mobile.
+ */
+function App_obterUrlContagemDeEstoque(idCotacao) {
+  const urlBase = ScriptApp.getService().getUrl();
+  let url = `${urlBase}?view=contagemdeestoque`;
+  if (idCotacao) url += `&idCotacao=${encodeURIComponent(idCotacao)}`;
+  console.log("App_obterUrlContagemDeEstoque: Gerada URL:", url);
+  return url;
 }
 
 /**

@@ -603,130 +603,129 @@ function initCotacaoIndividualScript() {
     CotacaoIndividualScript_filtrarTabelaPrincipal();
   }
 
-  function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
-      const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
-      if (!tabela) { console.error("Tabela não encontrada."); return; }
-      const tbody = tabela.querySelector('tbody');
-      if (!tbody) { console.error("Tbody não encontrado."); return; }
-      tbody.innerHTML = '';
+  /**
+ * renderizarGruposDeProdutosInterno: monta o corpo da tabela de produtos agrupados por Categoria → Produto Principal → Subprodutos
+ */
+/**
+ * renderizarGruposDeProdutosInterno: monta o corpo da tabela
+ */
+function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
+    const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
+    if (!tabela) { console.error("Tabela não encontrada."); return; }
+    const tbody = tabela.querySelector('tbody');
+    if (!tbody) { console.error("Tbody não encontrado."); return; }
+    tbody.innerHTML = '';
 
-      if (!gruposDeProdutos || gruposDeProdutos.length === 0) {
-          const tr = tbody.insertRow();
-          const td = tr.insertCell();
-          td.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
-          td.className = 'text-center p-8 text-gray-500';
-          td.textContent = 'Nenhum produto agrupado para esta cotação.';
-          return;
-      }
-      let categoriaAtualRenderizada = null;
+    if (!gruposDeProdutos || gruposDeProdutos.length === 0) {
+        const tr = tbody.insertRow();
+        const td = tr.insertCell();
+        td.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
+        td.className = 'text-center p-8 text-gray-500';
+        td.textContent = 'Nenhum produto agrupado para esta cotação.';
+        return;
+    }
 
-      const colunasEditaveis = ["SubProduto", "Tamanho", "UN", "Fator", "Preço", "Comprar"];
+    let categoriaAtualRenderizada = null;
+    const colunasEditaveis = ["SubProduto", "Tamanho", "UN", "Fator", "Preço", "Comprar"];
 
-      gruposDeProdutos.forEach((grupo) => {
-          const categoriaSanitizedParaClasse = String(grupo.categoria).replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || 'sem-categoria';
-          const categoriaTargetClass = `content-for-category-${categoriaSanitizedParaClasse}`;
+    gruposDeProdutos.forEach(grupo => {
+        // --- Cabeçalho de Categoria ---
+        const catSanit = String(grupo.categoria)
+            .replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || 'sem-categoria';
+        const catClass = `content-for-category-${catSanit}`;
+        if (grupo.categoria !== categoriaAtualRenderizada) {
+            const catRow = tbody.insertRow();
+            catRow.className = 'categoria-accordion-header-row';
+            catRow.dataset.targetClass = catClass;
+            catRow.dataset.categoriaNome = grupo.categoria;
 
-          if (grupo.categoria !== categoriaAtualRenderizada) {
-              const categoriaRow = tbody.insertRow();
-              categoriaRow.className = 'categoria-accordion-header-row';
-              categoriaRow.dataset.targetClass = categoriaTargetClass;
-              categoriaRow.dataset.categoriaNome = grupo.categoria;
+            const catCell = catRow.insertCell();
+            catCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'categoria-header-content';
+            const icon = document.createElementNS("http://www.w3.org/2000/svg","svg");
+            icon.setAttribute("class","categoria-accordion-icon");
+            icon.setAttribute("viewBox","0 0 20 20");
+            icon.setAttribute("fill","currentColor");
+            icon.innerHTML = `<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 
+                                7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 
+                                1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>`;
+            headerDiv.appendChild(icon);
+            const span = document.createElement('span');
+            span.textContent = `Categoria: ${grupo.categoria}`;
+            headerDiv.appendChild(span);
+            catCell.appendChild(headerDiv);
 
-              const categoriaCell = categoriaRow.insertCell();
-              categoriaCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length > 0 ? CotacaoIndividualScript_cabecalhosVisiveis.length : 1;
-              const categoriaHeaderContent = document.createElement('div');
-              categoriaHeaderContent.className = 'categoria-header-content';
-              const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-              icon.setAttribute("class", "categoria-accordion-icon");
-              icon.setAttribute("viewBox", "0 0 20 20"); icon.setAttribute("fill", "currentColor");
-              icon.innerHTML = `<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />`;
-              categoriaHeaderContent.appendChild(icon);
-              const titleSpan = document.createElement('span');
-              titleSpan.textContent = `Categoria: ${grupo.categoria}`;
-              categoriaHeaderContent.appendChild(titleSpan);
-              categoriaCell.appendChild(categoriaHeaderContent);
-              categoriaRow.addEventListener('click', function() {
-                  this.classList.toggle('expanded');
-                  const isExpanded = this.classList.contains('expanded');
-                  if (icon) icon.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
-                  const targetRows = tbody.querySelectorAll(`.${this.dataset.targetClass}`);
-                  targetRows.forEach(row => {
-                      if (!row.classList.contains('hidden-by-search') && !row.classList.contains('hidden-by-etapa')) {
-                          row.classList.toggle('hidden', !isExpanded);
-                      }
-                  });
-              });
-              categoriaAtualRenderizada = grupo.categoria;
-          }
+            catRow.addEventListener('click', function() {
+                this.classList.toggle('expanded');
+                const exp = this.classList.contains('expanded');
+                if (icon) icon.style.transform = exp ? 'rotate(90deg)' : 'rotate(0deg)';
+                tbody.querySelectorAll(`.${this.dataset.targetClass}`).forEach(r => {
+                    if (!r.classList.contains('hidden-by-search') &&
+                        !r.classList.contains('hidden-by-etapa')) {
+                        r.classList.toggle('hidden', !exp);
+                    }
+                });
+            });
+            categoriaAtualRenderizada = grupo.categoria;
+        }
 
-          const produtoSeparatorRow = tbody.insertRow();
-          produtoSeparatorRow.className = `produto-group-separator-row category-content-row ${categoriaTargetClass} hidden`;
-          produtoSeparatorRow.dataset.produtoNome = grupo.produtoNome;
-          produtoSeparatorRow.dataset.categoria = grupo.categoria;
+        // --- Separador de Produto Principal ---
+        const sepRow = tbody.insertRow();
+        sepRow.className = `produto-group-separator-row category-content-row ${catClass} hidden`;
+        sepRow.dataset.produtoNome = grupo.produtoNome;
+        sepRow.dataset.categoria = grupo.categoria;
 
-          const produtoCell = produtoSeparatorRow.insertCell();
-          produtoCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length > 0 ? CotacaoIndividualScript_cabecalhosVisiveis.length : 1;
+        const sepCell = sepRow.insertCell();
+        sepCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
 
-          if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
-              const estoqueMinProdutoPrincipal = (grupo.estoqueMinimoProdutoPrincipal !== undefined && grupo.estoqueMinimoProdutoPrincipal !== null) ? grupo.estoqueMinimoProdutoPrincipal : 'N/A';
-              produtoCell.textContent = `Produto: ${grupo.produtoNome} (Estoque Mínimo: ${estoqueMinProdutoPrincipal})`;
-          } else {
-              // Será preenchido por EtapasScript_ativarModoContagemEstoque
-          }
+        if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
+            const min = grupo.estoqueMinimoProdutoPrincipal != null
+                        ? grupo.estoqueMinimoProdutoPrincipal : 'N/A';
+            const dados = CotacaoIndividualScript_parsearStringEstoqueComprar(
+                grupo.subProdutos[0]["Estoque Atual"]
+            );
+            const atual = dados.estoqueAtual != null ? dados.estoqueAtual : 'N/A';
+            const sug   = dados.comprar     != null ? dados.comprar     : 'N/A';
+            sepCell.textContent =
+              `Produto: ${grupo.produtoNome} (Estoque Mínimo: ${min}) ` +
+              `(estoque atual ${atual}) (sugestão de compra ${sug})`;
+        }
 
-          if (grupo.subProdutos && grupo.subProdutos.length > 0) {
-              grupo.subProdutos.forEach(subProduto => {
-                  const subRow = tbody.insertRow();
-                  subRow.dataset.subprodutoOriginalPersistido = subProduto["_subProdutoOriginalPersistido"] || subProduto["SubProduto"];
-                  subRow.dataset.produto = subProduto['Produto'];
-                  subRow.dataset.fornecedor = subProduto['Fornecedor'];
-                  subRow.dataset.subprodutoAtual = subProduto['SubProduto'];
-                  subRow.dataset.categoria = grupo.categoria;
+        // --- Linhas de Subprodutos com edição inline ---
+        if (grupo.subProdutos && grupo.subProdutos.length > 0) {
+            grupo.subProdutos.forEach(sub => {
+                const subRow = tbody.insertRow();
+                subRow.className = `sub-produto-row category-content-row ${catClass} hidden`;
+                if (CotacaoIndividualScript_modoEtapaAtual === 'contagem_estoque') {
+                    subRow.classList.add('hidden-by-etapa');
+                }
+                subRow.dataset.subprodutoOriginalPersistido =
+                    sub["_subProdutoOriginalPersistido"] || sub["SubProduto"];
+                subRow.dataset.produto    = sub['Produto'];
+                subRow.dataset.fornecedor = sub['Fornecedor'];
+                subRow.dataset.subprodutoAtual = sub['SubProduto'];
 
-                  subRow.className = `sub-produto-row category-content-row ${categoriaTargetClass} hidden`;
-                  if (CotacaoIndividualScript_modoEtapaAtual === 'contagem_estoque') {
-                      subRow.classList.add('hidden-by-etapa');
-                  }
+                CotacaoIndividualScript_cabecalhosVisiveis.forEach(header => {
+                    const td = subRow.insertCell();
+                    const cor = CotacaoIndividualScript_getClasseCorColuna(header);
+                    if (cor) td.classList.add(cor);
+                    const val = sub[header];
+                    const fmt = val == null ? "" : String(val);
+                    td.textContent = fmt;
+                    td.dataset.coluna       = header;
+                    td.dataset.valorOriginal = fmt;
 
-                  CotacaoIndividualScript_cabecalhosVisiveis.forEach(cabecalhoVisivel => {
-                      const td = subRow.insertCell();
-                      const classeCor = CotacaoIndividualScript_getClasseCorColuna(cabecalhoVisivel);
-                      if (classeCor) td.classList.add(classeCor);
-                      let valor = subProduto[cabecalhoVisivel];
-                      let valorFormatado = (valor === null || valor === undefined) ? "" : valor;
-                      
-                      // Formatação específica para valores numéricos
-                      if (typeof valorFormatado === 'number') {
-                          if (cabecalhoVisivel === 'Preço por Fator') {
-                              valorFormatado = valorFormatado.toFixed(4).replace('.', ',');
-                          } else if (['Valor Total', 'Economia em Cotação'].includes(cabecalhoVisivel)) {
-                              valorFormatado = valorFormatado.toFixed(2).replace('.', ',');
-                          }
-                      }
-                      
-                      td.textContent = valorFormatado;
-                      td.dataset.coluna = cabecalhoVisivel;
-                      td.dataset.valorOriginal = (valor === null || valor === undefined) ? "" : valor;
+                    if (colunasEditaveis.includes(header)) {
+                        td.classList.add('editable-price-cell');
+                        td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
+                    }
+                });
+            });
+        }
+    });
+}
 
-                      // Adiciona a classe e o listener para edição inline
-                      if (colunasEditaveis.includes(cabecalhoVisivel)) {
-                          td.classList.add('editable-price-cell'); // Reusa estilo do cursor
-                          td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
-                      }
-                  });
-              });
-          } else {
-              if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
-                  const noSubRow = tbody.insertRow();
-                  noSubRow.className = `sub-produto-row category-content-row ${categoriaTargetClass} hidden`;
-                  const td = noSubRow.insertCell();
-                  td.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length > 0 ? CotacaoIndividualScript_cabecalhosVisiveis.length : 1;
-                  td.className = 'text-center p-4 text-gray-500 italic';
-                  td.textContent = 'Nenhum subproduto para este item.';
-              }
-          }
-      });
-  }
   
   window.CotacaoIndividualScript_carregarDadosCotacao = async function(idCotacao) {
     const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
