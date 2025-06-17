@@ -225,7 +225,7 @@ function CotacaoIndividualScript_transformarCelulaEmSelect(event, opcoes) {
 }
 
 //----------------------------------------------------------------------------------------------------
-// LÓGICA DE EDIÇÃO INLINE UNIVERSAL
+// LÓGICA DE EDIÇÃO INLINE E CÁLCULOS
 //----------------------------------------------------------------------------------------------------
 
 /**
@@ -258,34 +258,52 @@ function CotacaoIndividualScript_transformarCelulaEmInput(event) {
 
 /**
  * Salva o valor do input/select inline, atualiza a UI e chama o servidor.
+ * MODIFICADO: Agora também atualiza o array de dados local (CotacaoIndividualScript_dadosOriginaisCotacao)
+ * para garantir a persistência do estado na interface do usuário.
  */
 function CotacaoIndividualScript_salvarEdicaoInline(element) {
     const td = element.parentElement;
-    const novoValorStr = element.value;
+    let novoValorStr = element.value;
     const valorOriginalStr = td.dataset.valorOriginal || '';
 
-    if (novoValorStr === valorOriginalStr) {
+    // Converte vírgula para ponto se for um campo numérico
+    const coluna = td.dataset.coluna;
+    const camposNumericos = ["Fator", "Preço", "Comprar"];
+    if (camposNumericos.includes(coluna)) {
+        novoValorStr = novoValorStr.replace(',', '.');
+    }
+
+    if (novoValorStr === valorOriginalStr.replace(',', '.')) {
         td.textContent = valorOriginalStr;
         return;
     }
 
     const tr = td.closest('tr');
-    const coluna = td.dataset.coluna;
     const identificadores = {
         Produto: tr.dataset.produto,
         SubProdutoChave: tr.dataset.subprodutoOriginalPersistido,
         Fornecedor: tr.dataset.fornecedor
     };
 
-    td.textContent = novoValorStr;
-    td.dataset.valorOriginal = novoValorStr;
+    // Formata visualmente o novo valor para o padrão brasileiro
+    let valorDisplay = novoValorStr;
+    if (camposNumericos.includes(coluna) && !isNaN(parseFloat(novoValorStr))) {
+        const fractionDigits = { 'Preço': 2, 'Comprar': 2, 'Fator': 4 };
+        valorDisplay = parseFloat(novoValorStr).toLocaleString('pt-BR', {
+            minimumFractionDigits: fractionDigits[coluna] || 2,
+            maximumFractionDigits: fractionDigits[coluna] || 2,
+        });
+    }
+
+
+    td.textContent = valorDisplay;
+    td.dataset.valorOriginal = valorDisplay; // Atualiza o original com o valor formatado
 
     // Se a coluna editada afeta cálculos, atualiza o grupo
     if (["Fator", "Preço", "Comprar"].includes(coluna)) {
         CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(tr);
     }
     
-    // Se estiver no modo de faturamento, atualiza os dashboards
     if (CotacaoIndividualScript_modoEtapaAtual === 'definir_empresa') {
         if (typeof EtapasScript_atualizarDashboardFornecedor === 'function') {
             const fornecedor = tr.dataset.fornecedor;
@@ -300,47 +318,73 @@ function CotacaoIndividualScript_salvarEdicaoInline(element) {
     google.script.run
         .withSuccessHandler(response => {
             if (response && response.success) {
-                console.log(`Salvo: ${coluna} = ${novoValorStr}`);
+                console.log(`Salvo no servidor: ${coluna} = ${novoValorStr}`);
                 
-                // INÍCIO DA MODIFICAÇÃO: Atualizar o estado local
-                // Esta é a correção principal. Ela encontra o item correspondente no array de dados
-                // da página e atualiza o valor, para que ele seja "lembrado".
+                // INÍCIO DA MODIFICAÇÃO ESSENCIAL (CORREÇÃO DO BUG)
+                // Encontra o item correspondente no array de dados da página e atualiza o valor
+                // para que ele seja "lembrado" ao redesenhar a tela ou filtrar.
                 const itemOriginal = CotacaoIndividualScript_dadosOriginaisCotacao.find(item =>
                     item.Produto === identificadores.Produto &&
                     item._subProdutoOriginalPersistido === identificadores.SubProdutoChave &&
                     item.Fornecedor === identificadores.Fornecedor
                 );
+
                 if (itemOriginal) {
-                    itemOriginal[coluna] = novoValorStr;
-                    console.log('Estado local atualizado para a coluna:', coluna);
+                    // Tenta converter para número se for numérico, senão mantém como string
+                    let valorParaArmazenar = novoValorStr;
+                    if (camposNumericos.includes(coluna)) {
+                       const num = parseFloat(novoValorStr);
+                       if (!isNaN(num)) {
+                           valorParaArmazenar = num;
+                       }
+                    }
+                    itemOriginal[coluna] = valorParaArmazenar;
+                    console.log('Estado local (array de dados) atualizado para a coluna:', coluna, 'com o valor:', valorParaArmazenar);
+                } else {
+                    console.warn('Não foi possível encontrar o item no estado local para atualizar.');
                 }
-                // FIM DA MODIFICAÇÃO
+                // FIM DA MODIFICAÇÃO ESSENCIAL
 
                 if (response.novoSubProdutoNomeSeAlterado) {
                     tr.dataset.subprodutoOriginalPersistido = response.novoSubProdutoNomeSeAlterado;
+                    if(itemOriginal) {
+                       itemOriginal._subProdutoOriginalPersistido = response.novoSubProdutoNomeSeAlterado;
+                       itemOriginal.SubProduto = response.novoSubProdutoNomeSeAlterado;
+                    }
                 }
+
+                // Atualiza a UI com os valores calculados retornados pelo servidor para garantir consistência.
                 if (response.valoresCalculados) {
                     const celulaValorTotal = tr.querySelector('td[data-coluna="Valor Total"]');
-                    if (celulaValorTotal) celulaValorTotal.textContent = response.valoresCalculados.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    if (celulaValorTotal) {
+                        celulaValorTotal.textContent = response.valoresCalculados.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        if(itemOriginal) itemOriginal['Valor Total'] = response.valoresCalculados.valorTotal;
+                    }
                     
                     const celulaPrecoFator = tr.querySelector('td[data-coluna="Preço por Fator"]');
-                    if (celulaPrecoFator) celulaPrecoFator.textContent = response.valoresCalculados.precoPorFator.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                    if (celulaPrecoFator) {
+                        celulaPrecoFator.textContent = response.valoresCalculados.precoPorFator.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                        if(itemOriginal) itemOriginal['Preço por Fator'] = response.valoresCalculados.precoPorFator;
+                    }
                 }
             } else {
-                console.error("Falha ao salvar:", response.message);
+                console.error("Falha ao salvar no servidor:", response.message);
                 td.textContent = valorOriginalStr;
                 td.dataset.valorOriginal = valorOriginalStr;
-                td.style.backgroundColor = '#FECACA';
+                td.classList.add('bg-col-vermelho-leve');
+                setTimeout(() => td.classList.remove('bg-col-vermelho-leve'), 2000);
             }
         })
         .withFailureHandler(err => {
-            console.error("Erro de comunicação:", err);
+            console.error("Erro de comunicação com o servidor:", err);
             td.textContent = valorOriginalStr;
             td.dataset.valorOriginal = valorOriginalStr;
-            td.style.backgroundColor = '#FECACA';
+            td.classList.add('bg-col-vermelho-leve');
+            setTimeout(() => td.classList.remove('bg-col-vermelho-leve'), 2000);
         })
         .CotacaoIndividualController_salvarEdicaoCelulaIndividual(CotacaoIndividualScript_cotacaoIdAtual, identificadores, coluna, novoValorStr);
 }
+
 
 /**
  * Atualiza todas as colunas calculadas para todas as linhas do mesmo subproduto.
@@ -355,12 +399,22 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
     
     const lerValorDaLinha = (tr, coluna) => {
         const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
-        return cell ? parseFloat(cell.textContent.replace(',', '.')) || 0 : 0;
+        // Lê do dataset.valorOriginal se for um input, caso contrário, do textContent
+        const valorTexto = cell.querySelector('input')?.value || cell?.dataset.valorOriginal || cell?.textContent || '0';
+        return parseFloat(String(valorTexto).replace(/\./g, '').replace(',', '.')) || 0;
     };
     
     const escreverValorNaLinha = (tr, coluna, valor, casasDecimais = 2) => {
         const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
-        if (cell) cell.textContent = valor.toFixed(casasDecimais).replace('.',',');
+        if (cell) {
+             const valorFormatado = valor.toLocaleString('pt-BR', {
+                minimumFractionDigits: casasDecimais,
+                maximumFractionDigits: casasDecimais
+            });
+            cell.textContent = valorFormatado;
+            // Atualiza também o valor original para consistência futura
+            cell.dataset.valorOriginal = valorFormatado;
+        }
     };
 
     // 1ª Passagem: Encontrar o Preço por Fator máximo no grupo
@@ -390,12 +444,52 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
 
         // Atualiza 'Economia em Cotação'
         let economia = 0;
-        if (comprar > 0 && maxPrecoPorFator > 0) {
-            economia = (maxPrecoPorFator - precoPorFator) * comprar;
+        // A economia só faz sentido se houver mais de um fornecedor (mais de uma linha)
+        if (comprar > 0 && maxPrecoPorFator > 0 && todasLinhasDoGrupo.length > 1) {
+            // Economia = (Custo Máximo - Custo Atual)
+            // Custo = PrecoPorFator * Fator * Quantidade
+            economia = (maxPrecoPorFator * fator * comprar) - (preco * comprar);
         }
         escreverValorNaLinha(tr, "Economia em Cotação", economia, 2);
     });
 }
+
+
+/**
+ * NOVA FUNÇÃO: Força o recálculo de todas as colunas calculáveis na UI.
+ * Itera por todos os grupos de produtos visíveis na tabela e atualiza os campos
+ * "Preço por Fator", "Valor Total" e "Economia em Cotação".
+ */
+function CotacaoIndividualScript_forcarRecalculoTotalUI() {
+    console.log("Forçando recálculo total da UI...");
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Recalculando valores...");
+    const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
+    if (!tbody) {
+        console.error("Tbody não encontrado para o recálculo.");
+        CotacaoIndividualScript_mostrarLoadingOverlay(false);
+        return;
+    }
+
+    // Pega todos os grupos de subprodutos únicos que estão na tela
+    const todosOsGruposDeSubprodutos = new Set();
+    tbody.querySelectorAll('tr.sub-produto-row[data-subproduto-original-persistido]').forEach(row => {
+        todosOsGruposDeSubprodutos.add(row.dataset.subprodutoOriginalPersistido);
+    });
+
+    // Para cada grupo, chama a função de atualização individual
+    todosOsGruposDeSubprodutos.forEach(subprodutoOriginal => {
+        const umaLinhaDoGrupo = tbody.querySelector(`tr[data-subproduto-original-persistido="${subprodutoOriginal}"]`);
+        if (umaLinhaDoGrupo) {
+            CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(umaLinhaDoGrupo);
+        }
+    });
+    
+    setTimeout(() => {
+        CotacaoIndividualScript_mostrarLoadingOverlay(false);
+        CotacaoIndividualScript_exibirFeedback('Cálculos da tela atualizados com sucesso!', false, 3000);
+    }, 250); // Um pequeno delay para o usuário perceber a ação
+}
+
 
 //----------------------------------------------------------------------------------------------------
 // LÓGICA DE BUSCA
@@ -487,7 +581,7 @@ function CotacaoIndividualScript_filtrarTabelaPrincipal() {
 
 
 //----------------------------------------------------------------------------------------------------
-// FUNÇÃO DE INICIALIZAÇÃO PRINCIPAL
+// FUNÇÃO DE INICIALIZAÇÃO PRINCIPAL E RENDERIZAÇÃO
 //----------------------------------------------------------------------------------------------------
   function renderizarCabecalhoTabelaPrincipalInterno() {
     const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
@@ -580,11 +674,11 @@ function initCotacaoIndividualScript() {
     if (document.getElementById('EtapasScript_realizarCotacaoContainer')) {
       document.getElementById('EtapasScript_realizarCotacaoContainer').classList.add('hidden');
     }
-    // INÍCIO DA MODIFICAÇÃO
+
     if (document.getElementById('EtapasScript_definirCondicoesPagamentoContainer')) {
       document.getElementById('EtapasScript_definirCondicoesPagamentoContainer').classList.add('hidden');
     }
-    // FIM DA MODIFICAÇÃO
+
 
     const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
     if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
@@ -603,9 +697,7 @@ function initCotacaoIndividualScript() {
     CotacaoIndividualScript_filtrarTabelaPrincipal();
   }
 
-  /**
- * renderizarGruposDeProdutosInterno: monta o corpo da tabela de produtos agrupados por Categoria → Produto Principal → Subprodutos
- */
+
 /**
  * renderizarGruposDeProdutosInterno: monta o corpo da tabela
  */
@@ -705,16 +797,33 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
                 subRow.dataset.produto    = sub['Produto'];
                 subRow.dataset.fornecedor = sub['Fornecedor'];
                 subRow.dataset.subprodutoAtual = sub['SubProduto'];
+                subRow.dataset.categoria = sub['Categoria'] || 'Sem Categoria';
+
 
                 CotacaoIndividualScript_cabecalhosVisiveis.forEach(header => {
                     const td = subRow.insertCell();
                     const cor = CotacaoIndividualScript_getClasseCorColuna(header);
                     if (cor) td.classList.add(cor);
-                    const val = sub[header];
-                    const fmt = val == null ? "" : String(val);
+                    let val = sub[header];
+                    let fmt;
+
+                    const camposNumericos = ["Fator", "Preço", "Preço por Fator", "Comprar", "Valor Total", "Economia em Cotação"];
+                    if (camposNumericos.includes(header) && typeof val === 'number') {
+                        const fractionDigits = {
+                            'Fator': 4, 'Preço por Fator': 4,
+                            'Preço': 2, 'Comprar': 2, 'Valor Total': 2, 'Economia em Cotação': 2
+                        };
+                        fmt = val.toLocaleString('pt-BR', {
+                            minimumFractionDigits: fractionDigits[header] || 2,
+                            maximumFractionDigits: fractionDigits[header] || 2
+                        });
+                    } else {
+                        fmt = val == null ? "" : String(val);
+                    }
+                    
                     td.textContent = fmt;
                     td.dataset.coluna       = header;
-                    td.dataset.valorOriginal = fmt;
+                    td.dataset.valorOriginal = fmt; // Salva o valor formatado como original
 
                     if (colunasEditaveis.includes(header)) {
                         td.classList.add('editable-price-cell');
@@ -912,6 +1021,12 @@ function initDropdownsInterno() {
         searchInputTop.addEventListener('input', CotacaoIndividualScript_filtrarTabelaPrincipal);
     }
     
+    // Vincula o evento de clique ao novo botão de recalcular
+    const btnRecalcular = document.getElementById('CotacaoIndividualScript_btnRecalcularUI');
+    if (btnRecalcular) {
+        btnRecalcular.addEventListener('click', CotacaoIndividualScript_forcarRecalculoTotalUI);
+    }
+
     let paramsUrl;
     try {
         paramsUrl = await CotacaoIndividualScript_obterParametrosUrl();
