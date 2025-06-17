@@ -2,8 +2,8 @@
   "emeraldwalk.runonsave": {
     "commands": [
       {
-        "match": ".*",
-        "cmd": "cmd /c clasp push",
+        "match": "\\.(gs|html|js)$",
+        "cmd": "cmd.exe /c clasp push",
         "isAsync": true,
         "silent": false
       }
