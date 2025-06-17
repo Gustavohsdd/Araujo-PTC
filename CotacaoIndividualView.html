@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
-  <!-- CotacaoIndividualView.html -->
-<head>
+  <head>
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -794,6 +793,63 @@
         display: block; 
     }
 
+    /* Estilos para o Novo Dashboard Global de Totais */
+    .global-dashboard-container {
+      border: 1px solid #e2e8f0;
+      border-radius: 0.5rem; /* 8px */
+      background-color: #f8fafc;
+      padding: 1rem; /* 16px */
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .dashboard-title {
+      margin-top: 0;
+      margin-bottom: 0.75rem; /* 12px */
+      font-size: 1rem; /* 16px */
+      font-weight: 600;
+      color: #1e3a8a;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 0.5rem; /* 8px */
+    }
+    .dashboard-items-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem; /* 8px */
+    }
+    .global-total-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem; /* 14px */
+      color: #374151;
+    }
+    .global-total-item strong {
+      font-weight: 600;
+      color: #1f2937;
+      background-color: #eef2ff;
+      padding: 0.125rem 0.5rem; /* 2px 8px */
+      border-radius: 0.25rem; /* 4px */
+    }
+    .dashboard-empty-state {
+        color: #6b7280;
+        font-size: 0.875rem;
+        padding: 0.5rem 0;
+        text-align: center;
+    }
+    .dashboard-grand-total {
+      margin-top: 0.75rem; /* 12px */
+      padding-top: 0.75rem; /* 12px */
+      border-top: 2px solid #dbeafe;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 1rem; /* 16px */
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+    .dashboard-grand-total strong {
+        color: #166534; /* Verde escuro para destaque */
+    }
+
   </style>
 </head>
 <body>
@@ -887,7 +943,10 @@
       </div>
 
       <div id="CotacaoIndividualScript_gerenciarCotacoesPortalContainer" class="gerenciar-cotacoes-portal-container hidden">
-         <h3>Gerenciar Cotações do Portal</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #BFDBFE; padding-bottom: 0.5rem; margin-bottom: 1rem;">
+          <h3 style="margin: 0; padding: 0; border: none; font-size: 1.25rem; font-weight: 600; color: #1D4ED8;">Gerenciar Cotações do Portal</h3>
+          <button id="FuncoesScript_btnVoltarGerenciarCotacoes" class="btn-confirmar-remocao" style="background-color: #6b7280; margin-top: 0;">Voltar à Tela Principal</button>
+        </div>
         <div id="CotacaoIndividualScript_gerenciarCotacoesPortalBody" class="gerenciar-cotacoes-portal-body">
             <div class="empty-state">Carregando dados das cotações do portal...</div>
         </div>
@@ -900,7 +959,6 @@
         </p>
         
         <div id="EtapasScript_listaSubprodutosSemPreco">
-          <!-- A lista de subprodutos será renderizada aqui pelo script -->
           <div class="p-4 text-center text-gray-500">Nenhum subproduto sem preço encontrado.</div>
         </div>
         
@@ -979,7 +1037,6 @@
     </div>
   </div> 
 
-  <!-- Modal para Acrescentar Itens (Adaptado do Modal de Nova Cotação) -->
   <div id="CotacaoIndividualScript_modalAcrescentarItensOverlay" class="modal-overlay">
     <div class="modal-content custom-scrollbar">
       <div class="modal-header">

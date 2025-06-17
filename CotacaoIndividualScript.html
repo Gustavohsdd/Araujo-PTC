@@ -991,6 +991,11 @@ function initDropdownsInterno() {
             }
         });
     }
+
+    const btnVoltarGerenciarCotacoes = document.getElementById('FuncoesScript_btnVoltarGerenciarCotacoes');
+    if(btnVoltarGerenciarCotacoes) {
+        btnVoltarGerenciarCotacoes.addEventListener('click', FuncoesScript_desativarModoGerenciarCotacoesPortal);
+    }
    
     initDropdownsInterno();
   } 

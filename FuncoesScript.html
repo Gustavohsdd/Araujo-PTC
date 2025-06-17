@@ -220,9 +220,9 @@ function FuncoesScript_salvarTextoGlobalCotacaoPortal(idCotacao, textoPersonaliz
         .withSuccessHandler(function(response) {
             CotacaoIndividualScript_mostrarLoadingOverlay(false);
             if (response && response.success) {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Texto da cotação salvo!", false, 3000);
-                // Após salvar, retorna para a visualização padrão.
-                FuncoesScript_desativarModoGerenciarCotacoesPortal(); 
+                CotacaoIndividualScript_exibirFeedback(response.message || "Texto da cotação salvo! Atualizando...", false, 3000);
+                // Após salvar, recarrega o modo para exibir dados atualizados sem sair da tela.
+                FuncoesScript_ativarModoGerenciarCotacoesPortal(); 
             } else {
                 CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao salvar texto da cotação.", true, 5000);
             }
@@ -243,9 +243,9 @@ function FuncoesScript_excluirFornecedoresDaCotacaoPortal(idCotacao, nomesFornec
         .withSuccessHandler(function(response) {
             CotacaoIndividualScript_mostrarLoadingOverlay(false);
             if (response && response.success) {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Fornecedor(es) excluído(s) com sucesso!", false, 4000);
-                // Após excluir, retorna para a visualização padrão.
-                FuncoesScript_desativarModoGerenciarCotacoesPortal();
+                CotacaoIndividualScript_exibirFeedback(response.message || "Fornecedor(es) excluído(s) com sucesso! Atualizando...", false, 4000);
+                // Após excluir, recarrega o modo para exibir dados atualizados sem sair da tela.
+                FuncoesScript_ativarModoGerenciarCotacoesPortal();
             } else {
                 CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao excluir fornecedor(es).", true, 7000);
             }

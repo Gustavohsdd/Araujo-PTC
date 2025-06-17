@@ -704,36 +704,58 @@ function EtapasScript_atualizarDashboardGlobal() {
     if (!dashboardContainer) return;
 
     const totaisGlobais = {};
+    let grandeTotal = 0; // Variável para o total geral
     const todasLinhasDeProduto = document.querySelectorAll('tbody .sub-produto-row');
 
     todasLinhasDeProduto.forEach(row => {
+        // Pula linhas que não estão visíveis ou que não pertencem à etapa de faturamento
+        if (row.offsetParent === null || !row.closest('.etapa5-content-row')) return;
+
         const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
         const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
 
         if (empresaCell && valorTotalCell) {
-            const empresa = empresaCell.textContent.trim() || "Não Definido";
-            const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+            const empresa = empresaCell.textContent.trim();
+            // Apenas considera itens que têm uma empresa de faturamento definida
+            if (empresa) {
+                const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
 
-            if (!totaisGlobais[empresa]) {
-                totaisGlobais[empresa] = 0;
-            }
-            totaisGlobais[empresa] += valor;
+                if (!totaisGlobais[empresa]) {
+                    totaisGlobais[empresa] = 0;
+                }
+                totaisGlobais[empresa] += valor;
+                grandeTotal += valor; // Adiciona ao total geral
+            }
         }
     });
 
-    let dashboardHTML = '<h4>Totais Globais por Empresa</h4>';
+    // Início da construção do novo HTML
+    let dashboardHTML = '<div class="global-dashboard-container">';
+    dashboardHTML += '<h4 class="dashboard-title">Totais Globais por Empresa</h4>';
+    dashboardHTML += '<div class="dashboard-items-container">';
+
     if (Object.keys(totaisGlobais).length === 0) {
-        dashboardHTML += '<span>Nenhum item a ser faturado.</span>';
+        dashboardHTML += '<div class="dashboard-empty-state">Nenhum item a ser faturado.</div>';
     } else {
         for (const empresa in totaisGlobais) {
-            if (empresa !== "Não Definido") {
-                 dashboardHTML += `<div class="global-total-item">
-                                    <span>${empresa}:</span>
-                                    <strong>${EtapasScript_formatarMoeda(totaisGlobais[empresa])}</strong>
-                                  </div>`;
-            }
+            dashboardHTML += `<div class="global-total-item">
+                                <span>${empresa}:</span>
+                                <strong>${EtapasScript_formatarMoeda(totaisGlobais[empresa])}</strong>
+                            </div>`;
         }
     }
+
+    dashboardHTML += '</div>'; // Fecha o dashboard-items-container
+
+    // Adiciona a seção do Total Geral
+    if (grandeTotal > 0) {
+        dashboardHTML += `<div class="dashboard-grand-total">
+                            <span>Total Geral:</span>
+                            <strong>${EtapasScript_formatarMoeda(grandeTotal)}</strong>
+                          </div>`;
+    }
+
+    dashboardHTML += '</div>'; // Fecha o global-dashboard-container
     dashboardContainer.innerHTML = dashboardHTML;
 }
 
@@ -788,18 +810,33 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
         const fornecedorRow = tbody.insertRow();
         fornecedorRow.className = 'categoria-accordion-header-row';
         fornecedorRow.id = `fornecedor-row-${fornecedorClass}`;
+        // **INÍCIO DA CORREÇÃO 1: Adicionar o dataset para identificar o alvo do clique**
+        fornecedorRow.dataset.targetClass = fornecedorClass;
+        // **FIM DA CORREÇÃO 1**
+
         const fornecedorCell = fornecedorRow.insertCell();
         fornecedorCell.colSpan = cabecalhosVisiveis.length;
         
-        fornecedorCell.innerHTML = `
-            <div class="categoria-header-content" style="display: flex; justify-content: space-between; width: 100%; align-items: center; cursor: pointer;">
-                <div>
-                    <svg class="categoria-accordion-icon" viewBox="0 0 20 20" fill="currentColor" style="width: 1.25rem; height: 1.25rem; transition: transform 0.2s; transform: rotate(0deg);"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
-                    <span>Fornecedor: <strong>${fornecedor}</strong></span>
-                </div>
-                <div id="total-header-${fornecedorClass}"></div>
-            </div>
-        `;
+        // Conteúdo do cabeçalho
+        const headerContent = document.createElement('div');
+        headerContent.className = 'categoria-header-content';
+        headerContent.style.cssText = 'display: flex; justify-content: space-between; width: 100%; align-items: center;';
+        
+        const leftSide = document.createElement('div');
+        leftSide.style.display = 'flex';
+        leftSide.style.alignItems = 'center';
+        leftSide.innerHTML = `
+            <svg class="categoria-accordion-icon" viewBox="0 0 20 20" fill="currentColor" style="width: 1.25rem; height: 1.25rem; transition: transform 0.2s; transform: rotate(0deg);"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+            <span style="margin-left: 8px;">Fornecedor: <strong>${fornecedor}</strong></span>
+        `;
+        
+        const rightSide = document.createElement('div');
+        rightSide.id = `total-header-${fornecedorClass}`;
+        
+        headerContent.appendChild(leftSide);
+        headerContent.appendChild(rightSide);
+        fornecedorCell.appendChild(headerContent);
+
 
         const dashboardRow = tbody.insertRow();
         dashboardRow.className = `etapa5-content-row ${fornecedorClass}`;
@@ -847,32 +884,38 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
         EtapasScript_atualizarDashboardFornecedor(fornecedor);
         document.querySelectorAll(`tr.${fornecedorClass}`).forEach(row => row.classList.add('hidden'));
     
-        fornecedorRow.addEventListener('click', function(e) {
-            e.stopPropagation();
+        // **INÍCIO DA CORREÇÃO 2: Lógica de clique corrigida e simplificada**
+        fornecedorRow.addEventListener('click', function(e) {
+            e.stopPropagation();
 
-            const isCurrentlyExpanded = this.classList.contains('expanded');
-            const contentRows = document.querySelectorAll(`tr.${fornecedorClass}`);
-            const icon = this.querySelector('.categoria-accordion-icon');
+            // Alterna a classe 'expanded' no cabeçalho clicado
+            this.classList.toggle('expanded');
+            const isExpandedNow = this.classList.contains('expanded');
+            
+            // Pega o nome da classe alvo do atributo 'data-target-class'
+            const targetClass = this.dataset.targetClass;
+            const contentRows = document.querySelectorAll(`tr.${targetClass}`);
+            const icon = this.querySelector('.categoria-accordion-icon');
 
-            if (isCurrentlyExpanded) {
-                this.classList.remove('expanded');
-                if (icon) icon.style.transform = 'rotate(0deg)';
-                contentRows.forEach(row => {
-                    row.classList.add('hidden');
-                });
-            } else {
-                this.classList.add('expanded');
-                if (icon) icon.style.transform = 'rotate(90deg)';
-                contentRows.forEach(row => {
-                    row.classList.remove('hidden');
-                });
-                
-                EtapasScript_atualizarDashboardFornecedor(fornecedor);
-            }
-        });
+            // Gira o ícone
+            if (icon) {
+                icon.style.transform = isExpandedNow ? 'rotate(90deg)' : 'rotate(0deg)';
+            }
+            
+            // Mostra ou esconde as linhas de conteúdo
+            contentRows.forEach(row => {
+                row.classList.toggle('hidden', !isExpandedNow);
+            });
+            
+            // Atualiza o dashboard do fornecedor se estiver expandindo
+            if (isExpandedNow) {
+                EtapasScript_atualizarDashboardFornecedor(fornecedor);
+            }
+        });
+        // **FIM DA CORREÇÃO 2**
     }
 
-    EtapasScript_atualizarDashboardGlobal();
+      EtapasScript_atualizarDashboardGlobal();
 }
 
 function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
