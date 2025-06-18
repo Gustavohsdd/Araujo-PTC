@@ -387,23 +387,25 @@ function CotacaoIndividualScript_salvarEdicaoInline(element) {
 
 
 /**
- * Atualiza todas as colunas calculadas para todas as linhas do mesmo subproduto.
+ * Atualiza todas as colunas calculadas para todas as linhas do mesmo PRODUTO.
  * @param {HTMLTableRowElement} trEditada - A linha da tabela que disparou a modificação.
  */
 function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
-    const subprodutoOriginal = trEditada.dataset.subprodutoOriginalPersistido;
-    if (!subprodutoOriginal) return;
-    
+    // MODIFICAÇÃO: Agrupar pelo nome do Produto Principal, não pelo SubProduto.
+    const nomeProdutoPrincipal = trEditada.dataset.produto;
+    if (!nomeProdutoPrincipal) return;
+
     const tbody = trEditada.parentElement;
-    const todasLinhasDoGrupo = tbody.querySelectorAll(`tr[data-subproduto-original-persistido="${subprodutoOriginal}"]`);
-    
+    // MODIFICAÇÃO: Selecionar todas as linhas de sub-produto que pertencem ao mesmo produto principal.
+    const todasLinhasDoGrupo = tbody.querySelectorAll(`tr.sub-produto-row[data-produto="${nomeProdutoPrincipal}"]`);
+
     const lerValorDaLinha = (tr, coluna) => {
         const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
         // Lê do dataset.valorOriginal se for um input, caso contrário, do textContent
         const valorTexto = cell.querySelector('input')?.value || cell?.dataset.valorOriginal || cell?.textContent || '0';
         return parseFloat(String(valorTexto).replace(/\./g, '').replace(',', '.')) || 0;
     };
-    
+
     const escreverValorNaLinha = (tr, coluna, valor, casasDecimais = 2) => {
         const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
         if (cell) {
@@ -417,7 +419,7 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
         }
     };
 
-    // 1ª Passagem: Encontrar o Preço por Fator máximo no grupo
+    // 1ª Passagem: Encontrar o Preço por Fator máximo no grupo de PRODUTOS
     let maxPrecoPorFator = 0;
     todasLinhasDoGrupo.forEach(tr => {
         const preco = lerValorDaLinha(tr, "Preço");
@@ -470,15 +472,15 @@ function CotacaoIndividualScript_forcarRecalculoTotalUI() {
         return;
     }
 
-    // Pega todos os grupos de subprodutos únicos que estão na tela
-    const todosOsGruposDeSubprodutos = new Set();
-    tbody.querySelectorAll('tr.sub-produto-row[data-subproduto-original-persistido]').forEach(row => {
-        todosOsGruposDeSubprodutos.add(row.dataset.subprodutoOriginalPersistido);
+    // Pega todos os grupos de PRODUTOS únicos que estão na tela
+    const todosOsGruposDeProdutos = new Set();
+    tbody.querySelectorAll('tr.sub-produto-row[data-produto]').forEach(row => {
+        todosOsGruposDeProdutos.add(row.dataset.produto);
     });
 
     // Para cada grupo, chama a função de atualização individual
-    todosOsGruposDeSubprodutos.forEach(subprodutoOriginal => {
-        const umaLinhaDoGrupo = tbody.querySelector(`tr[data-subproduto-original-persistido="${subprodutoOriginal}"]`);
+    todosOsGruposDeProdutos.forEach(nomeProduto => {
+        const umaLinhaDoGrupo = tbody.querySelector(`tr.sub-produto-row[data-produto="${nomeProduto}"]`);
         if (umaLinhaDoGrupo) {
             CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(umaLinhaDoGrupo);
         }
