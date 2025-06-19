@@ -981,6 +981,13 @@ function initDropdownsInterno() {
                         case 'funcao_acrescentar_itens':
                             if (typeof FuncoesScript_ativarModoAcrescentarItens === 'function') FuncoesScript_ativarModoAcrescentarItens();
                             break;
+                        case 'funcao_preencher_precos':
+                            if (typeof FuncoesScript_iniciarPreenchimentoUltimosPrecos === 'function') {
+                                FuncoesScript_iniciarPreenchimentoUltimosPrecos();
+                            } else {
+                                console.error("Função FuncoesScript_iniciarPreenchimentoUltimosPrecos não definida.");
+                            }
+                            break;
                         case 'relatorio_analise_compra':
                             if (typeof RelatoriosScript_abrirRelatorioAnaliseCompra === 'function') {
                                 RelatoriosScript_abrirRelatorioAnaliseCompra(CotacaoIndividualScript_cotacaoIdAtual);

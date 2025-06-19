@@ -253,3 +253,148 @@ function FuncoesCRUD_salvarTextoGlobalCotacaoPortal(idCotacao, textoGlobal) {
     return { success: false, message: `Erro ao salvar texto global da cotação (FuncoesCRUD): ${error.message}` };
   }
 }
+
+/**
+ * MELHORADO: Busca na aba "Cotacoes" os últimos dados (Preço, Tamanho, UN, Fator) para cada combinação de SubProduto e Fornecedor
+ * e preenche os dados em itens da cotação atual que não possuem preço. Também recalcula os campos dependentes.
+ * @param {string} idCotacaoAlvo O ID da cotação cujos dados devem ser preenchidos.
+ * @return {object} Um objeto com { success: boolean, numItens: number, message: string }.
+ */
+function FuncoesCRUD_preencherUltimosPrecos(idCotacaoAlvo) {
+  Logger.log(`FuncoesCRUD_preencherUltimosPrecos (MELHORADO): Iniciando para ID '${idCotacaoAlvo}'.`);
+  
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const abaCotacoes = planilha.getSheetByName(ABA_COTACOES);
+    if (!abaCotacoes) {
+      throw new Error(`A aba "${ABA_COTACOES}" não foi encontrada.`);
+    }
+    
+    const range = abaCotacoes.getDataRange();
+    const valores = range.getValues();
+    const cabecalhos = valores[0].map(String);
+
+    // Mapear todos os índices de coluna necessários
+    const idxIdCotacao = cabecalhos.indexOf("ID da Cotação");
+    const idxSubProduto = cabecalhos.indexOf("SubProduto");
+    const idxFornecedor = cabecalhos.indexOf("Fornecedor");
+    const idxPreco = cabecalhos.indexOf("Preço");
+    const idxTamanho = cabecalhos.indexOf("Tamanho");
+    const idxUN = cabecalhos.indexOf("UN");
+    const idxFator = cabecalhos.indexOf("Fator");
+    const idxComprar = cabecalhos.indexOf("Comprar");
+    const idxValorTotal = cabecalhos.indexOf("Valor Total");
+    const idxPrecoPorFator = cabecalhos.indexOf("Preço por Fator");
+
+    // Validar se todas as colunas essenciais existem
+    const requiredColumns = {
+        "ID da Cotação": idxIdCotacao, "SubProduto": idxSubProduto, "Fornecedor": idxFornecedor, 
+        "Preço": idxPreco, "Tamanho": idxTamanho, "UN": idxUN, "Fator": idxFator,
+        "Comprar": idxComprar, "Valor Total": idxValorTotal, "Preço por Fator": idxPrecoPorFator
+    };
+
+    for(const col in requiredColumns) {
+        if(requiredColumns[col] === -1) {
+            throw new Error(`A coluna essencial "${col}" não foi encontrada na aba 'Cotacoes'.`);
+        }
+    }
+
+    const ultimosDadosMap = {};
+    // 1. Construir o mapa de últimos dados, iterando do mais recente para o mais antigo.
+    Logger.log("Construindo mapa de últimos dados (Preço, Tamanho, UN, Fator)...");
+    for (let i = valores.length - 1; i > 0; i--) {
+      const linha = valores[i];
+      const idCotacaoLinha = String(linha[idxIdCotacao]).trim();
+      
+      if (idCotacaoLinha === idCotacaoAlvo) continue;
+
+      const subProduto = String(linha[idxSubProduto]).trim();
+      const fornecedor = String(linha[idxFornecedor]).trim();
+      const preco = parseFloat(String(linha[idxPreco]).replace(",", "."));
+
+      if (subProduto && fornecedor) {
+        const chave = `${subProduto}__${fornecedor}`;
+        // Se a chave ainda não existe no mapa e o preço é válido e maior que zero, guarde todos os dados.
+        if (!ultimosDadosMap.hasOwnProperty(chave) && !isNaN(preco) && preco > 0) {
+          ultimosDadosMap[chave] = {
+            preco: preco,
+            tamanho: linha[idxTamanho],
+            un: linha[idxUN],
+            fator: linha[idxFator]
+          };
+        }
+      }
+    }
+    Logger.log(`Mapa de dados históricos construído com ${Object.keys(ultimosDadosMap).length} entradas.`);
+
+    // 2. Aplicar os dados e recalcular campos na matriz de valores em memória
+    let itensAtualizadosCount = 0;
+    let foiModificado = false;
+    Logger.log(`Aplicando dados históricos na cotação alvo: ${idCotacaoAlvo}`);
+    for (let i = 1; i < valores.length; i++) {
+      const linha = valores[i];
+      const idCotacaoLinha = String(linha[idxIdCotacao]).trim();
+
+      if (idCotacaoLinha === idCotacaoAlvo) {
+        const precoAtual = parseFloat(String(linha[idxPreco]).replace(",", "."));
+        let dadosForamAtualizadosNestaLinha = false;
+
+        // A condição principal para atualização continua sendo o preço vazio/zerado
+        if (isNaN(precoAtual) || precoAtual === 0) {
+          const subProduto = String(linha[idxSubProduto]).trim();
+          const fornecedor = String(linha[idxFornecedor]).trim();
+          const chave = `${subProduto}__${fornecedor}`;
+
+          if (ultimosDadosMap.hasOwnProperty(chave)) {
+            const dadosHistoricos = ultimosDadosMap[chave];
+            
+            // Atualiza os quatro campos na matriz em memória
+            valores[i][idxPreco] = dadosHistoricos.preco;
+            valores[i][idxTamanho] = dadosHistoricos.tamanho;
+            valores[i][idxUN] = dadosHistoricos.un;
+            valores[i][idxFator] = dadosHistoricos.fator;
+            
+            itensAtualizadosCount++;
+            dadosForamAtualizadosNestaLinha = true;
+            foiModificado = true;
+            Logger.log(`Dados para '${subProduto}' do fornecedor '${fornecedor}' atualizados na linha ${i + 1} (em memória).`);
+          }
+        }
+        
+        // Se os dados foram atualizados, precisamos recalcular os campos dependentes
+        if (dadosForamAtualizadosNestaLinha) {
+            const preco = parseFloat(valores[i][idxPreco]) || 0;
+            const comprar = parseFloat(String(valores[i][idxComprar]).replace(",", ".")) || 0;
+            const fator = parseFloat(String(valores[i][idxFator]).replace(",", ".")) || 0;
+
+            const valorTotalCalculado = preco * comprar;
+            const precoPorFatorCalculado = fator !== 0 ? preco / fator : 0;
+            
+            valores[i][idxValorTotal] = valorTotalCalculado;
+            valores[i][idxPrecoPorFator] = precoPorFatorCalculado;
+        }
+      }
+    }
+    
+    // 3. Salvar todas as alterações de volta na planilha de uma só vez, se houver modificações
+    if (foiModificado) {
+        range.setValues(valores);
+        Logger.log("Matriz de valores modificada foi salva de volta na planilha.");
+    }
+
+    if (itensAtualizadosCount > 0) {
+      return { success: true, numItens: itensAtualizadosCount, message: `Dados de ${itensAtualizadosCount} item(ns) foram atualizados com base no histórico.` };
+    } else {
+      return { success: true, numItens: 0, message: "Nenhum dado a ser atualizado foi encontrado no histórico para os itens desta cotação." };
+    }
+
+  } catch (error) {
+    Logger.log(`ERRO CRÍTICO em FuncoesCRUD_preencherUltimosPrecos: ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, numItens: 0, message: "Erro no servidor ao buscar últimos dados: " + error.message };
+  } finally {
+    lock.releaseLock();
+  }
+}

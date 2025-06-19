@@ -5,6 +5,7 @@
 //####################################################################################################
 
 let dadosImpressaoGlobais = null;
+let ImprimirPedidosScript_idCotacaoAtual = null;
 
 document.addEventListener('DOMContentLoaded', initImprimirPedidosScript);
 
@@ -30,8 +31,9 @@ function initImprimirPedidosScript() {
                 return;
             }
 
-            const idCotacao = location.parameter.idCotacao;
-            console.log("ID da cotação encontrado com sucesso:", idCotacao);
+            // Armazena o ID da cotação na variável global
+            ImprimirPedidosScript_idCotacaoAtual = location.parameter.idCotacao;
+            console.log("ID da cotação encontrado com sucesso:", ImprimirPedidosScript_idCotacaoAtual);
 
             google.script.run
                 .withSuccessHandler(response => {
@@ -47,7 +49,7 @@ function initImprimirPedidosScript() {
                     loadingOverlay.classList.add('hidden');
                     containerPrincipal.innerHTML = `<h1>Erro de Comunicação</h1><p>${error.message}</p>`;
                 })
-                .EtapasController_obterDadosParaImpressao(idCotacao);
+                .EtapasController_obterDadosParaImpressao(ImprimirPedidosScript_idCotacaoAtual);
         });
     } catch (e) {
         loadingOverlay.classList.add('hidden');
@@ -148,20 +150,58 @@ function ImprimirPedidosScript_executarImpressao() {
 
 /**
  * Função de impressão para o CHECKLIST.
+ * MODIFICADO: Agora, primeiro atualiza o status da cotação para "Aguardando Faturamento"
+ * e só então procede com a impressão.
  */
 function ImprimirPedidosScript_executarImpressaoChecklist() {
-    // CORREÇÃO: Busca o estilo pela ID da tag <style>
-    const stylesHtml = document.getElementById('page-styles').outerHTML;
-    const checklistHtml = ImprimirPedidosScript_gerarHtmlParaChecklist(); 
-    
-    const printWindow = window.open('', '', 'height=700,width=900');
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Imprimir Checklist de Separação</title>${stylesHtml}</head><body>${checklistHtml}</body></html>`);
-    printWindow.document.close();
-    setTimeout(function() {
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-    }, 250);
+    console.log("Checklist: Iniciando processo de atualização de status e impressão.");
+
+    if (!ImprimirPedidosScript_idCotacaoAtual) {
+        alert("Erro crítico: O ID da cotação não está disponível. Não é possível continuar.");
+        return;
+    }
+
+    // Mostra um overlay para o usuário saber que algo está acontecendo
+    const loadingOverlay = document.getElementById('ImprimirPedidosScript_loadingOverlay');
+    if(loadingOverlay) {
+        loadingOverlay.querySelector('p').textContent = "Atualizando status da cotação...";
+        loadingOverlay.classList.remove('hidden');
+    }
+
+    // Chama a função do Controller para atualizar o status
+    google.script.run
+        .withSuccessHandler(response => {
+            if (loadingOverlay) loadingOverlay.classList.add('hidden');
+            
+            if (response && response.success) {
+                console.log("Status atualizado com sucesso. Prosseguindo para a impressão do checklist.");
+
+                // A lógica de impressão original é executada aqui, dentro do success handler
+                const stylesHtml = document.getElementById('page-styles').outerHTML;
+                const checklistHtml = ImprimirPedidosScript_gerarHtmlParaChecklist(); 
+                
+                const printWindow = window.open('', '', 'height=700,width=900');
+                printWindow.document.write(`<!DOCTYPE html><html><head><title>Imprimir Checklist de Separação</title>${stylesHtml}</head><body>${checklistHtml}</body></html>`);
+                printWindow.document.close();
+                setTimeout(function() {
+                    printWindow.focus();
+                    printWindow.print();
+                    printWindow.close();
+                }, 250);
+
+            } else {
+                // Se a atualização do status falhar, exibe uma mensagem e não imprime
+                const errorMessage = (response && response.message) ? response.message : "Ocorreu um erro desconhecido ao atualizar o status.";
+                alert(`Falha ao atualizar o status da cotação:\n\n${errorMessage}\n\nA impressão foi cancelada.`);
+            }
+        })
+        .withFailureHandler(error => {
+            if (loadingOverlay) loadingOverlay.classList.add('hidden');
+            // Se houver um erro de comunicação, exibe uma mensagem e não imprime
+            alert(`Erro de comunicação com o servidor:\n\n${error.message}\n\nA impressão foi cancelada.`);
+            console.error("Erro ao chamar EtapasController_atualizarStatusCotacao:", error);
+        })
+        .EtapasController_atualizarStatusCotacao(ImprimirPedidosScript_idCotacaoAtual, "Aguardando Faturamento");
 }
 
 /**

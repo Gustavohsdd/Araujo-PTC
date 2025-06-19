@@ -791,4 +791,52 @@ function FuncoesScript_abrirContagemEstoqueMobile() {
         .App_obterUrlContagemDeEstoque(id);
 }
 
+//####################################################################################################
+// ADIÇÃO: FUNÇÃO PREENCHER ÚLTIMOS PREÇOS
+//####################################################################################################
+
+/**
+ * Inicia o processo de preenchimento dos últimos preços, chamando o backend.
+ * Após a conclusão, recarrega os dados da cotação na tela.
+ */
+function FuncoesScript_iniciarPreenchimentoUltimosPrecos() {
+    const idCotacao = CotacaoIndividualScript_cotacaoIdAtual;
+    if (!idCotacao) {
+        CotacaoIndividualScript_exibirFeedback("Erro: Não há uma cotação ativa para preencher os preços.", true);
+        return;
+    }
+
+    console.log(`FuncoesScript: Solicitando preenchimento de últimos preços para a cotação ${idCotacao}.`);
+    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Buscando últimos preços...");
+
+    google.script.run
+        .withSuccessHandler(async function(response) {
+            if (response && response.success) {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Processo finalizado. Atualizando a tabela...", false, 5000);
+                
+                // Recarrega os dados da cotação para refletir os novos preços na UI
+                try {
+                    await window.CotacaoIndividualScript_carregarDadosCotacao(idCotacao);
+                    // Após recarregar, força o recálculo dos totais na UI
+                    if(typeof CotacaoIndividualScript_forcarRecalculoTotalUI === 'function') {
+                        setTimeout(CotacaoIndividualScript_forcarRecalculoTotalUI, 200);
+                    }
+                } catch (loadError) {
+                    console.error("Falha ao recarregar dados da cotação após preenchimento de preços:", loadError);
+                    CotacaoIndividualScript_exibirFeedback("Preços atualizados no backend, mas houve um erro ao recarregar a tela. Por favor, recarregue a página.", true);
+                }
+
+            } else {
+                CotacaoIndividualScript_exibirFeedback(response.message || "Ocorreu uma falha no servidor ao preencher os preços.", true);
+            }
+             CotacaoIndividualScript_mostrarLoadingOverlay(false);
+        })
+        .withFailureHandler(function(error) {
+            CotacaoIndividualScript_mostrarLoadingOverlay(false);
+            console.error("Erro de comunicação ao preencher preços:", error);
+            CotacaoIndividualScript_exibirFeedback("Erro de comunicação com o servidor: " + error.message, true);
+        })
+        .FuncoesController_preencherUltimosPrecos(idCotacao);
+}
+
 </script>
