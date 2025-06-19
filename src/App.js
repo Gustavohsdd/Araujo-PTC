@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 // Constantes globais de App.gs (VIEWS_PERMITIDAS, VIEW_FILENAME_MAP)
-const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual", "contagemdeestoque"]; 
+const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual", "contagemdeestoque", "EnviarManualmenteView"]; 
 
 const App_VIEW_FILENAME_MAP = {
   "fornecedores": "FornecedoresView",
@@ -10,9 +10,10 @@ const App_VIEW_FILENAME_MAP = {
   "cotacoes": "CotacoesView",
   "cotacaoIndividual": "CotacaoIndividualView",
   "contagemdeestoque": "ContagemDeEstoqueView",
-};
+  "EnviarManualmenteView": "EnviarManualmenteView"
+}
 
-const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL'); 
+  const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL'); 
 
 /**
  * Função principal para servir o Web App.
@@ -76,6 +77,16 @@ function doGet(e) {
     case 'ImprimirPedidosView':
       Logger.log("App.gs: Carregando ImprimirPedidosView.");
       return App_carregarPaginaDeImpressao(e);
+
+    case 'EnviarManualmenteView':
+      Logger.log("App.gs: Carregando EnviarManualmenteView.");
+      const templateEnvioManual = HtmlService.createTemplateFromFile('EnviarManualmenteView');
+      // A lógica para pegar os dados está no script do lado do cliente (EnviarManualmenteScript.html)
+      // então não precisamos passar parâmetros para o template aqui.
+      return templateEnvioManual.evaluate()
+        .setTitle("Enviar Pedidos Manualmente")
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+    // ##########################################
 
     case 'RelatorioAnaliseCompraView':
       Logger.log("App.gs: Carregando RelatorioAnaliseCompraView.");
@@ -226,14 +237,20 @@ function App_carregarPaginaDeImpressao(e) {
 function App_obterUrlWebApp(params) {
   try {
     let url = ScriptApp.getService().getUrl();
-    if (params) {
+    
+    // ===== INÍCIO DA CORREÇÃO =====
+    // A condição foi ajustada para apenas adicionar o '?' se houver chaves no objeto de parâmetros.
+    if (params && Object.keys(params).length > 0) {
       const query = Object.keys(params)
         .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
         .join('&');
       url += `?${query}`;
     }
+    // ===== FIM DA CORREÇÃO =====
+
     Logger.log(`App_obterUrlWebApp: URL gerada -> ${url}`);
     return { success: true, url: url };
+
   } catch(e) {
     Logger.log(`ERRO em App_obterUrlWebApp: ${e.toString()}`);
     return { success: false, message: e.message };

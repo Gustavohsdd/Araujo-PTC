@@ -13,14 +13,21 @@ function initImprimirPedidosScript() {
     console.log("ImprimirPedidosScript: Iniciando página de impressão.");
     const loadingOverlay = document.getElementById('ImprimirPedidosScript_loadingOverlay');
     const containerPrincipal = document.getElementById('ImprimirPedidosScript_containerPrincipal');
+    
+    // Seleciona todos os botões
     const printButton = document.getElementById('print-button');
     const checklistButton = document.getElementById('checklist-button');
+    const manualSendButton = document.getElementById('manual-send-button'); // NOVO
 
+    // Adiciona os event listeners
     if(printButton) {
         printButton.addEventListener('click', ImprimirPedidosScript_executarImpressao);
     }
     if(checklistButton) {
         checklistButton.addEventListener('click', ImprimirPedidosScript_executarImpressaoChecklist);
+    }
+    if(manualSendButton) { // NOVO
+        manualSendButton.addEventListener('click', ImprimirPedidosScript_iniciarGeracaoDeLinksManuais);
     }
 
     try {
@@ -31,7 +38,6 @@ function initImprimirPedidosScript() {
                 return;
             }
 
-            // Armazena o ID da cotação na variável global
             ImprimirPedidosScript_idCotacaoAtual = location.parameter.idCotacao;
             console.log("ID da cotação encontrado com sucesso:", ImprimirPedidosScript_idCotacaoAtual);
 
@@ -258,5 +264,56 @@ function formatarMoeda(valor) {
         style: 'currency',
         currency: 'BRL'
     });
+}
+
+/**
+ * Inicia o processo de gerar os PDFs no back-end e abrir a nova guia com os links.
+ */
+function ImprimirPedidosScript_iniciarGeracaoDeLinksManuais() {
+    if (!ImprimirPedidosScript_idCotacaoAtual) {
+        alert("Erro: ID da Cotação não encontrado.");
+        return;
+    }
+
+    const loadingOverlay = document.getElementById('ImprimirPedidosScript_loadingOverlay');
+    if(loadingOverlay) {
+        loadingOverlay.querySelector('p').textContent = "Gerando ou buscando links dos PDFs... Isso pode levar um momento.";
+        loadingOverlay.classList.remove('hidden');
+    }
+
+    google.script.run
+        .withSuccessHandler(response => {
+            if (loadingOverlay) loadingOverlay.classList.add('hidden');
+            
+            if (response && response.success) {
+                const dadosJson = JSON.stringify(response.dados);
+                const dadosCodificados = encodeURIComponent(dadosJson);
+
+                google.script.run
+                    .withSuccessHandler(responseUrl => { // Renomeado para responseUrl para clareza
+                        // ===== INÍCIO DA CORREÇÃO =====
+                        if (responseUrl && responseUrl.success && responseUrl.url) {
+                            // AQUI ESTÁ A CORREÇÃO: Usamos responseUrl.url em vez do objeto inteiro
+                            const urlFinal = `${responseUrl.url}?view=EnviarManualmenteView&data=${dadosCodificados}`;
+                            window.open(urlFinal, '_blank');
+                        } else {
+                            alert("Não foi possível obter a URL do Web App para abrir a nova guia.");
+                        }
+                        // ===== FIM DA CORREÇÃO =====
+                    })
+                    .withFailureHandler(err => {
+                         alert(`Erro de comunicação ao obter URL do App: ${err.message}`);
+                    })
+                    .App_obterUrlWebApp({});
+
+            } else {
+                alert(`Falha ao gerar os PDFs: ${response.message || 'Erro desconhecido.'}`);
+            }
+        })
+        .withFailureHandler(error => {
+            if (loadingOverlay) loadingOverlay.classList.add('hidden');
+            alert(`Erro de comunicação ao gerar PDFs: ${error.message}`);
+        })
+        .FuncoesController_gerarPdfsParaEnvioManual(ImprimirPedidosScript_idCotacaoAtual);
 }
 </script>

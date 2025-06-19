@@ -398,3 +398,169 @@ function FuncoesCRUD_preencherUltimosPrecos(idCotacaoAlvo) {
     lock.releaseLock();
   }
 }
+
+// @ts-nocheck
+
+//####################################################################################################
+// MÓDULO: FUNCOES (SERVER-SIDE CRUD) - FuncoesCRUD.js
+// Funções CRUD para funcionalidades diversas do menu "Funções".
+//####################################################################################################
+
+/**
+ * @file FuncoesCRUD.gs
+ * @description Funções CRUD para as funcionalidades do menu "Funções".
+ */
+
+
+// CONSTANTE GLOBAL PARA ESTE MÓDULO
+const FuncoesCRUD_PASTA_PEDIDOS_PDF_ID = '1ELCkOmyHe55VwwJ0ihtSOzZv4KIMD25B';
+
+
+/**
+ * Gera um HTML simples para um único pedido, para ser convertido em PDF.
+ * @param {object} pedido O objeto do pedido contendo detalhes como fornecedor, empresa, itens e total.
+ * @return {string} Uma string contendo o corpo HTML do pedido.
+ */
+function FuncoesCRUD_gerarHtmlParaPedido(pedido) {
+  let itensHtml = '';
+  pedido.itens.forEach(item => {
+    itensHtml += `
+      <tr>
+        <td>${item.subProduto}</td>
+        <td class="col-un">${item.un}</td>
+        <td class="col-qtd">${item.qtd}</td>
+        <td class="col-valor">${(item.valorUnit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+        <td class="col-valor">${(item.valorTotal || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+      </tr>
+    `;
+  });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; font-size: 10pt; }
+          .pedido-container { border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; }
+          .pedido-header-fornecedor { border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 10px; }
+          h2 { font-size: 16pt; margin: 0 0 10px 0; }
+          .info-grid { font-size: 9pt; }
+          .info-grid strong { font-weight: bold; }
+          .itens-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          .itens-table th { background-color: #f2f2f2; padding: 8px; text-align: left; font-size: 8pt; text-transform: uppercase; }
+          .itens-table td { padding: 8px; border-bottom: 1px solid #ddd; }
+          .col-un, .col-qtd { text-align: center; }
+          .col-valor { text-align: right; }
+          .total-pedido-footer { margin-top: 15px; text-align: right; font-size: 12pt; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="pedido-container">
+          <div class="pedido-header-fornecedor">
+            <h2>${pedido.fornecedor}</h2>
+            <div class="info-grid">
+              <p><strong>EMPRESA PARA FATURAMENTO:</strong> ${pedido.empresaFaturada}</p>
+              <p><strong>CNPJ:</strong> ${pedido.cnpj || 'Não informado'}</p>
+              <p><strong>CONDIÇÃO DE PAGAMENTO:</strong> ${pedido.condicaoPagamento || 'Não informada'}</p>
+            </div>
+          </div>
+          <table class="itens-table">
+            <thead>
+              <tr>
+                <th>PRODUTO (SUBPRODUTO)</th>
+                <th class="col-un">UN</th>
+                <th class="col-qtd">QTD.</th>
+                <th class="col-valor">VALOR UNIT.</th>
+                <th class="col-valor">VALOR TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itensHtml}
+            </tbody>
+          </table>
+          <div class="total-pedido-footer">
+            TOTAL DO PEDIDO: ${(pedido.totalPedido || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+  return html;
+}
+
+
+/**
+ * Gera arquivos PDF para cada pedido de uma cotação e os salva no Google Drive.
+ * VERSÃO MELHORADA: Verifica se o arquivo já existe antes de criar para evitar duplicatas.
+ * @param {string} idCotacao O ID da cotação a ser processada.
+ * @returns {object} Um objeto com { success, message, dados } contendo os links dos PDFs.
+ */
+function FuncoesCRUD_gerarPdfsParaEnvioManual(idCotacao) {
+  Logger.log(`FuncoesCRUD_gerarPdfsParaEnvioManual: Iniciando para ID '${idCotacao}'.`);
+
+  try {
+    const pastaPedidos = DriveApp.getFolderById(FuncoesCRUD_PASTA_PEDIDOS_PDF_ID);
+    if (!pastaPedidos) {
+      return { success: false, message: "A pasta de destino dos PDFs no Google Drive não foi encontrada. Verifique o ID." };
+    }
+
+    const resultadoDados = EtapasCRUD_buscarDadosAgrupadosParaImpressao(idCotacao);
+    if (!resultadoDados.success) {
+      return resultadoDados;
+    }
+
+    const dadosAgrupados = resultadoDados.dados;
+    if (!dadosAgrupados || Object.keys(dadosAgrupados).length === 0) {
+      return { success: false, message: "Nenhum pedido com itens a comprar foi encontrado nesta cotação." };
+    }
+
+    const linksGerados = [];
+    
+    for (const nomeFornecedor in dadosAgrupados) {
+      const pedidosDoFornecedor = dadosAgrupados[nomeFornecedor];
+      
+      for (const pedido of pedidosDoFornecedor) {
+        const nomeArquivo = `Pedido-${idCotacao}-${pedido.fornecedor}-${pedido.empresaFaturada}.pdf`;
+        let arquivoPdf;
+        let urlPdf;
+
+        // ===== INÍCIO DA LÓGICA ANTI-DUPLICAÇÃO =====
+        const arquivosExistentes = pastaPedidos.getFilesByName(nomeArquivo);
+        
+        if (arquivosExistentes.hasNext()) {
+          // O arquivo já existe, vamos apenas usar o existente.
+          arquivoPdf = arquivosExistentes.next();
+          urlPdf = arquivoPdf.getUrl();
+          Logger.log(`Arquivo encontrado, não será duplicado: ${nomeArquivo}`);
+        } else {
+          // O arquivo não existe, então criamos um novo.
+          Logger.log(`Arquivo não encontrado. Criando novo: ${nomeArquivo}`);
+          const htmlPedido = FuncoesCRUD_gerarHtmlParaPedido(pedido);
+          const pdfBlob = Utilities.newBlob(htmlPedido, MimeType.HTML, nomeArquivo).getAs(MimeType.PDF);
+          arquivoPdf = pastaPedidos.createFile(pdfBlob);
+          arquivoPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+          urlPdf = arquivoPdf.getUrl();
+          Logger.log(`PDF gerado com sucesso: ${nomeArquivo}`);
+        }
+        // ===== FIM DA LÓGICA ANTI-DUPLICAÇÃO =====
+
+        linksGerados.push({
+          fornecedor: pedido.fornecedor,
+          empresaFaturada: pedido.empresaFaturada,
+          valorTotal: pedido.totalPedido,
+          linkPdf: urlPdf
+        });
+      }
+    }
+
+    return {
+      success: true,
+      message: `${linksGerados.length} PDF(s) de pedido processados com sucesso.`,
+      dados: linksGerados
+    };
+
+  } catch (error) {
+    Logger.log(`ERRO CRÍTICO em FuncoesCRUD_gerarPdfsParaEnvioManual: ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, message: "Erro no servidor ao gerar os arquivos PDF: " + error.message };
+  }
+}
