@@ -80,8 +80,10 @@ const CABECALHOS_COTACOES = [
   "CFOP",
   "Empresa Faturada",
   "Condição de Pagamento",
-  "Status da Cotação"
-];
+  "Status da Cotação",
+  "Status do SubProduto",
+  "Quantidade Recebida"
+]
 
 // Aba Pedidos
 const ABA_PEDIDOS = "Pedidos";

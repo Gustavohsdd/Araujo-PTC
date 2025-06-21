@@ -9,10 +9,10 @@
  * Busca os dados necessários para exibir no portal do fornecedor.
  * Esta função é chamada pelo App.gs (doGet) quando um token é detectado.
  * @param {string} token O token de acesso do fornecedor.
- * @return {object} Um objeto com { valido: boolean, mensagemErro?: string, nomeFornecedor?: string, idCotacao?: string, produtos?: Array<object>, pedidoFinalizado?: object }.
+ * @return {object} Um objeto com os dados para o portal, incluindo a data de abertura formatada.
  */
 function PortalController_buscarDadosParaPortalWebService(token) {
-  const resultadoDefault = { valido: false, mensagemErro: "Token não encontrado ou inválido.", nomeFornecedor: null, idCotacao: null, produtos: [], pedidoFinalizado: null };
+  const resultadoDefault = { valido: false, mensagemErro: "Token não encontrado ou inválido.", nomeFornecedor: null, idCotacao: null, produtos: [], pedidoFinalizado: null, dataAberturaFormatada: "" };
 
   if (!token) {
     return resultadoDefault;
@@ -25,7 +25,6 @@ function PortalController_buscarDadosParaPortalWebService(token) {
       return { ...resultadoDefault, mensagemErro: dadosToken.mensagemErro || "Falha ao validar token." };
     }
     
-    // Verificação de status do link
     const statusPermitidos = [STATUS_PORTAL.LINK_GERADO, STATUS_PORTAL.EM_PREENCHIMENTO, STATUS_PORTAL.RESPONDIDO];
     if (!statusPermitidos.includes(dadosToken.status)) {
         const msgErro = `O acesso para esta cotação (ID: ${dadosToken.idCotacao}) não está mais ativo (Status Atual do Link: ${dadosToken.status}). Contate o comprador.`;
@@ -39,7 +38,6 @@ function PortalController_buscarDadosParaPortalWebService(token) {
     }
 
     let pedidoFinalizado = { pedidoExiste: false };
-    // Se o status for 'Respondido', busca os dados do pedido finalizado
     if (dadosToken.status === STATUS_PORTAL.RESPONDIDO) {
       const dadosPedido = PortalCRUD_buscarDadosDoPedidoFinalizado(dadosToken.idCotacao, dadosToken.nomeFornecedor);
       if (dadosPedido) {
@@ -47,13 +45,16 @@ function PortalController_buscarDadosParaPortalWebService(token) {
       }
     }
 
+    const dataAberturaFormatada = PortalController_formatarDataParaBrasileiro(dadosToken.dataEnvio);
+
     return {
       valido: true,
       nomeFornecedor: dadosToken.nomeFornecedor,
       idCotacao: dadosToken.idCotacao,
-      status: dadosToken.status, // Enviando o status para o front-end
+      status: dadosToken.status,
       produtos: produtosDoFornecedor,
-      pedidoFinalizado: pedidoFinalizado, // Enviando os dados do pedido
+      pedidoFinalizado: pedidoFinalizado,
+      dataAberturaFormatada: dataAberturaFormatada, // NOVO CAMPO PARA A PRÉ-VISUALIZAÇÃO
       mensagemErro: null
     };
 
@@ -264,4 +265,16 @@ function PortalFornecedorController_gerarLinksParaFornecedores(idCotacao) {
     resultadoGeral.message = "Erro inesperado no servidor ao gerar links para fornecedores.";
     return resultadoGeral;
   }
+}
+
+/**
+ * Formata um objeto Date para o formato "dd/MM/yyyy".
+ * @param {Date} data O objeto Date a ser formatado.
+ * @return {string} A data formatada ou uma string vazia se a data for inválida.
+ */
+function PortalController_formatarDataParaBrasileiro(data) {
+  if (data instanceof Date && !isNaN(data)) {
+    return Utilities.formatDate(data, "GMT-03:00", "dd/MM/yyyy");
+  }
+  return "";
 }

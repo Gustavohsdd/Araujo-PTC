@@ -586,6 +586,27 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
         });
     }
 
+    // --- MODIFICAÇÃO INÍCIO ---
+    const btnAbrirMarcacao = document.getElementById('CotacoesScript_btnAbrirMarcacaoProdutos');
+    if (btnAbrirMarcacao) {
+      btnAbrirMarcacao.addEventListener('click', () => {
+        CotacoesScript_exibirFeedbackGlobal('Abrindo página de marcação...', false, 2000);
+        google.script.run
+          .withSuccessHandler(response => {
+            if (response.success && response.url) {
+              window.open(response.url, '_blank');
+            } else {
+              CotacoesScript_exibirFeedbackGlobal(response.message || 'Erro ao gerar URL para a página de marcação.', true);
+            }
+          })
+          .withFailureHandler(err => {
+             CotacoesScript_exibirFeedbackGlobal('Falha de comunicação ao tentar abrir a página: ' + err.message, true);
+          })
+          .App_obterUrlWebApp({ view: 'marcarprodutos' });
+      });
+    }
+    // --- MODIFICAÇÃO FIM ---
+
 
     CotacoesScript_carregarTodasCotacoes();
   }

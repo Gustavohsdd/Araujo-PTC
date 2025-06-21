@@ -3,6 +3,29 @@
   <head>
     <base target="_top">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <!-- ================================================================================= -->
+    <!--      INÍCIO DAS NOVAS TAGS PARA PRÉ-VISUALIZAÇÃO DE LINK (UNFURL)                  -->
+    <!-- ================================================================================= -->
+    
+    <? var nomeEmpresa = "CotaçãoPro | Araújo Padaria e Pizzaria - Patrocínio (MG)"; ?>
+    <? var tituloCotacao = "Cotação: " + idCotacao + " | Data de Abertura: " + dataAberturaFormatada; ?>
+
+    <!-- Título da página/aba do navegador -->
+    <title><?= nomeEmpresa ?></title>
+
+    <!-- Tags Open Graph (OG) para WhatsApp, Facebook, etc. -->
+    <meta property="og:title" content="<?= nomeEmpresa ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:description" content="<?= tituloCotacao ?>" />
+    
+    <!-- Opcional: Coloque uma URL pública de uma imagem/logo para aparecer na pré-visualização -->
+    <meta property="og:image" content="https://i.imgur.com/URL_DA_SUA_IMAGEM_AQUI.png" />
+
+    <!-- ================================================================================= -->
+    <!--      FIM DAS NOVAS TAGS PARA PRÉ-VISUALIZAÇÃO DE LINK                             -->
+    <!-- ================================================================================= -->
+    
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" xintegrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>

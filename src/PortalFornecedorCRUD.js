@@ -19,10 +19,21 @@
  * status?: string,
  * linhaNoLog?: number (1-indexed)
  */
+/**
+ * Valida um token de acesso na ABA_PORTAL e retorna os dados do log associados.
+ * @param {string} token O token de acesso a ser validado.
+ * @return {object} Um objeto com:
+ * valido: boolean,
+ * mensagemErro?: string,
+ * idCotacao?: string, 
+ * nomeFornecedor?: string,
+ * status?: string,
+ * linhaNoLog?: number (1-indexed),
+ * dataEnvio?: Date
+ */
 function PortalCRUD_validarTokenEObterDadosLog(token) {
   const tokenLimpo = String(token || "").trim().replace(/^"|"$/g, ''); 
-  // Logger.log(`PortalCRUD_validarTokenEObterDadosLog: Validando token (limpo) '${tokenLimpo}'.`); // Log removido
-  const resultado = { valido: false, mensagemErro: "Token não fornecido.", idCotacao: null, nomeFornecedor: null, status: null, linhaNoLog: -1 };
+  const resultado = { valido: false, mensagemErro: "Token não fornecido.", idCotacao: null, nomeFornecedor: null, status: null, linhaNoLog: -1, dataEnvio: null };
   
   if (!tokenLimpo) return resultado;
 
@@ -32,14 +43,12 @@ function PortalCRUD_validarTokenEObterDadosLog(token) {
 
     if (!abaPortal) {
       resultado.mensagemErro = `Aba de controle de portal "${ABA_PORTAL}" não encontrada.`;
-      // Logger.log(`PortalCRUD_validarTokenEObterDadosLog: ${resultado.mensagemErro}`); // Log removido
       return resultado;
     }
 
     const ultimaLinha = abaPortal.getLastRow();
     if (ultimaLinha < 1) { 
       resultado.mensagemErro = `Aba "${ABA_PORTAL}" está vazia.`;
-      // Logger.log(`PortalCRUD_validarTokenEObterDadosLog: ${resultado.mensagemErro}`); // Log removido
       return resultado;
     }
     
@@ -51,10 +60,6 @@ function PortalCRUD_validarTokenEObterDadosLog(token) {
         const indiceReal = cabecalhosPlanilha.indexOf(nomeConstante);
         if (indiceReal !== -1) {
             indices[nomeConstante] = indiceReal;
-        } else {
-            // Logger.log(`PortalCRUD_validarTokenEObterDadosLog: AVISO - Cabeçalho "${nomeConstante}" (de CABECALHOS_PORTAL) não encontrado na planilha "${ABA_PORTAL}".`); // Log removido
-            // Este aviso pode ser importante, mas a instrução é remover logs.
-            // A lógica abaixo que verifica os índices essenciais já trata a falha crítica.
         }
     });
 
@@ -62,10 +67,10 @@ function PortalCRUD_validarTokenEObterDadosLog(token) {
     const idxIdCotacao = indices["ID da Cotação"];
     const idxNomeFornecedor = indices["Nome Fornecedor"];
     const idxStatus = indices["Status"];
+    const idxDataEnvio = indices["Data Envio"]; // Índice para a nova data
 
-    if (idxToken === undefined || idxIdCotacao === undefined || idxNomeFornecedor === undefined || idxStatus === undefined) {
-      resultado.mensagemErro = `Configuração de colunas da aba "${ABA_PORTAL}" está incorreta ou cabeçalhos não correspondem à constante CABECALHOS_PORTAL.`;
-      // Logger.log(`PortalCRUD_validarTokenEObterDadosLog: ${resultado.mensagemErro}. Índices obtidos: Token=${idxToken}, ID=${idxIdCotacao}, Forn=${idxNomeFornecedor}, Status=${idxStatus}`); // Log removido
+    if (idxToken === undefined || idxIdCotacao === undefined || idxNomeFornecedor === undefined || idxStatus === undefined || idxDataEnvio === undefined) {
+      resultado.mensagemErro = `Configuração de colunas da aba "${ABA_PORTAL}" está incorreta ou cabeçalhos não correspondem à constante CABECALHOS_PORTAL. Verifique se a coluna 'Data Envio' existe.`;
       return resultado;
     }
 
@@ -77,18 +82,16 @@ function PortalCRUD_validarTokenEObterDadosLog(token) {
         resultado.nomeFornecedor = String(dadosAbaPortal[i][idxNomeFornecedor] || "").trim();
         resultado.status = String(dadosAbaPortal[i][idxStatus] || "").trim();
         resultado.linhaNoLog = i + 1; 
+        resultado.dataEnvio = dadosAbaPortal[i][idxDataEnvio] instanceof Date ? dadosAbaPortal[i][idxDataEnvio] : null; // Captura a data
         resultado.mensagemErro = null;
-        // Logger.log(`PortalCRUD_validarTokenEObterDadosLog: Token '${tokenLimpo}' válido. Dados extraídos: ID Cotação=${resultado.idCotacao} (Tipo: ${typeof resultado.idCotacao}), Fornecedor=${resultado.nomeFornecedor}, Status=${resultado.status}`); // Log removido
         return resultado;
       }
     }
 
     resultado.mensagemErro = "Token de acesso inválido ou não encontrado na aba Portal.";
-    // Logger.log(`PortalCRUD_validarTokenEObterDadosLog: Token '${tokenLimpo}' não encontrado.`); // Log removido
     return resultado;
 
   } catch (error) {
-    // Logger.log(`ERRO CRÍTICO em PortalCRUD_validarTokenEObterDadosLog para token '${tokenLimpo}': ${error.toString()} Stack: ${error.stack}`); // Log removido
     console.error(`PortalCRUD_validarTokenEObterDadosLog: Erro para token '${tokenLimpo}': ${error.toString()}`);
     resultado.valido = false;
     resultado.mensagemErro = "Erro interno ao validar o token de acesso.";

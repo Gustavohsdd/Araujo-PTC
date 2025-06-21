@@ -1,0 +1,201 @@
+<script>
+function initMarcacaoProdutosScript() {
+  const ID_CONTAINER_PRINCIPAL = 'MarcacaoProdutos_containerPrincipal';
+  const ID_FEEDBACK_GERAL = 'MarcacaoProdutos_feedback';
+  const ID_LOADING_GERAL = 'MarcacaoProdutos_loadingGeral';
+  
+  // Constantes do Modal
+  const ID_MODAL_OVERLAY = 'MarcacaoProdutos_modalParcial';
+  const ID_MODAL_INPUT_QTD = 'MarcacaoProdutos_inputQuantidade';
+  const ID_MODAL_BTN_CONFIRMAR = 'MarcacaoProdutos_btnConfirmarModal';
+  const ID_MODAL_BTN_CANCELAR = 'MarcacaoProdutos_btnCancelarModal';
+  const ID_MODAL_FEEDBACK = 'MarcacaoProdutos_modalFeedback';
+
+  const modalOverlay = document.getElementById(ID_MODAL_OVERLAY);
+  const modalInputQtd = document.getElementById(ID_MODAL_INPUT_QTD);
+  const modalBtnConfirmar = document.getElementById(ID_MODAL_BTN_CONFIRMAR);
+  const modalBtnCancelar = document.getElementById(ID_MODAL_BTN_CANCELAR);
+  const modalFeedback = document.getElementById(ID_MODAL_FEEDBACK);
+  let linhaPlanilhaAtual = null;
+
+  function exibirFeedback(mensagem, isError = false) {
+    const feedbackEl = document.getElementById(ID_FEEDBACK_GERAL);
+    if (!feedbackEl) return;
+    feedbackEl.textContent = mensagem;
+    feedbackEl.className = `p-3 my-4 text-sm rounded-md ${isError ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-green-100 text-green-800 border border-green-300'}`;
+    feedbackEl.style.display = 'block';
+    setTimeout(() => { feedbackEl.style.display = 'none'; }, 5000);
+  }
+
+  function abrirModal(linha) {
+    linhaPlanilhaAtual = linha;
+    modalInputQtd.value = '';
+    modalFeedback.textContent = '';
+    modalOverlay.classList.remove('hidden');
+    setTimeout(() => modalOverlay.classList.remove('opacity-0'), 10);
+    modalInputQtd.focus();
+  }
+
+  function fecharModal() {
+    modalOverlay.classList.add('opacity-0');
+    setTimeout(() => modalOverlay.classList.add('hidden'), 300);
+    linhaPlanilhaAtual = null;
+  }
+  
+  function removerItemDaLista(linha) {
+    const itemEl = document.querySelector(`.produto-item[data-linha-planilha="${linha}"]`);
+    if(!itemEl) return;
+    itemEl.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+    itemEl.style.opacity = '0';
+    itemEl.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      const parentContainer = itemEl.parentNode;
+      itemEl.remove();
+      if (parentContainer && parentContainer.childElementCount === 0) {
+        const accordionItem = parentContainer.closest('.accordion-item-marcacao');
+        if (accordionItem) {
+          accordionItem.style.transition = 'opacity 0.5s ease';
+          accordionItem.style.opacity = '0';
+          setTimeout(() => accordionItem.remove(), 500);
+        }
+      }
+    }, 500);
+  }
+
+  function handleMarcarProdutoClick(event) {
+    const button = event.currentTarget;
+    const { linhaPlanilha, novoStatus } = button.dataset;
+    
+    if (novoStatus === 'Recebido Parcialmente') {
+      abrirModal(linhaPlanilha);
+      return;
+    }
+
+    const itemProdutoEl = button.closest('.produto-item');
+    itemProdutoEl.style.opacity = '0.5';
+    itemProdutoEl.querySelectorAll('button').forEach(btn => btn.disabled = true);
+    
+    google.script.run
+      .withSuccessHandler(response => {
+        if (response.success) {
+          removerItemDaLista(linhaPlanilha);
+        } else {
+          exibirFeedback(response.message || 'Falha ao atualizar o status.', true);
+          itemProdutoEl.style.opacity = '1';
+          itemProdutoEl.querySelectorAll('button').forEach(btn => btn.disabled = false);
+        }
+      })
+      .withFailureHandler(error => {
+        exibirFeedback(`Erro de comunicação: ${error.message}`, true);
+        itemProdutoEl.style.opacity = '1';
+        itemProdutoEl.querySelectorAll('button').forEach(btn => btn.disabled = false);
+      })
+      .MarcacaoProdutosController_atualizarStatusSubproduto(parseInt(linhaPlanilha, 10), novoStatus);
+  }
+
+  function popularLista(dadosAgrupados) {
+    const container = document.getElementById(ID_CONTAINER_PRINCIPAL);
+    container.innerHTML = '';
+    const fornecedores = Object.keys(dadosAgrupados).sort();
+
+    if (fornecedores.length === 0) {
+      container.innerHTML = `<div class="text-center p-8 bg-white rounded-lg shadow"><h3 class="text-xl font-semibold text-gray-700">Tudo em ordem!</h3><p class="text-gray-500 mt-2">Nenhum produto aguardando recebimento no momento.</p></div>`;
+      return;
+    }
+
+    for (const fornecedor of fornecedores) {
+      const produtos = dadosAgrupados[fornecedor];
+      const accordionItem = document.createElement('div');
+      accordionItem.className = 'accordion-item-marcacao bg-white rounded-lg shadow-md overflow-hidden mb-4';
+      const header = document.createElement('button');
+      header.className = 'accordion-header-marcacao flex justify-between items-center w-full p-4 text-left font-semibold text-gray-800 bg-gray-50 hover:bg-gray-100 transition';
+      header.innerHTML = `<span class="text-lg">${fornecedor} <span class="text-base font-normal text-gray-500">(${produtos.length} itens)</span></span><svg class="w-6 h-6 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>`;
+      const content = document.createElement('div');
+      content.className = 'accordion-content-marcacao p-4 border-t border-gray-200';
+      content.style.display = 'none';
+
+      produtos.forEach(produto => {
+        const item = document.createElement('div');
+        item.className = 'produto-item flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 border-b border-gray-100 last:border-b-0';
+        item.dataset.linhaPlanilha = produto.linhaPlanilha;
+        item.innerHTML = `
+          <div class="mb-2 sm:mb-0">
+            <p class="font-medium text-gray-800">${produto.nomeSubproduto}</p>
+            <p class="text-xs text-gray-500">ID Cotação: ${produto.idCotacao}</p>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button data-linha-planilha="${produto.linhaPlanilha}" data-novo-status="Recebido" class="btn-marcacao btn-marcacao-recebido"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Recebido</button>
+            <button data-linha-planilha="${produto.linhaPlanilha}" data-novo-status="Cortado" class="btn-marcacao btn-marcacao-cortado"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>Cortado</button>
+            <button data-linha-planilha="${produto.linhaPlanilha}" data-novo-status="Recebido Parcialmente" class="btn-marcacao btn-marcacao-parcial">Parcial</button>
+          </div>`;
+        content.appendChild(item);
+      });
+      accordionItem.appendChild(header);
+      accordionItem.appendChild(content);
+      container.appendChild(accordionItem);
+      header.addEventListener('click', () => {
+        const isVisible = content.style.display === 'block';
+        content.style.display = isVisible ? 'none' : 'block';
+        header.querySelector('svg').classList.toggle('rotate-180', !isVisible);
+      });
+    }
+
+    document.querySelectorAll('.btn-marcacao').forEach(button => {
+        button.addEventListener('click', handleMarcarProdutoClick);
+    });
+  }
+
+  function carregarProdutos() {
+    document.getElementById(ID_LOADING_GERAL).style.display = 'flex';
+    document.getElementById(ID_CONTAINER_PRINCIPAL).style.display = 'none';
+    google.script.run
+      .withSuccessHandler(response => {
+        document.getElementById(ID_LOADING_GERAL).style.display = 'none';
+        document.getElementById(ID_CONTAINER_PRINCIPAL).style.display = 'block';
+        if (response.success) popularLista(response.dados);
+        else exibirFeedback(response.message || 'Ocorreu um erro ao buscar os produtos.', true);
+      })
+      .withFailureHandler(error => {
+        document.getElementById(ID_LOADING_GERAL).style.display = 'none';
+        exibirFeedback(`Erro de comunicação com o servidor: ${error.message}`, true);
+      })
+      .MarcacaoProdutosController_obterProdutosParaMarcacao();
+  }
+  
+  function confirmarRecebimentoParcial() {
+    const quantidade = modalInputQtd.value;
+    if (quantidade === '' || isNaN(quantidade) || Number(quantidade) <= 0) {
+      modalFeedback.textContent = 'Por favor, insira uma quantidade válida.';
+      return;
+    }
+    
+    modalFeedback.textContent = '';
+    modalBtnConfirmar.disabled = true;
+    modalBtnConfirmar.textContent = 'Salvando...';
+
+    google.script.run
+      .withSuccessHandler(response => {
+        modalBtnConfirmar.disabled = false;
+        modalBtnConfirmar.textContent = 'Confirmar';
+        if (response.success) {
+          removerItemDaLista(linhaPlanilhaAtual);
+          fecharModal();
+        } else {
+          modalFeedback.textContent = response.message || 'Falha ao atualizar.';
+        }
+      })
+      .withFailureHandler(error => {
+        modalBtnConfirmar.disabled = false;
+        modalBtnConfirmar.textContent = 'Confirmar';
+        modalFeedback.textContent = `Erro: ${error.message}`;
+      })
+      .MarcacaoProdutosController_atualizarStatusParcial(parseInt(linhaPlanilhaAtual, 10), Number(quantidade));
+  }
+
+  modalBtnCancelar.addEventListener('click', fecharModal);
+  modalBtnConfirmar.addEventListener('click', confirmarRecebimentoParcial);
+
+  carregarProdutos();
+}
+initMarcacaoProdutosScript();
+</script>
