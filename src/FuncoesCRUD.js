@@ -253,3 +253,314 @@ function FuncoesCRUD_salvarTextoGlobalCotacaoPortal(idCotacao, textoGlobal) {
     return { success: false, message: `Erro ao salvar texto global da cotação (FuncoesCRUD): ${error.message}` };
   }
 }
+
+/**
+ * MELHORADO: Busca na aba "Cotacoes" os últimos dados (Preço, Tamanho, UN, Fator) para cada combinação de SubProduto e Fornecedor
+ * e preenche os dados em itens da cotação atual que não possuem preço. Também recalcula os campos dependentes.
+ * @param {string} idCotacaoAlvo O ID da cotação cujos dados devem ser preenchidos.
+ * @return {object} Um objeto com { success: boolean, numItens: number, message: string }.
+ */
+function FuncoesCRUD_preencherUltimosPrecos(idCotacaoAlvo) {
+  Logger.log(`FuncoesCRUD_preencherUltimosPrecos (MELHORADO): Iniciando para ID '${idCotacaoAlvo}'.`);
+  
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const abaCotacoes = planilha.getSheetByName(ABA_COTACOES);
+    if (!abaCotacoes) {
+      throw new Error(`A aba "${ABA_COTACOES}" não foi encontrada.`);
+    }
+    
+    const range = abaCotacoes.getDataRange();
+    const valores = range.getValues();
+    const cabecalhos = valores[0].map(String);
+
+    // Mapear todos os índices de coluna necessários
+    const idxIdCotacao = cabecalhos.indexOf("ID da Cotação");
+    const idxSubProduto = cabecalhos.indexOf("SubProduto");
+    const idxFornecedor = cabecalhos.indexOf("Fornecedor");
+    const idxPreco = cabecalhos.indexOf("Preço");
+    const idxTamanho = cabecalhos.indexOf("Tamanho");
+    const idxUN = cabecalhos.indexOf("UN");
+    const idxFator = cabecalhos.indexOf("Fator");
+    const idxComprar = cabecalhos.indexOf("Comprar");
+    const idxValorTotal = cabecalhos.indexOf("Valor Total");
+    const idxPrecoPorFator = cabecalhos.indexOf("Preço por Fator");
+
+    // Validar se todas as colunas essenciais existem
+    const requiredColumns = {
+        "ID da Cotação": idxIdCotacao, "SubProduto": idxSubProduto, "Fornecedor": idxFornecedor, 
+        "Preço": idxPreco, "Tamanho": idxTamanho, "UN": idxUN, "Fator": idxFator,
+        "Comprar": idxComprar, "Valor Total": idxValorTotal, "Preço por Fator": idxPrecoPorFator
+    };
+
+    for(const col in requiredColumns) {
+        if(requiredColumns[col] === -1) {
+            throw new Error(`A coluna essencial "${col}" não foi encontrada na aba 'Cotacoes'.`);
+        }
+    }
+
+    const ultimosDadosMap = {};
+    // 1. Construir o mapa de últimos dados, iterando do mais recente para o mais antigo.
+    Logger.log("Construindo mapa de últimos dados (Preço, Tamanho, UN, Fator)...");
+    for (let i = valores.length - 1; i > 0; i--) {
+      const linha = valores[i];
+      const idCotacaoLinha = String(linha[idxIdCotacao]).trim();
+      
+      if (idCotacaoLinha === idCotacaoAlvo) continue;
+
+      const subProduto = String(linha[idxSubProduto]).trim();
+      const fornecedor = String(linha[idxFornecedor]).trim();
+      const preco = parseFloat(String(linha[idxPreco]).replace(",", "."));
+
+      if (subProduto && fornecedor) {
+        const chave = `${subProduto}__${fornecedor}`;
+        // Se a chave ainda não existe no mapa e o preço é válido e maior que zero, guarde todos os dados.
+        if (!ultimosDadosMap.hasOwnProperty(chave) && !isNaN(preco) && preco > 0) {
+          ultimosDadosMap[chave] = {
+            preco: preco,
+            tamanho: linha[idxTamanho],
+            un: linha[idxUN],
+            fator: linha[idxFator]
+          };
+        }
+      }
+    }
+    Logger.log(`Mapa de dados históricos construído com ${Object.keys(ultimosDadosMap).length} entradas.`);
+
+    // 2. Aplicar os dados e recalcular campos na matriz de valores em memória
+    let itensAtualizadosCount = 0;
+    let foiModificado = false;
+    Logger.log(`Aplicando dados históricos na cotação alvo: ${idCotacaoAlvo}`);
+    for (let i = 1; i < valores.length; i++) {
+      const linha = valores[i];
+      const idCotacaoLinha = String(linha[idxIdCotacao]).trim();
+
+      if (idCotacaoLinha === idCotacaoAlvo) {
+        const precoAtual = parseFloat(String(linha[idxPreco]).replace(",", "."));
+        let dadosForamAtualizadosNestaLinha = false;
+
+        // A condição principal para atualização continua sendo o preço vazio/zerado
+        if (isNaN(precoAtual) || precoAtual === 0) {
+          const subProduto = String(linha[idxSubProduto]).trim();
+          const fornecedor = String(linha[idxFornecedor]).trim();
+          const chave = `${subProduto}__${fornecedor}`;
+
+          if (ultimosDadosMap.hasOwnProperty(chave)) {
+            const dadosHistoricos = ultimosDadosMap[chave];
+            
+            // Atualiza os quatro campos na matriz em memória
+            valores[i][idxPreco] = dadosHistoricos.preco;
+            valores[i][idxTamanho] = dadosHistoricos.tamanho;
+            valores[i][idxUN] = dadosHistoricos.un;
+            valores[i][idxFator] = dadosHistoricos.fator;
+            
+            itensAtualizadosCount++;
+            dadosForamAtualizadosNestaLinha = true;
+            foiModificado = true;
+            Logger.log(`Dados para '${subProduto}' do fornecedor '${fornecedor}' atualizados na linha ${i + 1} (em memória).`);
+          }
+        }
+        
+        // Se os dados foram atualizados, precisamos recalcular os campos dependentes
+        if (dadosForamAtualizadosNestaLinha) {
+            const preco = parseFloat(valores[i][idxPreco]) || 0;
+            const comprar = parseFloat(String(valores[i][idxComprar]).replace(",", ".")) || 0;
+            const fator = parseFloat(String(valores[i][idxFator]).replace(",", ".")) || 0;
+
+            const valorTotalCalculado = preco * comprar;
+            const precoPorFatorCalculado = fator !== 0 ? preco / fator : 0;
+            
+            valores[i][idxValorTotal] = valorTotalCalculado;
+            valores[i][idxPrecoPorFator] = precoPorFatorCalculado;
+        }
+      }
+    }
+    
+    // 3. Salvar todas as alterações de volta na planilha de uma só vez, se houver modificações
+    if (foiModificado) {
+        range.setValues(valores);
+        Logger.log("Matriz de valores modificada foi salva de volta na planilha.");
+    }
+
+    if (itensAtualizadosCount > 0) {
+      return { success: true, numItens: itensAtualizadosCount, message: `Dados de ${itensAtualizadosCount} item(ns) foram atualizados com base no histórico.` };
+    } else {
+      return { success: true, numItens: 0, message: "Nenhum dado a ser atualizado foi encontrado no histórico para os itens desta cotação." };
+    }
+
+  } catch (error) {
+    Logger.log(`ERRO CRÍTICO em FuncoesCRUD_preencherUltimosPrecos: ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, numItens: 0, message: "Erro no servidor ao buscar últimos dados: " + error.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// @ts-nocheck
+
+//####################################################################################################
+// MÓDULO: FUNCOES (SERVER-SIDE CRUD) - FuncoesCRUD.js
+// Funções CRUD para funcionalidades diversas do menu "Funções".
+//####################################################################################################
+
+/**
+ * @file FuncoesCRUD.gs
+ * @description Funções CRUD para as funcionalidades do menu "Funções".
+ */
+
+
+// CONSTANTE GLOBAL PARA ESTE MÓDULO
+const FuncoesCRUD_PASTA_PEDIDOS_PDF_ID = '1ELCkOmyHe55VwwJ0ihtSOzZv4KIMD25B';
+
+
+/**
+ * Gera um HTML simples para um único pedido, para ser convertido em PDF.
+ * @param {object} pedido O objeto do pedido contendo detalhes como fornecedor, empresa, itens e total.
+ * @return {string} Uma string contendo o corpo HTML do pedido.
+ */
+function FuncoesCRUD_gerarHtmlParaPedido(pedido) {
+  let itensHtml = '';
+  pedido.itens.forEach(item => {
+    itensHtml += `
+      <tr>
+        <td>${item.subProduto}</td>
+        <td class="col-un">${item.un}</td>
+        <td class="col-qtd">${item.qtd}</td>
+        <td class="col-valor">${(item.valorUnit || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+        <td class="col-valor">${(item.valorTotal || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+      </tr>
+    `;
+  });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; font-size: 10pt; }
+          .pedido-container { border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; }
+          .pedido-header-fornecedor { border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 10px; }
+          h2 { font-size: 16pt; margin: 0 0 10px 0; }
+          .info-grid { font-size: 9pt; }
+          .info-grid strong { font-weight: bold; }
+          .itens-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          .itens-table th { background-color: #f2f2f2; padding: 8px; text-align: left; font-size: 8pt; text-transform: uppercase; }
+          .itens-table td { padding: 8px; border-bottom: 1px solid #ddd; }
+          .col-un, .col-qtd { text-align: center; }
+          .col-valor { text-align: right; }
+          .total-pedido-footer { margin-top: 15px; text-align: right; font-size: 12pt; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="pedido-container">
+          <div class="pedido-header-fornecedor">
+            <h2>${pedido.fornecedor}</h2>
+            <div class="info-grid">
+              <p><strong>EMPRESA PARA FATURAMENTO:</strong> ${pedido.empresaFaturada}</p>
+              <p><strong>CNPJ:</strong> ${pedido.cnpj || 'Não informado'}</p>
+              <p><strong>CONDIÇÃO DE PAGAMENTO:</strong> ${pedido.condicaoPagamento || 'Não informada'}</p>
+            </div>
+          </div>
+          <table class="itens-table">
+            <thead>
+              <tr>
+                <th>PRODUTO (SUBPRODUTO)</th>
+                <th class="col-un">UN</th>
+                <th class="col-qtd">QTD.</th>
+                <th class="col-valor">VALOR UNIT.</th>
+                <th class="col-valor">VALOR TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itensHtml}
+            </tbody>
+          </table>
+          <div class="total-pedido-footer">
+            TOTAL DO PEDIDO: ${(pedido.totalPedido || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+  return html;
+}
+
+
+/**
+ * Gera arquivos PDF para cada pedido de uma cotação e os salva no Google Drive.
+ * VERSÃO MELHORADA: Verifica se o arquivo já existe antes de criar para evitar duplicatas.
+ * @param {string} idCotacao O ID da cotação a ser processada.
+ * @returns {object} Um objeto com { success, message, dados } contendo os links dos PDFs.
+ */
+function FuncoesCRUD_gerarPdfsParaEnvioManual(idCotacao) {
+  Logger.log(`FuncoesCRUD_gerarPdfsParaEnvioManual: Iniciando para ID '${idCotacao}'.`);
+
+  try {
+    const pastaPedidos = DriveApp.getFolderById(FuncoesCRUD_PASTA_PEDIDOS_PDF_ID);
+    if (!pastaPedidos) {
+      return { success: false, message: "A pasta de destino dos PDFs no Google Drive não foi encontrada. Verifique o ID." };
+    }
+
+    const resultadoDados = EtapasCRUD_buscarDadosAgrupadosParaImpressao(idCotacao);
+    if (!resultadoDados.success) {
+      return resultadoDados;
+    }
+
+    const dadosAgrupados = resultadoDados.dados;
+    if (!dadosAgrupados || Object.keys(dadosAgrupados).length === 0) {
+      return { success: false, message: "Nenhum pedido com itens a comprar foi encontrado nesta cotação." };
+    }
+
+    const linksGerados = [];
+    
+    for (const nomeFornecedor in dadosAgrupados) {
+      const pedidosDoFornecedor = dadosAgrupados[nomeFornecedor];
+      
+      for (const pedido of pedidosDoFornecedor) {
+        const nomeArquivo = `Pedido-${idCotacao}-${pedido.fornecedor}-${pedido.empresaFaturada}.pdf`;
+        let arquivoPdf;
+        let urlPdf;
+
+        // ===== INÍCIO DA LÓGICA ANTI-DUPLICAÇÃO =====
+        const arquivosExistentes = pastaPedidos.getFilesByName(nomeArquivo);
+        
+        if (arquivosExistentes.hasNext()) {
+          // O arquivo já existe, vamos apenas usar o existente.
+          arquivoPdf = arquivosExistentes.next();
+          urlPdf = arquivoPdf.getUrl();
+          Logger.log(`Arquivo encontrado, não será duplicado: ${nomeArquivo}`);
+        } else {
+          // O arquivo não existe, então criamos um novo.
+          Logger.log(`Arquivo não encontrado. Criando novo: ${nomeArquivo}`);
+          const htmlPedido = FuncoesCRUD_gerarHtmlParaPedido(pedido);
+          const pdfBlob = Utilities.newBlob(htmlPedido, MimeType.HTML, nomeArquivo).getAs(MimeType.PDF);
+          arquivoPdf = pastaPedidos.createFile(pdfBlob);
+          arquivoPdf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+          urlPdf = arquivoPdf.getUrl();
+          Logger.log(`PDF gerado com sucesso: ${nomeArquivo}`);
+        }
+        // ===== FIM DA LÓGICA ANTI-DUPLICAÇÃO =====
+
+        linksGerados.push({
+          fornecedor: pedido.fornecedor,
+          empresaFaturada: pedido.empresaFaturada,
+          valorTotal: pedido.totalPedido,
+          linkPdf: urlPdf
+        });
+      }
+    }
+
+    return {
+      success: true,
+      message: `${linksGerados.length} PDF(s) de pedido processados com sucesso.`,
+      dados: linksGerados
+    };
+
+  } catch (error) {
+    Logger.log(`ERRO CRÍTICO em FuncoesCRUD_gerarPdfsParaEnvioManual: ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, message: "Erro no servidor ao gerar os arquivos PDF: " + error.message };
+  }
+}

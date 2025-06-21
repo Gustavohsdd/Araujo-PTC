@@ -102,3 +102,60 @@ function FuncoesController_salvarTextoGlobalCotacaoPortal(idCotacao, textoPerson
     return { success: false, message: "Erro no FuncoesController ao salvar texto global da cotação: " + error.message };
   }
 }
+
+/**
+ * Controller para iniciar o processo de preenchimento dos últimos preços em uma cotação.
+ * @param {string} idCotacao O ID da cotação.
+ * @return {object} Resultado da operação CRUD.
+ */
+function FuncoesController_preencherUltimosPrecos(idCotacao) {
+  Logger.log(`FuncoesController_preencherUltimosPrecos: Solicitado para ID '${idCotacao}'.`);
+  try {
+    if (!idCotacao) {
+      return { success: false, message: "ID da Cotação não fornecido." };
+    }
+
+    // A lógica pesada é delegada para a camada CRUD
+    const resultado = FuncoesCRUD_preencherUltimosPrecos(idCotacao);
+    return resultado;
+
+  } catch (error) {
+    console.error(`ERRO em FuncoesController_preencherUltimosPrecos: ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, message: "Erro no controller ao processar o preenchimento de preços: " + error.message };
+  }
+}
+
+// @ts-nocheck
+
+//####################################################################################################
+// MÓDULO: FUNCOES (SERVER-SIDE CONTROLLER) - FuncoesController.js
+// Funções controller para operações diversas do menu "Funções".
+//####################################################################################################
+
+/**
+ * @file FuncoesController.gs
+ * @description Controlador do lado do servidor para as funcionalidades do menu "Funções".
+ */
+
+/**
+ * Controller para gerar os PDFs dos pedidos para envio manual.
+ * @param {string} idCotacao O ID da cotação.
+ * @returns {object} Um objeto com o resultado da operação e os dados dos links.
+ */
+function FuncoesController_gerarPdfsParaEnvioManual(idCotacao) {
+  Logger.log(`FuncoesController_gerarPdfsParaEnvioManual: Solicitado para cotação ID '${idCotacao}'.`);
+  try {
+    if (!idCotacao) {
+      return { success: false, dados: null, message: "ID da Cotação não fornecido." };
+    }
+    
+    // Chama a função CRUD para fazer todo o trabalho pesado
+    const resultado = FuncoesCRUD_gerarPdfsParaEnvioManual(idCotacao);
+    
+    return resultado;
+
+  } catch (error) {
+    console.error(`ERRO em FuncoesController_gerarPdfsParaEnvioManual para ID '${idCotacao}': ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, dados: null, message: "Erro no controller ao processar a geração de PDFs: " + error.message };
+  }
+}
