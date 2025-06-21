@@ -1,9 +1,8 @@
 // @ts-nocheck
 
 // Constantes globais de App.gs
-// --- MODIFICAÇÃO INÍCIO ---
-const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual", "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos"]; 
-// --- MODIFICAÇÃO FIM ---
+const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual",
+  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf"];
 
 const App_VIEW_FILENAME_MAP = {
   "fornecedores": "FornecedoresView",
@@ -14,7 +13,8 @@ const App_VIEW_FILENAME_MAP = {
   "contagemdeestoque": "ContagemDeEstoqueView",
   "EnviarManualmenteView": "EnviarManualmenteView",
   // --- MODIFICAÇÃO INÍCIO ---
-  "marcarprodutos": "MarcacaoProdutosView"
+  "marcarprodutos": "MarcacaoProdutosView",
+  "conciliacaonf": "ConciliacaoNFView"
   // --- MODIFICAÇÃO FIM ---
 }
 
@@ -117,6 +117,14 @@ function doGet(e) {
       return templateMarcacao.evaluate()
         .setTitle("Marcação de Recebimento")
         .addMetaTag('viewport', 'width=device-width, initial-scale=1') // Garante responsividade
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+    
+    case 'conciliacaonf':
+      Logger.log("App.gs: Carregando ConciliacaoNFView.");
+      const templateConciliacao = HtmlService.createTemplateFromFile('ConciliacaoNFView');
+      return templateConciliacao.evaluate()
+        .setTitle("Conciliação de NF-e")
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
     // --- MODIFICAÇÃO FIM ---
         
