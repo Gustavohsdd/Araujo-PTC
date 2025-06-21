@@ -841,10 +841,10 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
   window.CotacaoIndividualScript_carregarDadosCotacao = async function(idCotacao) {
     const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
     if (tbody) {
-        tbody.innerHTML = `<tr><td id="${CotacaoIndividualScript_ID_TABELA_LOADING_MSG_CELL}" colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" style="text-align: center; padding: 2rem; color: #6b7280;">
-                                <div class="loading-indicator">
+        tbody.innerHTML = `<tr><td id="${CotacaoIndividualScript_ID_TABELA_LOADING_MSG_CELL}" colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" class="text-center p-8 text-gray-500">
+                                <div class="flex justify-center items-center">
                                     <svg class="custom-spinner" viewBox="0 0 50 50" style="width: 32px; height: 32px;"><circle cx="25" cy="25" r="20" fill="none" stroke="#D1D5DB" stroke-width="5"></circle><circle cx="25" cy="25" r="20" fill="none" stroke="#1D4ED8" stroke-width="5" stroke-linecap="round" stroke-dasharray="31.41592653589793, 125.66370614359172" stroke-dashoffset="0"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="1s" values="0 25 25;360 25 25" keyTimes="0;1"></animateTransform></circle></svg>
-                                    <span>Carregando dados da cotação...</span>
+                                    <span class="ml-3 text-gray-700">Carregando dados da cotação...</span>
                                 </div></td></tr>`;
     }
     return new Promise((resolve, reject) => {
