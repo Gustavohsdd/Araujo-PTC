@@ -332,7 +332,9 @@ function ConciliacaoNFCrud_obterNFsNaoConciliadas() {
 }
 
 /**
- * [CORRIGIDO] Obtém os itens de uma cotação específica, filtrando por ID e Fornecedor.
+ * [MODIFICADO] Obtém os itens de uma cotação específica, filtrando por ID e Fornecedor.
+ * Adiciona o Fator e o Preço por Fator para a comparação.
+ * Converte a data para string (ISO) para evitar erros de serialização.
  * @param {string} idCotacao - O ID da cotação.
  * @param {string} nomeFornecedor - O nome do fornecedor.
  * @returns {Array<object>} Array de itens da cotação.
@@ -340,29 +342,45 @@ function ConciliacaoNFCrud_obterNFsNaoConciliadas() {
 function ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor) {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
     const aba = planilha.getSheetByName(ABA_COTACOES);
+
     const cabecalhos = Utilities_obterCabecalhos(ABA_COTACOES);
-    const colId = cabecalhos.indexOf("ID da Cotação");
-    const colSubProd = cabecalhos.indexOf("SubProduto");
-    const colComprar = cabecalhos.indexOf("Comprar");
-    const colPreco = cabecalhos.indexOf("Preço");
-    const colForn = cabecalhos.indexOf("Fornecedor");
-    const colData = cabecalhos.indexOf("Data Abertura");
+    if (!cabecalhos) {
+      throw new Error(`Não foi possível obter os cabeçalhos da aba: ${ABA_COTACOES}`);
+    }
+
+    // Mapeamento das colunas necessárias
+    const colMap = {};
+    const colunasNecessarias = ["ID da Cotação", "SubProduto", "Comprar", "Preço", "Fornecedor", "Data Abertura", "Fator", "Preço por Fator"];
+    colunasNecessarias.forEach(nomeColuna => {
+        const index = cabecalhos.indexOf(nomeColuna);
+        if (index === -1) {
+            throw new Error(`A coluna obrigatória "${nomeColuna}" não foi encontrada na aba Cotações.`);
+        }
+        colMap[nomeColuna] = index;
+    });
     
     const dados = aba.getDataRange().getValues();
     const itens = [];
-    dados.forEach(linha => {
-        const qtdComprar = parseFloat(linha[colComprar]);
-        // Adiciona a verificação do fornecedor ao filtro
-        if (linha[colId] == idCotacao && linha[colForn] == nomeFornecedor && !isNaN(qtdComprar) && qtdComprar > 0) {
+
+    for (let i = 1; i < dados.length; i++) {
+        const linha = dados[i];
+        const qtdComprar = parseFloat(linha[colMap["Comprar"]]);
+        
+        // Filtra pela cotação, fornecedor e quantidade a comprar > 0
+        if (linha[colMap["ID da Cotação"]] == idCotacao && linha[colMap["Fornecedor"]] == nomeFornecedor && !isNaN(qtdComprar) && qtdComprar > 0) {
+            const dataAberturaObj = new Date(linha[colMap["Data Abertura"]]);
+            
             itens.push({
-                subProduto: linha[colSubProd],
+                subProduto: linha[colMap["SubProduto"]],
                 qtdComprar: qtdComprar,
-                preco: parseFloat(linha[colPreco]) || 0,
-                fornecedor: linha[colForn],
-                dataAbertura: linha[colData]
+                preco: parseFloat(linha[colMap["Preço"]]) || 0,
+                fator: parseFloat(linha[colMap["Fator"]]) || 1, // Padrão 1 se não houver fator
+                precoPorFator: parseFloat(linha[colMap["Preço por Fator"]]) || 0,
+                fornecedor: linha[colMap["Fornecedor"]],
+                dataAbertura: !isNaN(dataAberturaObj.getTime()) ? dataAberturaObj.toISOString() : null
             });
         }
-    });
+    }
     return itens;
 }
 
@@ -458,7 +476,9 @@ function ConciliacaoNFCrud_obterPrazoFornecedor(nomeFornecedor) {
 }
 
 /**
- * [CORRIGIDO] Atualiza o status na planilha de Cotações, filtrando por ID e Fornecedor.
+ * [MODIFICADO] Atualiza o status na planilha de Cotações.
+ * 1. Salva "Faturado" em "Status do SubProduto".
+ * 2. Salva os dados de "Divergencia da Nota", "Quantidade na Nota" e "Preço da Nota".
  * @param {string} idCotacao - O ID da cotação.
  * @param {string} nomeFornecedor - O nome do fornecedor.
  * @param {Array<object>} itensConciliados - Itens que deram match.
@@ -473,30 +493,49 @@ function ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, ite
         const dados = range.getValues();
         const cabecalhos = dados[0];
 
+        // Mapeamento de colunas
         const colId = cabecalhos.indexOf("ID da Cotação");
         const colForn = cabecalhos.indexOf("Fornecedor");
         const colSubProd = cabecalhos.indexOf("SubProduto");
-        const colStatusCot = cabecalhos.indexOf("Status da Cotação");
         const colStatusSub = cabecalhos.indexOf("Status do SubProduto");
+        const colDivergencia = cabecalhos.indexOf("Divergencia da Nota");
+        const colQtdNota = cabecalhos.indexOf("Quantidade na Nota");
+        const colPrecoNota = cabecalhos.indexOf("Preço da Nota");
 
-        const nomesConciliados = new Set(itensConciliados.map(i => i.subProduto));
+        if ([colStatusSub, colDivergencia, colQtdNota, colPrecoNota].includes(-1)) {
+            throw new Error("Uma ou mais colunas de destino ('Status do SubProduto', 'Divergencia da Nota', 'Quantidade na Nota', 'Preço da Nota') não foram encontradas.");
+        }
+
+        // Mapeia os itens conciliados pelo nome do SubProduto para acesso rápido
+        const mapaConciliados = new Map(itensConciliados.map(item => [item.subProduto, item]));
         const nomesCortados = new Set(itensSomenteCotacao.map(i => i.subProduto));
 
         for (let i = 1; i < dados.length; i++) {
-            // Adiciona a verificação do fornecedor ao filtro
+            // Filtra pela linha correta da cotação e fornecedor
             if (dados[i][colId] == idCotacao && dados[i][colForn] == nomeFornecedor) {
                 const subProdutoLinha = dados[i][colSubProd];
-                if (nomesConciliados.has(subProdutoLinha)) {
-                    dados[i][colStatusCot] = "Faturado";
+
+                if (mapaConciliados.has(subProdutoLinha)) {
+                    const itemConciliado = mapaConciliados.get(subProdutoLinha);
+                    
+                    // REQUISITO 3: Salvar "Faturado" no Status do SubProduto
+                    dados[i][colStatusSub] = "Faturado";
+                    
+                    // REQUISITO 4: Salvar os novos dados da conciliação
+                    dados[i][colDivergencia] = itemConciliado.divergenciaNota;
+                    dados[i][colQtdNota] = itemConciliado.quantidadeNota;
+                    dados[i][colPrecoNota] = itemConciliado.precoNota;
+
                 } else if (nomesCortados.has(subProdutoLinha)) {
                     dados[i][colStatusSub] = "Cortado";
                 }
             }
         }
+        
         range.setValues(dados);
         return true;
     } catch(e) {
-        Logger.log(`Erro em ConciliacaoNFCrud_atualizarStatusCotacao: ${e.message}`);
+        Logger.log(`Erro em ConciliacaoNFCrud_atualizarStatusCotacao: ${e.toString()}\n${e.stack}`);
         return false;
     }
 }

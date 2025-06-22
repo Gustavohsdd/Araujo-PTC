@@ -1,405 +1,333 @@
 <script>
-// =================================================================================
-// Funções no Escopo Global
-// A função chamada pelo onchange="" no HTML precisa estar aqui, fora do DOMContentLoaded.
-// =================================================================================
-let dadosConciliacaoBrutos = null; // Precisa ser global para ser acessada pela função abaixo
+  // Funções iniciais (normalizarCNPJ, formatarMoeda, toggleLoader, etc.) permanecem as mesmas
+  let todasAsCotacoes = [];
+  let todasAsNFs = [];
+  let dadosComparacao = {};
 
-function atualizarLinhaComDadosDaNF(selectElement) {
-  const selectedIndex = selectElement.value;
-  const tr = selectElement.closest('tr');
-  const itemCotacao = dadosConciliacaoBrutos.itensCotacao[parseInt(tr.dataset.index, 10)];
-  
-  const cellQtdPrecoNF = tr.cells[3];
-  const cellStatus = tr.cells[4];
-
-  if (selectedIndex === "-1") {
-    cellQtdPrecoNF.innerHTML = '';
-    cellStatus.innerHTML = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-800">Cortado</span>';
-    tr.className = 'item-cortado';
-  } else {
-    const itemNF = dadosConciliacaoBrutos.itensNF[parseInt(selectedIndex, 10)];
-    cellQtdPrecoNF.innerHTML = `Qtd: ${itemNF.qtdNF} <br> Preço: R$ ${itemNF.precoNF.toFixed(2)}`;
-    
-    const divergenciaPreco = Math.abs(itemCotacao.preco - itemNF.precoNF) > 0.01;
-    const divergenciaQtd = itemCotacao.qtdComprar !== itemNF.qtdNF;
-    
-    let statusHtml = '', classeLinha = '';
-    if (divergenciaPreco && divergenciaQtd) {
-      statusHtml = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">Preço e Qtd.</span>`;
-      classeLinha = 'divergencia-preco divergencia-qtd';
-    } else if (divergenciaPreco) {
-      statusHtml = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Preço Divergente</span>`;
-      classeLinha = 'divergencia-preco';
-    } else if (divergenciaQtd) {
-      statusHtml = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Qtd. Divergente</span>`;
-      classeLinha = 'divergencia-qtd';
-    } else {
-      statusHtml = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">OK</span>';
-      classeLinha = 'item-ok';
-    }
-    cellStatus.innerHTML = statusHtml;
-    tr.className = classeLinha;
-  }
-}
-
-
-document.addEventListener('DOMContentLoaded', function () {
-  // --- Mapeamento de Elementos da UI ---
-  const ui = {
-    loader: document.getElementById('ConciliacaoNFScript_loader'),
-    feedbackDiv: document.getElementById('ConciliacaoNFScript_feedback'),
-    secaoSelecao: document.getElementById('ConciliacaoNFScript_secaoSelecao'),
-    secaoResultados: document.getElementById('ConciliacaoNFScript_secaoResultados'),
-    selectCotacao: document.getElementById('ConciliacaoNFScript_selectCotacao'),
-    selectNF: document.getElementById('ConciliacaoNFScript_selectNF'),
-    btnIniciar: document.getElementById('ConciliacaoNFScript_btnIniciar'),
-    btnConfirmar: document.getElementById('ConciliacaoNFScript_btnConfirmar'),
-    btnCancelar: document.getElementById('ConciliacaoNFScript_btnCancelar'),
-    corpoTabelaResultados: document.getElementById('ConciliacaoNFScript_corpoTabelaResultados'),
-    conteudoResumo: document.getElementById('ConciliacaoNFScript_conteudoResumo')
-  };
-
-  // --- Estado da Aplicação ---
-  let dadosIniciais = {};
-  // dadosConciliacaoBrutos foi movido para o escopo global
-  let resultadoConciliacaoGlobal = null;
-
-  // --- Funções Utilitárias ---
-  function toggleLoader(mostrar) {
-    ui.loader.classList.toggle('hidden', !mostrar);
-  }
-
-  function exibirFeedback(mensagem, isError = false) {
-    ui.feedbackDiv.innerHTML = `<div class="p-4 rounded-md ${isError ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}">${mensagem}</div>`;
+  function normalizarCNPJ(cnpj) {
+    return cnpj ? String(cnpj).replace(/[^\d]/g, '') : '';
   }
   
-  function limparFeedback() {
-    ui.feedbackDiv.innerHTML = '';
-  }
-
-  function normalizarCnpj(cnpj) {
-    if (!cnpj) {
-      return '';
+  function formatarMoeda(valor) {
+    if (typeof valor !== 'number' || isNaN(valor)) {
+      return "R$ 0,00";
     }
-    return String(cnpj).replace(/[^\d]/g, '');
-  }
-
-  // --- Funções de Lógica e Manipulação de Dados ---
-  function popularSelectNF(notasFiscais) {
-      $(ui.selectNF).empty();
-      if (notasFiscais && notasFiscais.length > 0) {
-        notasFiscais.forEach(nf => {
-          const option = new Option(`NF: ${nf.numeroNF} (${nf.nomeEmitente}) - Emissão: ${nf.dataEmissao}`, nf.chaveAcesso, false, false);
-          option.setAttribute('data-cnpj', nf.cnpjEmitente);
-          $(ui.selectNF).append(option);
-        });
-      } else {
-        const option = new Option('Nenhuma NF não conciliada encontrada', '', false, false);
-        option.disabled = true;
-        $(ui.selectNF).append(option);
-      }
-      $(ui.selectNF).trigger('change');
-  }
-
-  function popularSelectCotacoes(cotacoes) {
-      ui.selectCotacao.innerHTML = '';
-      if (cotacoes && cotacoes.length > 0) {
-        ui.selectCotacao.innerHTML = '<option value="">Selecione uma cotação</option>';
-        cotacoes.forEach(c => {
-          const option = document.createElement('option');
-          option.value = c.compositeKey;
-          option.textContent = `ID: ${c.idCotacao} - Fornecedor: ${c.fornecedor} - Data: ${c.dataAbertura}`;
-          ui.selectCotacao.appendChild(option);
-        });
-        ui.selectCotacao.disabled = false;
-      } else {
-        ui.selectCotacao.innerHTML = '<option value="">Nenhuma cotação compatível encontrada</option>';
-        ui.selectCotacao.disabled = true;
-      }
-  }
-
-  function filtrarECarregarCotacoes() {
-    console.clear();
-    const selectedOptions = $(ui.selectNF).find('option:selected');
-    
-    if (selectedOptions.length === 0) {
-        ui.selectCotacao.innerHTML = '<option value="">Aguardando seleção da Nota Fiscal...</option>';
-        ui.selectCotacao.disabled = true;
-        return;
-    }
-    
-    const cnpjNF = selectedOptions.first().data('cnpj');
-    const cnpjNormalizadoNF = normalizarCnpj(cnpjNF);
-
-    console.log("--- INICIANDO FILTRAGEM ---");
-    console.log(`CNPJ da NF selecionada (normalizado): ${cnpjNormalizadoNF}`);
-    console.log("---------------------------------");
-    
-    if (!cnpjNormalizadoNF || !dadosIniciais.cotacoes) {
-      popularSelectCotacoes([]); 
-      return;
-    }
-
-    console.log("Verificando as seguintes cotações disponíveis (antes de filtrar):");
-    dadosIniciais.cotacoes.forEach(cotacao => {
-        console.log(`- Cotação ID: ${cotacao.idCotacao}, Fornecedor: ${cotacao.fornecedor}, CNPJ Cadastrado: '${cotacao.fornecedorCnpj}'`);
-    });
-    console.log("---------------------------------");
-
-    const cotacoesFiltradas = dadosIniciais.cotacoes.filter(cotacao => {
-        const cnpjNormalizadoCotacao = normalizarCnpj(cotacao.fornecedorCnpj);
-        return cnpjNormalizadoCotacao && cnpjNormalizadoCotacao === cnpjNormalizadoNF;
-    });
-    
-    if(cotacoesFiltradas.length > 0) {
-        console.log(`SUCESSO: ${cotacoesFiltradas.length} cotação(ões) compatível(is) encontrada(s)!`);
-    } else {
-        console.error("FALHA: Nenhuma cotação compatível encontrada.");
-    }
-    console.log("--- FIM DA FILTRAGEM ---");
-
-    popularSelectCotacoes(cotacoesFiltradas);
+    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
   
-  function construirResultadoManual() {
-    const itensConciliados = [];
-    const itensSomenteCotacao = [];
-    const nfItensUtilizados = new Set();
+  function toggleLoader(show) {
+    document.getElementById('loader').classList.toggle('d-none', !show);
+  }
 
-    const linhasTabela = ui.corpoTabelaResultados.querySelectorAll('tr');
-
-    linhasTabela.forEach((linha, indexCotacao) => {
-      const selectNF = linha.querySelector('select');
-      const itemCotacao = dadosConciliacaoBrutos.itensCotacao[indexCotacao];
-
-      if (selectNF && selectNF.value !== "-1") {
-        const indexNF = parseInt(selectNF.value, 10);
-        const itemNF = dadosConciliacaoBrutos.itensNF[indexNF];
-        nfItensUtilizados.add(indexNF);
-
-        const divergenciaPreco = Math.abs(itemCotacao.preco - itemNF.precoNF) > 0.01;
-        const divergenciaQtd = itemCotacao.qtdComprar !== itemNF.qtdNF;
-        
-        let status = 'OK';
-        if (divergenciaPreco && divergenciaQtd) status = 'Divergência Mista';
-        else if (divergenciaPreco) status = 'Divergência de Preço';
-        else if (divergenciaQtd) status = 'Divergência de Quantidade';
-
-        itensConciliados.push({ 
-          subProduto: itemCotacao.subProduto, 
-          qtdCotacao: itemCotacao.qtdComprar, 
-          precoCotacao: itemCotacao.preco, 
-          qtdNF: itemNF.qtdNF, 
-          precoNF: itemNF.precoNF, 
-          status: status 
-        });
-
-      } else {
-        itensSomenteCotacao.push({ 
-          subProduto: itemCotacao.subProduto, 
-          qtdCotacao: itemCotacao.qtdComprar, 
-          precoCotacao: itemCotacao.preco, 
-          qtdNF: 0, 
-          precoNF: 0, 
-          status: 'Somente na Cotação (Cortado)' 
-        });
-      }
-    });
+  document.addEventListener('DOMContentLoaded', function() {
+    toggleLoader(true);
+    $('#cotacao-select, #nf-select').select2({ theme: "bootstrap-5" });
     
-    const itensSomenteNF = dadosConciliacaoBrutos.itensNF
-      .filter((_, index) => !nfItensUtilizados.has(index))
-      .map(itemNF => ({ 
-        subProduto: null, 
-        descricaoNF: itemNF.descricaoNF, 
-        qtdCotacao: 0, precoCotacao: 0, 
-        qtdNF: itemNF.qtdNF, 
-        precoNF: itemNF.precoNF, 
-        status: 'Somente na NF' 
-      }));
-
-    const totalCotacaoConciliada = itensConciliados.reduce((acc, item) => acc + (item.qtdNF * item.precoCotacao), 0);
-    const totalItensCortados = itensSomenteCotacao.reduce((acc, item) => acc + (item.qtdCotacao * item.precoCotacao), 0);
-    const totalCotacao = totalCotacaoConciliada + totalItensCortados;
-    const diferencaTotal = dadosConciliacaoBrutos.dadosGeraisNF.valorTotalNF - totalCotacao;
-
-    resultadoConciliacaoGlobal = {
-      idCotacao: dadosConciliacaoBrutos.idCotacao,
-      nomeFornecedor: dadosConciliacaoBrutos.nomeFornecedor,
-      chavesAcessoNF: dadosConciliacaoBrutos.chavesAcessoNF,
-      itensConciliados,
-      itensSomenteCotacao,
-      itensSomenteNF,
-      dadosGeraisNF: dadosConciliacaoBrutos.dadosGeraisNF,
-      analisePrazo: dadosConciliacaoBrutos.analisePrazo,
-      resumoFinanceiro: { totalCotacao, diferencaTotal }
-    };
-
-    renderizarResumo(resultadoConciliacaoGlobal);
-    return true;
-  }
-
-  // --- Funções de Renderização ---
-  function renderizarTabelaParaConciliacaoManual(dados) {
-    ui.corpoTabelaResultados.innerHTML = ''; 
-    dadosConciliacaoBrutos = dados;
-
-    let optionsHtml = '<option value="-1">-- Não conciliar (Cortado) --</option>';
-    dados.itensNF.forEach((item, index) => {
-      optionsHtml += `<option value="${index}">NF: ${item.descricaoNF} (Qtd: ${item.qtdNF}, Preço: R$ ${item.precoNF.toFixed(2)})</option>`;
-    });
-
-    dados.itensCotacao.forEach((item, index) => {
-        const tr = document.createElement('tr');
-        tr.dataset.index = index;
-        tr.className = 'item-cortado';
-
-        tr.innerHTML = `
-          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.subProduto}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Qtd: ${item.qtdComprar}<br>Preço: R$ ${item.preco.toFixed(2)}</td>
-          <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-            <select class="block w-full mt-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring-opacity-50" onchange="atualizarLinhaComDadosDaNF(this)">
-              ${optionsHtml}
-            </select>
-          </td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"></td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-800">Cortado</span>
-          </td>
-        `;
-        ui.corpoTabelaResultados.appendChild(tr);
-    });
-  }
-
-  function renderizarResumo(resultado) {
-      const { dadosGeraisNF, resumoFinanceiro } = resultado;
-      let prazoHtml = '';
+    google.script.run
+      .withSuccessHandler(onDadosIniciaisSuccess)
+      .withFailureHandler(onFailure)
+      .ConciliacaoNFController_obterDadosParaPagina();
       
-      ui.conteudoResumo.innerHTML = `
-        <div><p class="font-medium text-gray-500">Valor Total Cotação</p><p class="font-bold text-lg text-gray-800">R$ ${resumoFinanceiro.totalCotacao.toFixed(2)}</p></div>
-        <div><p class="font-medium text-gray-500">Valor Total NF</p><p class="font-bold text-lg text-gray-800">R$ ${dadosGeraisNF.valorTotalNF.toFixed(2)}</p></div>
-        <div><p class="font-medium text-gray-500">Diferença</p><p class="font-bold text-lg ${resumoFinanceiro.diferencaTotal >= 0 ? 'text-green-600' : 'text-red-600'}">R$ ${resumoFinanceiro.diferencaTotal.toFixed(2)}</p></div>
-        <div><p class="font-medium text-gray-500">Prazo de Entrega</p>${prazoHtml}<p class="text-xs text-gray-400">&nbsp;</p></div>
-      `;
+    addEventListeners();
+  });
+  
+  function addEventListeners() {
+    $('#nf-select').on('change', onNfSelectChange);
+    $('#cotacao-select').on('change', onCotacaoSelectChange);
+    $('#btn-comparar').on('click', onBtnCompararClick);
+    $('#btn-voltar').on('click', resetarPagina);
+    $('#btn-salvar').on('click', onBtnSalvarClick);
   }
 
-  // --- Handlers de Eventos ---
-  function handleIniciarConciliacao() {
-    limparFeedback();
-    const compositeKeyCotacao = ui.selectCotacao.value;
-    const chavesAcessoNF = $(ui.selectNF).val();
+  function onDadosIniciaisSuccess(response) {
+    if (response.success) {
+      todasAsCotacoes = response.dados.cotacoes;
+      todasAsNFs = response.dados.notasFiscais;
 
-    if (!compositeKeyCotacao || !chavesAcessoNF || chavesAcessoNF.length === 0) {
-      exibirFeedback('Por favor, selecione uma nota fiscal e uma cotação compatível.', true);
-      return;
+      const nfSelect = $('#nf-select');
+      nfSelect.empty();
+      todasAsNFs.forEach(nf => {
+        const displayText = `NF ${nf.numeroNF} - ${nf.nomeEmitente} (${nf.dataEmissao})`;
+        const option = new Option(displayText, nf.chaveAcesso);
+        $(option).data('nf', nf);
+        nfSelect.append(option);
+      });
+      nfSelect.val(null).trigger('change');
+    } else {
+      alert('Erro ao carregar dados: ' + response.message);
     }
+    toggleLoader(false);
+  }
 
-    toggleLoader(true);
-    ui.secaoSelecao.classList.add('hidden');
-    ui.secaoResultados.classList.add('hidden');
+  function onFailure(error) {
+    console.error('Erro na chamada ao servidor:', error);
+    alert('Ocorreu um erro: ' + error.message);
+    toggleLoader(false);
+  }
 
-    google.script.run
-      .withSuccessHandler(resultado => {
-        toggleLoader(false);
-        if (resultado && resultado.success) {
-          ui.secaoResultados.classList.remove('hidden');
-          renderizarResumo({ dadosGeraisNF: resultado.dados.dadosGeraisNF, resumoFinanceiro: { totalCotacao: 0, diferencaTotal: 0 }, analisePrazo: {} });
-          renderizarTabelaParaConciliacaoManual(resultado.dados);
+  function onNfSelectChange() {
+    const selectedOptions = $('#nf-select').find('option:selected');
+    const cotacaoSelect = $('#cotacao-select');
+    
+    cotacaoSelect.empty();
+    $('#btn-comparar').prop('disabled', true);
+    
+    if (selectedOptions.length > 0) {
+      const primeiraNfData = $(selectedOptions[0]).data('nf');
+      const cnpjDaNfNormalizado = normalizarCNPJ(primeiraNfData.cnpjEmitente);
+
+      if (cnpjDaNfNormalizado) {
+        const cotacoesFiltradas = todasAsCotacoes.filter(c => {
+          const cnpjDaCotacaoNormalizado = normalizarCNPJ(c.fornecedorCnpj);
+          return cnpjDaCotacaoNormalizado === cnpjDaNfNormalizado;
+        });
+        
+        if(cotacoesFiltradas.length > 0) {
+          cotacaoSelect.append(new Option('Selecione uma cotação', '', true, true));
+          cotacoesFiltradas.forEach(c => {
+            const displayText = `ID ${c.idCotacao} - ${c.fornecedor} (${c.dataAbertura})`;
+            cotacaoSelect.append(new Option(displayText, c.compositeKey));
+          });
+          cotacaoSelect.prop('disabled', false);
         } else {
-          exibirFeedback(resultado ? resultado.message : "Ocorreu um erro desconhecido no servidor.", true);
-          ui.secaoSelecao.classList.remove('hidden');
+          cotacaoSelect.append(new Option('Nenhuma cotação aberta encontrada para este fornecedor', '', true, true)).prop('disabled', true);
         }
-      })
-      .withFailureHandler(err => {
-        toggleLoader(false);
-        ui.secaoSelecao.classList.remove('hidden');
-        exibirFeedback(`Erro ao iniciar conciliação: ${err.message}`, true);
-      })
-      .ConciliacaoNFController_realizarComparacao(compositeKeyCotacao, chavesAcessoNF);
+      }
+    } else {
+       cotacaoSelect.append(new Option('Selecione uma NF primeiro', '', true, true)).prop('disabled', true);
+    }
+    cotacaoSelect.val('').trigger('change');
   }
   
-  function handleConfirmarConciliacao() {
-    if (!construirResultadoManual()) {
-        exibirFeedback('Falha ao processar a conciliação manual.', true);
-        return;
-    }
+  function onCotacaoSelectChange(){
+    const cotacaoKey = $('#cotacao-select').val();
+    const nfKeys = $('#nf-select').val();
+    $('#btn-comparar').prop('disabled', !(cotacaoKey && nfKeys && nfKeys.length > 0));
+  }
 
-    if (!resultadoConciliacaoGlobal) {
-        exibirFeedback('Não há dados de conciliação para salvar.', true);
-        return;
-    }
-
+  function onBtnCompararClick() {
     toggleLoader(true);
-    ui.btnConfirmar.disabled = true;
-    ui.btnCancelar.disabled = true;
+    const cotacaoKey = $('#cotacao-select').val();
+    const chavesNf = $('#nf-select').val();
+    
+    google.script.run
+      .withSuccessHandler(onComparacaoSuccess)
+      .withFailureHandler(onFailure)
+      .ConciliacaoNFController_realizarComparacao(cotacaoKey, chavesNf);
+  }
+  
+  function onComparacaoSuccess(response) {
+    if (response.success) {
+      dadosComparacao = response.dados;
+      
+      const resumo = response.dados.dadosGeraisNF;
+      const totaisTributos = (resumo.totalValorIcms || 0) + (resumo.totalValorIcmsSt || 0) + (resumo.totalValorPis || 0) + (resumo.totalValorCofins || 0);
+      
+      $('#header-resumo').text(`Resumo da Conciliação: Cotação ${dadosComparacao.idCotacao} vs NFs`);
+      $('#total-produtos-nf').text(formatarMoeda(resumo.totalValorProdutos));
+      $('#total-frete-nf').text(formatarMoeda(resumo.totalValorFrete));
+      $('#total-ipi-nf').text(formatarMoeda(resumo.totalValorIpi));
+      $('#total-outras-nf').text(formatarMoeda(resumo.totalOutrasDespesas));
+      $('#total-desconto-nf').text(formatarMoeda(resumo.totalValorDesconto));
+      $('#total-impostos-nf').text(formatarMoeda(totaisTributos));
+      $('#valor-total-nf').text(formatarMoeda(resumo.valorTotalNf));
+
+      construirTabelaComparacao();
+      
+      $('#card-selecao').addClass('d-none');
+      $('#etapa-comparacao').removeClass('d-none');
+      
+    } else {
+      alert('Erro na comparação: ' + response.message);
+    }
+    toggleLoader(false);
+  }
+
+  /**
+   * NOVA VERSÃO: Constrói dinamicamente as linhas da tabela com colunas condensadas.
+   */
+  function construirTabelaComparacao() {
+      const tbody = $('#comparison-table-body');
+      tbody.empty();
+      dadosComparacao.itensNF.forEach((itemNF, index) => {
+        const subtotalNF = itemNF.qtdNF * itemNF.precoNF;
+        const row = `
+          <tr data-item-nf-index="${index}">
+            <td>${itemNF.descricaoNF}</td>
+            
+            <td class="dados-condensados text-end">
+              <div><small>Qtd:</small> <span>${itemNF.qtdNF.toFixed(2)}</span></div>
+              <div><small>Preço:</small> <span>${formatarMoeda(itemNF.precoNF)}</span></div>
+              <div><small>Subtotal:</small> <strong class="text-primary">${formatarMoeda(subtotalNF)}</strong></div>
+            </td>
+            
+            <td>
+              <select class="form-select select-cotacao-item" data-placeholder="Escolha o item correspondente..."></select>
+            </td>
+            
+            <td class="dados-condensados text-end">
+              <div><small>Qtd Pedida:</small> <span class="cot-qtd"></span></div>
+              <div><small>Preço Unit.:</small> <span class="cot-preco"></span></div>
+              <div><small>Preço Fator:</small> <span class="cot-preco-fator"></span></div>
+            </td>
+
+            <td class="dados-condensados text-center">
+              <div><small>Div. Preço:</small> <span class="divergencia-preco fw-bold"></span></div>
+              <div><small>Div. Qtd:</small> <span class="divergencia-qtd fw-bold"></span></div>
+            </td>
+          </tr>
+        `;
+        tbody.append(row);
+      });
+      
+      popularSelectsItensCotacao();
+  }
+
+  /**
+   * Popula cada dropdown na tabela de comparação com os itens da cotação.
+   * (Função inalterada)
+   */
+  function popularSelectsItensCotacao() {
+      const selects = $('.select-cotacao-item');
+      selects.each(function() {
+        const select = $(this);
+        select.empty().append(new Option('', '', true, true));
+        dadosComparacao.itensCotacao.forEach((itemCot, index) => {
+            const displayText = `${itemCot.subProduto} (Qtd: ${itemCot.qtdComprar})`;
+            const option = new Option(displayText, index);
+            select.append(option);
+        });
+      });
+
+      selects.select2({ 
+        theme: "bootstrap-5",
+        placeholder: $(this).data('placeholder'),
+        allowClear: true
+      }).on('change', onMatchItem);
+  }
+
+  /**
+   * NOVA VERSÃO: Preenche os dados e divergências nas células condensadas.
+   */
+  function onMatchItem() {
+    const select = $(this);
+    const selectedCotacaoIndex = select.val();
+    const row = select.closest('tr');
+    const itemNFIndex = row.data('item-nf-index');
+    const itemNF = dadosComparacao.itensNF[itemNFIndex];
+    
+    const cotQtdEl = row.find('.cot-qtd');
+    const cotPrecoEl = row.find('.cot-preco');
+    const cotPrecoFatorEl = row.find('.cot-preco-fator');
+    const divPrecoEl = row.find('.divergencia-preco');
+    const divQtdEl = row.find('.divergencia-qtd');
+
+    // Limpa as células de resultado se a seleção for limpa
+    if (!selectedCotacaoIndex) {
+        cotQtdEl.empty();
+        cotPrecoEl.empty();
+        cotPrecoFatorEl.empty();
+        divPrecoEl.empty().removeClass('text-success text-danger');
+        divQtdEl.empty().removeClass('text-success text-danger text-warning');
+        return;
+    }
+
+    const itemCotacao = dadosComparacao.itensCotacao[selectedCotacaoIndex];
+    
+    // Preenche os dados da cotação
+    cotQtdEl.text(itemCotacao.qtdComprar.toFixed(2));
+    cotPrecoEl.text(formatarMoeda(itemCotacao.preco));
+    cotPrecoFatorEl.text(formatarMoeda(itemCotacao.precoPorFator));
+
+    // Compara PREÇO
+    const precoNF = itemNF.precoNF;
+    const diffPreco = precoNF - itemCotacao.preco;
+    const diffPrecoFator = precoNF - itemCotacao.precoPorFator;
+    
+    if (Math.abs(diffPreco) < 0.01 || Math.abs(diffPrecoFator) < 0.01) {
+        divPrecoEl.text('OK').removeClass('text-danger').addClass('text-success');
+    } else {
+        const menorDivergencia = Math.abs(diffPreco) < Math.abs(diffPrecoFator) ? diffPreco : diffPrecoFator;
+        divPrecoEl.text(formatarMoeda(menorDivergencia)).removeClass('text-success').addClass('text-danger');
+    }
+
+    // Compara QUANTIDADE
+    const qtdNF = itemNF.qtdNF;
+    const qtdComprar = itemCotacao.qtdComprar;
+    const diffQtd = qtdNF - qtdComprar;
+
+    if (Math.abs(diffQtd) < 0.001) {
+        divQtdEl.text('OK').removeClass('text-warning text-danger').addClass('text-success');
+    } else if (diffQtd < 0) {
+        divQtdEl.text(`${diffQtd.toFixed(2)}`).removeClass('text-success text-warning').addClass('text-danger');
+    } else {
+        divQtdEl.text(`+${diffQtd.toFixed(2)}`).removeClass('text-success text-danger').addClass('text-warning');
+    }
+  }
+  
+  function onBtnSalvarClick() {
+    toggleLoader(true);
+    
+    const resultado = {
+      idCotacao: dadosComparacao.idCotacao,
+      nomeFornecedor: dadosComparacao.nomeFornecedor,
+      chavesAcessoNF: dadosComparacao.chavesAcessoNF,
+      itensConciliados: [],
+      itensSomenteCotacao: []
+    };
+    
+    const cotacaoItensUtilizados = new Set();
+    
+    $('#comparison-table-body tr').each(function() {
+      const row = $(this);
+      const itemNFIndex = row.data('item-nf-index');
+      const itemNF = dadosComparacao.itensNF[itemNFIndex];
+      const selectedCotacaoIndex = row.find('.select-cotacao-item').val();
+      
+      if (selectedCotacaoIndex) {
+        cotacaoItensUtilizados.add(parseInt(selectedCotacaoIndex));
+        const itemCotacao = dadosComparacao.itensCotacao[selectedCotacaoIndex];
+        const diffPreco = itemNF.precoNF - itemCotacao.preco;
+        
+        resultado.itensConciliados.push({
+          subProduto: itemCotacao.subProduto,
+          divergenciaNota: formatarMoeda(diffPreco),
+          quantidadeNota: itemNF.qtdNF,
+          precoNota: itemNF.precoNF
+        });
+      }
+    });
+    
+    dadosComparacao.itensCotacao.forEach((item, index) => {
+        if (!cotacaoItensUtilizados.has(index)) {
+            resultado.itensSomenteCotacao.push(item);
+        }
+    });
 
     google.script.run
-        .withSuccessHandler(response => {
+        .withSuccessHandler(function(res) {
             toggleLoader(false);
-            if(response.success) {
-                exibirFeedback('Conciliação salva com sucesso! A página será recarregada.');
-                setTimeout(() => window.location.reload(), 3000);
+            if(res.success) {
+                alert(res.message);
+                resetarPagina();
             } else {
-                exibirFeedback(response.message, true);
-                ui.btnConfirmar.disabled = false;
-                ui.btnCancelar.disabled = false;
+                onFailure(res);
             }
         })
-        .withFailureHandler(err => {
-            toggleLoader(false);
-            ui.btnConfirmar.disabled = false;
-            ui.btnCancelar.disabled = false;
-            exibirFeedback(`Erro ao salvar conciliação: ${err.message}`, true);
-        })
-        .ConciliacaoNFController_salvarConciliacao(resultadoConciliacaoGlobal);
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_salvarConciliacao(resultado);
   }
 
-  function resetarView() {
-      limparFeedback();
-      ui.secaoResultados.classList.add('hidden');
-      ui.secaoSelecao.classList.remove('hidden');
-      $(ui.selectNF).val(null).trigger('change');
-      ui.selectCotacao.innerHTML = '<option value="">Aguardando seleção da Nota Fiscal...</option>';
-      ui.selectCotacao.disabled = true;
-      ui.selectCotacao.value = '';
-      dadosConciliacaoBrutos = null;
-      resultadoConciliacaoGlobal = null;
+  function resetarPagina() {
+      $('#etapa-comparacao').addClass('d-none');
+      $('#card-selecao').removeClass('d-none');
+      
+      $('#nf-select').val(null).trigger('change');
+      $('#cotacao-select').empty().append(new Option('Aguardando seleção da NF...', '', true, true)).prop('disabled', true).val('').trigger('change');
+      $('#btn-comparar').prop('disabled', true);
+      
+      $('#comparison-table-body').empty();
+      dadosComparacao = {};
   }
 
-  // --- Função de Inicialização ---
-  function init() {
-    toggleLoader(true);
-    ui.secaoSelecao.classList.add('hidden');
-    
-    $(ui.selectNF).select2({ 
-        placeholder: "Selecione as notas fiscais", 
-        allowClear: true,
-        width: '100%' 
-    });
-
-    google.script.run
-      .withSuccessHandler(response => {
-        toggleLoader(false);
-        ui.secaoSelecao.classList.remove('hidden');
-        if (response.success) {
-          dadosIniciais = response.dados;
-          popularSelectNF(dadosIniciais.notasFiscais);
-        } else {
-          exibirFeedback(response.message, true);
-        }
-      })
-      .withFailureHandler(err => {
-        toggleLoader(false);
-        exibirFeedback(`Erro ao carregar dados iniciais: ${err.message}`, true);
-      })
-      .ConciliacaoNFController_obterDadosParaPagina();
-
-    $(ui.selectNF).on('change', filtrarECarregarCotacoes);
-    ui.btnIniciar.addEventListener('click', handleIniciarConciliacao);
-    ui.btnConfirmar.addEventListener('click', handleConfirmarConciliacao);
-    ui.btnCancelar.addEventListener('click', resetarView);
-  }
-  
-  init();
-});
 </script>

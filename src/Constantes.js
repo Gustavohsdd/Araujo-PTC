@@ -82,35 +82,12 @@ const CABECALHOS_COTACOES = [
   "Condição de Pagamento",
   "Status da Cotação",
   "Status do SubProduto",
-  "Quantidade Recebida"
+  "Quantidade Recebida",
+  "Divergencia da Nota",
+  "Quantidade na Nota",
+  "Preço da Nota"
 ]
 
-// Aba Pedidos
-const ABA_PEDIDOS = "Pedidos";
-const CABECALHOS_PEDIDOS = [
-  "ID do Pedido",
-  "Data Abertura",
-  "Produto",
-  "SubProduto",
-  "Categoria",
-  "Fornecedor",
-  "Tamanho",
-  "UN",
-  "Fator",
-  "Estoque Mínimo",
-  "Estoque Atual",
-  "Preço",
-  "Preço por Fator",
-  "Comprar",
-  "Valor Total",
-  "Economia em Cotação",
-  "NCM",
-  "CST",
-  "CFOP",
-  "Empresa Faturada",
-  "Condição de Pagamento",
-  "Status do Pedido"
-];
 
 // Aba Portal
 const ABA_PORTAL = "Portal";
