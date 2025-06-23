@@ -14,7 +14,7 @@
     .container {
       max-width: 1600px;
     }
-    .card {
+    .card, .accordion-item {
       margin-top: 20px;
     }
     .loading-spinner {
@@ -32,7 +32,7 @@
     .table-responsive {
         max-height: 60vh;
     }
-    .select2-container .select2-selection--single {
+    .select2-container--bootstrap-5 .select2-selection--single {
         height: 38px !important;
     }
     .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
@@ -41,18 +41,27 @@
     .table th {
         white-space: nowrap;
     }
-    /* NOVO ESTILO PARA CONDENSAR AS CÉLULAS */
     .dados-condensados div {
         line-height: 1.2;
         margin-bottom: 2px;
     }
     .dados-condensados {
-        font-size: 0.85rem; /* Letras menores */
+        font-size: 0.85rem;
         white-space: nowrap;
     }
     .dados-condensados small {
         color: #6c757d;
         margin-right: 4px;
+    }
+    .accordion-button:not(.collapsed) {
+      background-color: #e7f1ff;
+    }
+    .accordion-button:focus {
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    .status-badge {
+      font-size: 0.9rem;
+      margin-left: 15px;
     }
   </style>
 </head>
@@ -66,51 +75,61 @@
   <div class="container mt-4">
     <div class="card shadow-sm" id="card-selecao">
       <div class="card-header bg-primary text-white">
-        <h3>Conciliação de Notas Fiscais</h3>
+        <h3>Central de Conciliação</h3>
       </div>
       <div class="card-body">
         <div id="etapa-selecao">
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label for="nf-select" class="form-label fw-bold">1. Selecione uma ou mais Notas Fiscais</label>
-              <select id="nf-select" class="form-select" multiple="multiple">
-                <option disabled>Carregando notas fiscais...</option>
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label for="cotacao-select" class="form-label fw-bold">2. Selecione a Cotação correspondente</label>
-              <select id="cotacao-select" class="form-select" disabled>
-                <option selected disabled>Aguardando seleção da NF...</option>
-              </select>
-            </div>
+          <div class="col-12">
+            <label for="nf-select" class="form-label fw-bold">1. Selecione uma ou mais Notas Fiscais de qualquer fornecedor</label>
+            <select id="nf-select" class="form-select" multiple="multiple">
+              <option disabled>Carregando notas fiscais...</option>
+            </select>
           </div>
           <div class="text-center mt-4">
-            <button id="btn-comparar" class="btn btn-primary btn-lg" disabled>Comparar Itens</button>
+            <button id="btn-preparar" class="btn btn-primary btn-lg" disabled>Preparar Conciliação</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div id="etapa-comparacao" class="d-none mt-4">
-      <div class="card shadow-sm">
-        <div class="card-header bg-secondary text-white">
-          <h4 id="header-resumo">Resumo da Conciliação</h4>
-        </div>
-        <div class="card-body">
-            <div id="resumo-nf" class="row g-3 mb-4 p-3 bg-light border rounded">
-                <h5><strong class="text-primary">Totais Consolidados da(s) Nota(s) Fiscal(is)</strong></h5>
-                <div class="col-md-3"><strong>Valor Total dos Produtos:</strong> <span id="total-produtos-nf"></span></div>
-                <div class="col-md-3"><strong>Valor Total do Frete:</strong> <span id="total-frete-nf"></span></div>
-                <div class="col-md-3"><strong>Valor Total do IPI:</strong> <span id="total-ipi-nf"></span></div>
-                <div class="col-md-3"><strong>Outras Despesas:</strong> <span id="total-outras-nf"></span></div>
-                <div class="col-md-3"><strong>Valor Total do Desconto:</strong> <span id="total-desconto-nf"></span></div>
-                <div class="col-md-3"><strong>Valor Total dos Impostos (ICMS+ST+PIS+COFINS):</strong> <span id="total-impostos-nf"></span></div>
-                <hr class="my-2">
-                <div class="col-md-12 fs-5"><strong>VALOR TOTAL DA(S) NF(s):</strong> <strong id="valor-total-nf" class="text-success"></strong></div>
-            </div>
+    <div class="accordion" id="accordion-container">
+      </div>
+  </div>
 
+
+  <template id="template-accordion-item">
+    <div class="accordion-item">
+      <h2 class="accordion-header">
+        <button class="accordion-button" type="button" data-bs-toggle="collapse">
+          <span class="header-text"></span>
+          <span class="badge rounded-pill text-bg-light status-badge d-none"></span>
+        </button>
+      </h2>
+      <div class="accordion-collapse collapse">
+        <div class="accordion-body">
+          
+          <div class="mb-3">
+              <label class="form-label fw-bold">2. Selecione a Cotação correspondente para esta NF</label>
+              <select class="form-select select-cotacao-item" disabled>
+                <option selected disabled>Carregando cotações...</option>
+              </select>
+            </div>
+            <hr>
+
+          <div class="row g-3 mb-4 p-3 bg-light border rounded totais-nf-container d-none">
+            <h5><strong class="text-primary">Totais da Nota Fiscal</strong></h5>
+            <div class="col-md-3"><strong>Produtos:</strong> <span class="total-produtos"></span></div>
+            <div class="col-md-3"><strong>Frete:</strong> <span class="total-frete"></span></div>
+            <div class="col-md-3"><strong>IPI:</strong> <span class="total-ipi"></span></div>
+            <div class="col-md-3"><strong>Outras Desp.:</strong> <span class="total-outras"></span></div>
+            <div class="col-md-3"><strong>Desconto:</strong> <span class="total-desconto text-danger"></span></div>
+            <div class="col-md-3"><strong>Impostos (ICMS/ST/PIS/COFINS):</strong> <span class="total-impostos"></span></div>
+            <hr class="my-2">
+            <div class="col-md-12 fs-5"><strong>VALOR TOTAL DA NF:</strong> <strong class="valor-total text-success"></strong></div>
+          </div>
+
+          <div class="comparison-container d-none">
             <h5><strong class="text-primary">Itens da Nota Fiscal vs. Itens da Cotação</strong></h5>
-            <p>Para cada item da nota fiscal, selecione o item correspondente da cotação para comparar os valores e quantidades.</p>
             <div class="table-responsive">
               <table class="table table-bordered table-striped table-hover align-middle">
                 <thead class="table-dark text-center">
@@ -125,19 +144,22 @@
                       <th>Divergências</th>
                   </tr>
                 </thead>
-                <tbody id="comparison-table-body">
+                <tbody class="comparison-table-body">
                   </tbody>
               </table>
             </div>
 
-            <div class="text-center mt-4">
-              <button id="btn-voltar" class="btn btn-secondary btn-lg">Voltar e Refazer Seleção</button>
-              <button id="btn-salvar" class="btn btn-success btn-lg">Salvar Conciliação</button>
+            <div class="text-center mt-4 action-buttons">
+              <button class="btn btn-secondary btn-cancel">Cancelar</button>
+              <button class="btn btn-success btn-save">Salvar Conciliação desta Nota</button>
             </div>
+          </div>
+
         </div>
       </div>
     </div>
-  </div>
+  </template>
+
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>

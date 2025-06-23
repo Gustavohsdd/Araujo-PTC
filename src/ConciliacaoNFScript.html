@@ -1,8 +1,6 @@
 <script>
-  // Funções iniciais (normalizarCNPJ, formatarMoeda, toggleLoader, etc.) permanecem as mesmas
   let todasAsCotacoes = [];
   let todasAsNFs = [];
-  let dadosComparacao = {};
 
   function normalizarCNPJ(cnpj) {
     return cnpj ? String(cnpj).replace(/[^\d]/g, '') : '';
@@ -21,7 +19,7 @@
 
   document.addEventListener('DOMContentLoaded', function() {
     toggleLoader(true);
-    $('#cotacao-select, #nf-select').select2({ theme: "bootstrap-5" });
+    $('#nf-select').select2({ theme: "bootstrap-5" });
     
     google.script.run
       .withSuccessHandler(onDadosIniciaisSuccess)
@@ -32,14 +30,20 @@
   });
   
   function addEventListeners() {
-    $('#nf-select').on('change', onNfSelectChange);
-    $('#cotacao-select').on('change', onCotacaoSelectChange);
-    $('#btn-comparar').on('click', onBtnCompararClick);
-    $('#btn-voltar').on('click', resetarPagina);
-    $('#btn-salvar').on('click', onBtnSalvarClick);
+    $('#nf-select').on('change', () => {
+        const nfKeys = $('#nf-select').val();
+        $('#btn-preparar').prop('disabled', !(nfKeys && nfKeys.length > 0));
+    });
+    $('#btn-preparar').on('click', onBtnPrepararClick);
+
+    $('#accordion-container').on('show.bs.collapse', onAccordionOpen);
+    $('#accordion-container').on('change', '.select-cotacao-item', onAccordionCotacaoChange);
+    $('#accordion-container').on('click', '.btn-save', onBtnSaveAccordionClick);
+    $('#accordion-container').on('click', '.btn-cancel', onBtnCancelAccordionClick);
   }
 
   function onDadosIniciaisSuccess(response) {
+    toggleLoader(false);
     if (response.success) {
       todasAsCotacoes = response.dados.cotacoes;
       todasAsNFs = response.dados.notasFiscais;
@@ -56,7 +60,6 @@
     } else {
       alert('Erro ao carregar dados: ' + response.message);
     }
-    toggleLoader(false);
   }
 
   function onFailure(error) {
@@ -65,209 +68,200 @@
     toggleLoader(false);
   }
 
-  function onNfSelectChange() {
-    const selectedOptions = $('#nf-select').find('option:selected');
-    const cotacaoSelect = $('#cotacao-select');
+  function onBtnPrepararClick() {
+    const accordionContainer = $('#accordion-container');
+    accordionContainer.empty();
     
-    cotacaoSelect.empty();
-    $('#btn-comparar').prop('disabled', true);
-    
-    if (selectedOptions.length > 0) {
-      const primeiraNfData = $(selectedOptions[0]).data('nf');
-      const cnpjDaNfNormalizado = normalizarCNPJ(primeiraNfData.cnpjEmitente);
+    const chavesNfSelecionadas = $('#nf-select').val();
+    if (!chavesNfSelecionadas || chavesNfSelecionadas.length === 0) return;
 
-      if (cnpjDaNfNormalizado) {
-        const cotacoesFiltradas = todasAsCotacoes.filter(c => {
-          const cnpjDaCotacaoNormalizado = normalizarCNPJ(c.fornecedorCnpj);
-          return cnpjDaCotacaoNormalizado === cnpjDaNfNormalizado;
-        });
+    chavesNfSelecionadas.forEach((chaveAcesso, index) => {
+        const nfInfo = todasAsNFs.find(n => n.chaveAcesso === chaveAcesso);
+        if (!nfInfo) return;
         
-        if(cotacoesFiltradas.length > 0) {
-          cotacaoSelect.append(new Option('Selecione uma cotação', '', true, true));
-          cotacoesFiltradas.forEach(c => {
-            const displayText = `ID ${c.idCotacao} - ${c.fornecedor} (${c.dataAbertura})`;
-            cotacaoSelect.append(new Option(displayText, c.compositeKey));
-          });
-          cotacaoSelect.prop('disabled', false);
-        } else {
-          cotacaoSelect.append(new Option('Nenhuma cotação aberta encontrada para este fornecedor', '', true, true)).prop('disabled', true);
-        }
-      }
-    } else {
-       cotacaoSelect.append(new Option('Selecione uma NF primeiro', '', true, true)).prop('disabled', true);
-    }
-    cotacaoSelect.val('').trigger('change');
-  }
-  
-  function onCotacaoSelectChange(){
-    const cotacaoKey = $('#cotacao-select').val();
-    const nfKeys = $('#nf-select').val();
-    $('#btn-comparar').prop('disabled', !(cotacaoKey && nfKeys && nfKeys.length > 0));
-  }
+        const template = document.getElementById('template-accordion-item').content.cloneNode(true);
+        const accordionItem = $(template.querySelector('.accordion-item'));
 
-  function onBtnCompararClick() {
-    toggleLoader(true);
-    const cotacaoKey = $('#cotacao-select').val();
-    const chavesNf = $('#nf-select').val();
+        accordionItem.find('.accordion-button').attr('data-bs-target', `#collapse-${index}`).attr('aria-controls', `collapse-${index}`);
+        accordionItem.find('.accordion-collapse').attr('id', `collapse-${index}`);
+        accordionItem.data('chave-acesso', chaveAcesso);
+        accordionItem.data('nf-info', nfInfo);
+
+        accordionItem.find('.header-text').text(`NF ${nfInfo.numeroNF} - ${nfInfo.nomeEmitente}`);
+        
+        accordionContainer.append(accordionItem);
+    });
+
+    $('#card-selecao').addClass('d-none');
     
-    google.script.run
-      .withSuccessHandler(onComparacaoSuccess)
-      .withFailureHandler(onFailure)
-      .ConciliacaoNFController_realizarComparacao(cotacaoKey, chavesNf);
-  }
-  
-  function onComparacaoSuccess(response) {
-    if (response.success) {
-      dadosComparacao = response.dados;
-      
-      const resumo = response.dados.dadosGeraisNF;
-      const totaisTributos = (resumo.totalValorIcms || 0) + (resumo.totalValorIcmsSt || 0) + (resumo.totalValorPis || 0) + (resumo.totalValorCofins || 0);
-      
-      $('#header-resumo').text(`Resumo da Conciliação: Cotação ${dadosComparacao.idCotacao} vs NFs`);
-      $('#total-produtos-nf').text(formatarMoeda(resumo.totalValorProdutos));
-      $('#total-frete-nf').text(formatarMoeda(resumo.totalValorFrete));
-      $('#total-ipi-nf').text(formatarMoeda(resumo.totalValorIpi));
-      $('#total-outras-nf').text(formatarMoeda(resumo.totalOutrasDespesas));
-      $('#total-desconto-nf').text(formatarMoeda(resumo.totalValorDesconto));
-      $('#total-impostos-nf').text(formatarMoeda(totaisTributos));
-      $('#valor-total-nf').text(formatarMoeda(resumo.valorTotalNf));
-
-      construirTabelaComparacao();
-      
-      $('#card-selecao').addClass('d-none');
-      $('#etapa-comparacao').removeClass('d-none');
-      
-    } else {
-      alert('Erro na comparação: ' + response.message);
+    if (chavesNfSelecionadas.length > 0) {
+        new bootstrap.Collapse(accordionContainer.find('.accordion-collapse').first(), {
+            toggle: true
+        });
     }
-    toggleLoader(false);
   }
 
-  /**
-   * NOVA VERSÃO: Constrói dinamicamente as linhas da tabela com colunas condensadas.
-   */
-  function construirTabelaComparacao() {
-      const tbody = $('#comparison-table-body');
+  function onAccordionOpen(event) {
+      const accordionItem = $(event.target).closest('.accordion-item');
+      if (accordionItem.data('loaded')) return;
+
+      const nfInfo = accordionItem.data('nf-info');
+      const selectCotacao = accordionItem.find('.select-cotacao-item');
+      const cnpjNormalizadoNF = normalizarCNPJ(nfInfo.cnpjEmitente);
+      const cotacoesFiltradas = todasAsCotacoes.filter(c => normalizarCNPJ(c.fornecedorCnpj) === cnpjNormalizadoNF);
+      
+      selectCotacao.empty().append(new Option('Selecione a cotação...', '', true, true));
+      if(cotacoesFiltradas.length > 0) {
+          cotacoesFiltradas.forEach(c => {
+              selectCotacao.append(new Option(`ID ${c.idCotacao} - ${c.fornecedor} (${c.dataAbertura})`, c.compositeKey));
+          });
+          selectCotacao.prop('disabled', false);
+      } else {
+          selectCotacao.append(new Option('Nenhuma cotação aberta para este fornecedor', '', true, true)).prop('disabled', true);
+      }
+      
+      selectCotacao.select2({ theme: "bootstrap-5", dropdownParent: accordionItem });
+      accordionItem.data('loaded', true);
+  }
+
+  function onAccordionCotacaoChange(event) {
+    const select = $(event.target);
+    const accordionItem = select.closest('.accordion-item');
+    const comparisonContainer = accordionItem.find('.comparison-container');
+    const totaisContainer = accordionItem.find('.totais-nf-container');
+    const compositeKey = select.val();
+    const chaveAcesso = accordionItem.data('chave-acesso');
+
+    if (!compositeKey) {
+        comparisonContainer.addClass('d-none');
+        totaisContainer.addClass('d-none');
+        return;
+    }
+    
+    toggleLoader(true);
+    google.script.run
+        .withSuccessHandler(response => onCompareSuccess(response, accordionItem))
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_realizarComparacao(compositeKey, [chaveAcesso]);
+  }
+
+  function onCompareSuccess(response, accordionItem) {
+      toggleLoader(false);
+      if (!response.success) {
+          onFailure(response);
+          return;
+      }
+      const dados = response.dados;
+      accordionItem.data('dados-comparacao', dados);
+
+      // **NOVA LÓGICA PARA POPULAR OS TOTAIS**
+      const totaisContainer = accordionItem.find('.totais-nf-container');
+      const totaisNF = dados.dadosGeraisNF && dados.dadosGeraisNF[0] ? dados.dadosGeraisNF[0] : null;
+
+      if (totaisNF) {
+        const impostosSum = (totaisNF.totalValorIcms || 0) + (totaisNF.totalValorIcmsSt || 0) + (totaisNF.totalValorPis || 0) + (totaisNF.totalValorCofins || 0);
+        totaisContainer.find('.total-produtos').text(formatarMoeda(totaisNF.totalValorProdutos));
+        totaisContainer.find('.total-frete').text(formatarMoeda(totaisNF.totalValorFrete));
+        totaisContainer.find('.total-ipi').text(formatarMoeda(totaisNF.totalValorIpi));
+        totaisContainer.find('.total-outras').text(formatarMoeda(totaisNF.totalOutrasDespesas));
+        totaisContainer.find('.total-desconto').text(formatarMoeda(totaisNF.totalValorDesconto));
+        totaisContainer.find('.total-impostos').text(formatarMoeda(impostosSum));
+        totaisContainer.find('.valor-total').text(formatarMoeda(totaisNF.valorTotalNf));
+        totaisContainer.removeClass('d-none');
+      }
+
+      construirTabelaComparacao(accordionItem, dados.itensNF, dados.itensCotacao);
+      accordionItem.find('.comparison-container').removeClass('d-none');
+  }
+
+  function construirTabelaComparacao(accordionItem, itensNF, itensCotacao) {
+      const tbody = accordionItem.find('.comparison-table-body');
       tbody.empty();
-      dadosComparacao.itensNF.forEach((itemNF, index) => {
+      
+      itensNF.forEach((itemNF, index) => {
         const subtotalNF = itemNF.qtdNF * itemNF.precoNF;
-        const row = `
+        const rowHTML = `
           <tr data-item-nf-index="${index}">
             <td>${itemNF.descricaoNF}</td>
-            
             <td class="dados-condensados text-end">
               <div><small>Qtd:</small> <span>${itemNF.qtdNF.toFixed(2)}</span></div>
               <div><small>Preço:</small> <span>${formatarMoeda(itemNF.precoNF)}</span></div>
               <div><small>Subtotal:</small> <strong class="text-primary">${formatarMoeda(subtotalNF)}</strong></div>
             </td>
-            
-            <td>
-              <select class="form-select select-cotacao-item" data-placeholder="Escolha o item correspondente..."></select>
-            </td>
-            
+            <td><select class="form-select select-item-match"></select></td>
             <td class="dados-condensados text-end">
               <div><small>Qtd Pedida:</small> <span class="cot-qtd"></span></div>
               <div><small>Preço Unit.:</small> <span class="cot-preco"></span></div>
               <div><small>Preço Fator:</small> <span class="cot-preco-fator"></span></div>
             </td>
-
             <td class="dados-condensados text-center">
               <div><small>Div. Preço:</small> <span class="divergencia-preco fw-bold"></span></div>
               <div><small>Div. Qtd:</small> <span class="divergencia-qtd fw-bold"></span></div>
             </td>
           </tr>
         `;
+        const row = $(rowHTML);
+        
+        const selectMatch = row.find('.select-item-match');
+        selectMatch.append(new Option('Escolha o item...', '', true, true));
+        itensCotacao.forEach((itemCot, cotIndex) => {
+            const option = new Option(`${itemCot.subProduto} (Qtd: ${itemCot.qtdComprar})`, cotIndex);
+            $(option).data('item-cot', itemCot);
+            selectMatch.append(option);
+        });
+        
         tbody.append(row);
       });
-      
-      popularSelectsItensCotacao();
+
+      tbody.find('.select-item-match').select2({ theme: "bootstrap-5", allowClear: true, dropdownParent: accordionItem })
+        .on('change', onMatchItem);
   }
 
-  /**
-   * Popula cada dropdown na tabela de comparação com os itens da cotação.
-   * (Função inalterada)
-   */
-  function popularSelectsItensCotacao() {
-      const selects = $('.select-cotacao-item');
-      selects.each(function() {
-        const select = $(this);
-        select.empty().append(new Option('', '', true, true));
-        dadosComparacao.itensCotacao.forEach((itemCot, index) => {
-            const displayText = `${itemCot.subProduto} (Qtd: ${itemCot.qtdComprar})`;
-            const option = new Option(displayText, index);
-            select.append(option);
-        });
-      });
-
-      selects.select2({ 
-        theme: "bootstrap-5",
-        placeholder: $(this).data('placeholder'),
-        allowClear: true
-      }).on('change', onMatchItem);
-  }
-
-  /**
-   * NOVA VERSÃO: Preenche os dados e divergências nas células condensadas.
-   */
-  function onMatchItem() {
-    const select = $(this);
-    const selectedCotacaoIndex = select.val();
+  function onMatchItem(event) {
+    const select = $(event.target);
+    const selectedOption = select.find('option:selected');
     const row = select.closest('tr');
+    
+    row.find('.cot-qtd, .cot-preco, .cot-preco-fator, .divergencia-preco, .divergencia-qtd').empty().removeClass('text-success text-danger text-warning');
+
+    if (!select.val()) return;
+    
+    const itemCotacao = $(selectedOption).data('item-cot');
+    const accordionItem = row.closest('.accordion-item');
+    const dadosComparacao = accordionItem.data('dados-comparacao');
     const itemNFIndex = row.data('item-nf-index');
     const itemNF = dadosComparacao.itensNF[itemNFIndex];
     
-    const cotQtdEl = row.find('.cot-qtd');
-    const cotPrecoEl = row.find('.cot-preco');
-    const cotPrecoFatorEl = row.find('.cot-preco-fator');
-    const divPrecoEl = row.find('.divergencia-preco');
-    const divQtdEl = row.find('.divergencia-qtd');
+    row.find('.cot-qtd').text(itemCotacao.qtdComprar.toFixed(2));
+    row.find('.cot-preco').text(formatarMoeda(itemCotacao.preco));
+    row.find('.cot-preco-fator').text(formatarMoeda(itemCotacao.precoPorFator));
 
-    // Limpa as células de resultado se a seleção for limpa
-    if (!selectedCotacaoIndex) {
-        cotQtdEl.empty();
-        cotPrecoEl.empty();
-        cotPrecoFatorEl.empty();
-        divPrecoEl.empty().removeClass('text-success text-danger');
-        divQtdEl.empty().removeClass('text-success text-danger text-warning');
-        return;
-    }
-
-    const itemCotacao = dadosComparacao.itensCotacao[selectedCotacaoIndex];
-    
-    // Preenche os dados da cotação
-    cotQtdEl.text(itemCotacao.qtdComprar.toFixed(2));
-    cotPrecoEl.text(formatarMoeda(itemCotacao.preco));
-    cotPrecoFatorEl.text(formatarMoeda(itemCotacao.precoPorFator));
-
-    // Compara PREÇO
-    const precoNF = itemNF.precoNF;
-    const diffPreco = precoNF - itemCotacao.preco;
-    const diffPrecoFator = precoNF - itemCotacao.precoPorFator;
-    
+    const diffPreco = itemNF.precoNF - itemCotacao.preco;
+    const diffPrecoFator = itemNF.precoNF - itemCotacao.precoPorFator;
+    const elDivPreco = row.find('.divergencia-preco');
     if (Math.abs(diffPreco) < 0.01 || Math.abs(diffPrecoFator) < 0.01) {
-        divPrecoEl.text('OK').removeClass('text-danger').addClass('text-success');
+        elDivPreco.text('OK').addClass('text-success');
     } else {
-        const menorDivergencia = Math.abs(diffPreco) < Math.abs(diffPrecoFator) ? diffPreco : diffPrecoFator;
-        divPrecoEl.text(formatarMoeda(menorDivergencia)).removeClass('text-success').addClass('text-danger');
+        elDivPreco.text(formatarMoeda(Math.abs(diffPreco) < Math.abs(diffPrecoFator) ? diffPreco : diffPrecoFator)).addClass('text-danger');
     }
 
-    // Compara QUANTIDADE
-    const qtdNF = itemNF.qtdNF;
-    const qtdComprar = itemCotacao.qtdComprar;
-    const diffQtd = qtdNF - qtdComprar;
-
+    const diffQtd = itemNF.qtdNF - itemCotacao.qtdComprar;
+    const elDivQtd = row.find('.divergencia-qtd');
     if (Math.abs(diffQtd) < 0.001) {
-        divQtdEl.text('OK').removeClass('text-warning text-danger').addClass('text-success');
+        elDivQtd.text('OK').addClass('text-success');
     } else if (diffQtd < 0) {
-        divQtdEl.text(`${diffQtd.toFixed(2)}`).removeClass('text-success text-warning').addClass('text-danger');
+        elDivQtd.text(`${diffQtd.toFixed(2)}`).addClass('text-danger');
     } else {
-        divQtdEl.text(`+${diffQtd.toFixed(2)}`).removeClass('text-success text-danger').addClass('text-warning');
+        elDivQtd.text(`+${diffQtd.toFixed(2)}`).addClass('text-warning');
     }
   }
-  
-  function onBtnSalvarClick() {
+
+  function onBtnSaveAccordionClick(event) {
+    const accordionItem = $(event.target).closest('.accordion-item');
+    const dadosComparacao = accordionItem.data('dados-comparacao');
+    if (!dadosComparacao) return;
+
     toggleLoader(true);
-    
     const resultado = {
       idCotacao: dadosComparacao.idCotacao,
       nomeFornecedor: dadosComparacao.nomeFornecedor,
@@ -276,58 +270,49 @@
       itensSomenteCotacao: []
     };
     
-    const cotacaoItensUtilizados = new Set();
-    
-    $('#comparison-table-body tr').each(function() {
+    const itensCotacaoConciliados = new Set();
+    accordionItem.find('.comparison-table-body tr').each(function() {
       const row = $(this);
-      const itemNFIndex = row.data('item-nf-index');
-      const itemNF = dadosComparacao.itensNF[itemNFIndex];
-      const selectedCotacaoIndex = row.find('.select-cotacao-item').val();
-      
-      if (selectedCotacaoIndex) {
-        cotacaoItensUtilizados.add(parseInt(selectedCotacaoIndex));
-        const itemCotacao = dadosComparacao.itensCotacao[selectedCotacaoIndex];
-        const diffPreco = itemNF.precoNF - itemCotacao.preco;
-        
-        resultado.itensConciliados.push({
-          subProduto: itemCotacao.subProduto,
-          divergenciaNota: formatarMoeda(diffPreco),
-          quantidadeNota: itemNF.qtdNF,
-          precoNota: itemNF.precoNF
-        });
+      const selectedMatch = row.find('.select-item-match option:selected');
+      if (selectedMatch.val()) {
+          const itemCot = $(selectedMatch).data('item-cot');
+          const itemNF = dadosComparacao.itensNF[row.data('item-nf-index')];
+          itensCotacaoConciliados.add(itemCot.subProduto);
+          resultado.itensConciliados.push({
+            subProduto: itemCot.subProduto,
+            divergenciaNota: formatarMoeda(itemNF.precoNF - itemCot.preco),
+            quantidadeNota: itemNF.qtdNF,
+            precoNota: itemNF.precoNF
+          });
       }
     });
-    
-    dadosComparacao.itensCotacao.forEach((item, index) => {
-        if (!cotacaoItensUtilizados.has(index)) {
-            resultado.itensSomenteCotacao.push(item);
-        }
-    });
+
+    resultado.itensSomenteCotacao = dadosComparacao.itensCotacao.filter(item => !itensCotacaoConciliados.has(item.subProduto));
 
     google.script.run
-        .withSuccessHandler(function(res) {
-            toggleLoader(false);
-            if(res.success) {
-                alert(res.message);
-                resetarPagina();
-            } else {
-                onFailure(res);
-            }
-        })
+        .withSuccessHandler(res => onSaveSuccess(res, accordionItem))
         .withFailureHandler(onFailure)
         .ConciliacaoNFController_salvarConciliacao(resultado);
   }
 
-  function resetarPagina() {
-      $('#etapa-comparacao').addClass('d-none');
-      $('#card-selecao').removeClass('d-none');
-      
-      $('#nf-select').val(null).trigger('change');
-      $('#cotacao-select').empty().append(new Option('Aguardando seleção da NF...', '', true, true)).prop('disabled', true).val('').trigger('change');
-      $('#btn-comparar').prop('disabled', true);
-      
-      $('#comparison-table-body').empty();
-      dadosComparacao = {};
+  function onSaveSuccess(response, accordionItem) {
+    toggleLoader(false);
+    if (response.success) {
+        accordionItem.find('.accordion-button').addClass('bg-success-subtle');
+        accordionItem.find('.status-badge').text('Conciliado').removeClass('d-none text-bg-light').addClass('text-bg-success');
+        accordionItem.find('.accordion-body').empty().html(`<div class="p-3 text-center text-success fw-bold">${response.message}</div>`);
+        const collapse = bootstrap.Collapse.getInstance(accordionItem.find('.accordion-collapse'));
+        if (collapse) collapse.hide();
+    } else {
+        onFailure(response);
+    }
   }
-
+  
+  function onBtnCancelAccordionClick(event) {
+    const accordionItem = $(event.target).closest('.accordion-item');
+    accordionItem.find('.select-cotacao-item').val('').trigger('change');
+    accordionItem.find('.comparison-container').addClass('d-none');
+    accordionItem.find('.totais-nf-container').addClass('d-none');
+    accordionItem.find('.comparison-table-body').empty();
+  }
 </script>

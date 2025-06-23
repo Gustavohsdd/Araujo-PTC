@@ -94,8 +94,6 @@ function ConciliacaoNFCrud_obterChavesDeAcessoExistentes() {
 }
 
 function ConciliacaoNFCrud_parsearConteudoXml(conteudoXml) {
-  // Esta função permanece exatamente a mesma da versão anterior.
-  // Ela já é otimizada para ler um único XML.
   const documento = XmlService.parse(conteudoXml);
   const root = documento.getRootElement();
 
@@ -167,10 +165,6 @@ function ConciliacaoNFCrud_parsearConteudoXml(conteudoXml) {
   };
 }
 
-/**
- * NOVA FUNÇÃO OTIMIZADA: Salva todos os dados acumulados de várias NF-e de uma só vez.
- * @param {object} todosOsDados Um objeto contendo arrays de dados para cada aba.
- */
 function ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados) {
   const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
 
@@ -212,16 +206,6 @@ function ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados) {
   }
 }
 
-/**
- * @file ConciliacaoNFCrud.gs
- * @description Funções CRUD Corrigidas para o processo de conciliação.
- */
-
-/**
- * [CORRIGIDO] Obtém uma lista de cotações com status "Aguardando Faturamento".
- * Trata a combinação de ID e Fornecedor como única e usa o CNPJ para futuras comparações.
- * @returns {Array<object>|null} Array de objetos de cotação ou null em caso de erro.
- */
 function ConciliacaoNFCrud_obterCotacoesAbertas() {
   try {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
@@ -237,7 +221,6 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
 
     const dados = aba.getRange(2, 1, ultimaLinha - 1, aba.getLastColumn()).getValues();
     
-    // Mapeia Fornecedor para CNPJ para uso posterior
     const fornecedoresData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_FORNECEDORES).getDataRange().getValues();
     const cabecalhosForn = fornecedoresData.shift();
     const colFornNome = cabecalhosForn.indexOf("Fornecedor");
@@ -257,17 +240,16 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
       const id = linha[colId];
       const fornecedor = linha[colForn];
 
-      // [NOVA REGRA] A cotação só é válida se tiver ID, Fornecedor, e o status for "Aguardando Faturamento".
       if (id && fornecedor && status === 'Aguardando Faturamento') {
-        const compositeKey = `${id}-${fornecedor}`; // Cria chave composta (ex: "54-Ambev")
+        const compositeKey = `${id}-${fornecedor}`; 
         
-        if (!cotacoesUnicas[compositeKey]) { // Verifica a unicidade usando a chave composta
+        if (!cotacoesUnicas[compositeKey]) { 
           const nomeFornecedorTrim = fornecedor.toString().trim();
           cotacoesUnicas[compositeKey] = {
-            compositeKey: compositeKey, // Chave para o valor do <option> no HTML
+            compositeKey: compositeKey,
             idCotacao: id,
             fornecedor: fornecedor,
-            fornecedorCnpj: mapaFornecedores[nomeFornecedorTrim] || '', // Garante que o CNPJ é encontrado
+            fornecedorCnpj: mapaFornecedores[nomeFornecedorTrim] || '',
             dataAbertura: new Date(linha[colData]).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
           };
         }
@@ -276,7 +258,6 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
     
     const resultado = Object.values(cotacoesUnicas);
     
-    // Ordena por ID (mais novo primeiro) e depois por nome do fornecedor
     resultado.sort((a, b) => {
         if (b.idCotacao !== a.idCotacao) {
             return b.idCotacao - a.idCotacao;
@@ -292,10 +273,6 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
   }
 }
 
-/**
- * Obtém uma lista de NFs que ainda não foram conciliadas.
- * @returns {Array<object>|null} Array de objetos de NF ou null em caso de erro.
- */
 function ConciliacaoNFCrud_obterNFsNaoConciliadas() {
   try {
     const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
@@ -331,14 +308,6 @@ function ConciliacaoNFCrud_obterNFsNaoConciliadas() {
   }
 }
 
-/**
- * [MODIFICADO] Obtém os itens de uma cotação específica, filtrando por ID e Fornecedor.
- * Adiciona o Fator e o Preço por Fator para a comparação.
- * Converte a data para string (ISO) para evitar erros de serialização.
- * @param {string} idCotacao - O ID da cotação.
- * @param {string} nomeFornecedor - O nome do fornecedor.
- * @returns {Array<object>} Array de itens da cotação.
- */
 function ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor) {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
     const aba = planilha.getSheetByName(ABA_COTACOES);
@@ -348,7 +317,6 @@ function ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor) {
       throw new Error(`Não foi possível obter os cabeçalhos da aba: ${ABA_COTACOES}`);
     }
 
-    // Mapeamento das colunas necessárias
     const colMap = {};
     const colunasNecessarias = ["ID da Cotação", "SubProduto", "Comprar", "Preço", "Fornecedor", "Data Abertura", "Fator", "Preço por Fator"];
     colunasNecessarias.forEach(nomeColuna => {
@@ -366,7 +334,6 @@ function ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor) {
         const linha = dados[i];
         const qtdComprar = parseFloat(linha[colMap["Comprar"]]);
         
-        // Filtra pela cotação, fornecedor e quantidade a comprar > 0
         if (linha[colMap["ID da Cotação"]] == idCotacao && linha[colMap["Fornecedor"]] == nomeFornecedor && !isNaN(qtdComprar) && qtdComprar > 0) {
             const dataAberturaObj = new Date(linha[colMap["Data Abertura"]]);
             
@@ -374,7 +341,7 @@ function ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor) {
                 subProduto: linha[colMap["SubProduto"]],
                 qtdComprar: qtdComprar,
                 preco: parseFloat(linha[colMap["Preço"]]) || 0,
-                fator: parseFloat(linha[colMap["Fator"]]) || 1, // Padrão 1 se não houver fator
+                fator: parseFloat(linha[colMap["Fator"]]) || 1,
                 precoPorFator: parseFloat(linha[colMap["Preço por Fator"]]) || 0,
                 fornecedor: linha[colMap["Fornecedor"]],
                 dataAbertura: !isNaN(dataAberturaObj.getTime()) ? dataAberturaObj.toISOString() : null
@@ -384,11 +351,6 @@ function ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor) {
     return itens;
 }
 
-/**
- * Obtém os itens das NFs especificadas.
- * @param {Array<string>} chavesAcessoNF - Array de chaves de acesso.
- * @returns {Array<object>} Array de itens de NF.
- */
 function ConciliacaoNFCrud_obterItensDasNFs(chavesAcessoNF) {
     const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
     const aba = planilha.getSheetByName(ABA_NF_ITENS);
@@ -401,8 +363,10 @@ function ConciliacaoNFCrud_obterItensDasNFs(chavesAcessoNF) {
     const dados = aba.getDataRange().getValues();
     const itens = [];
     dados.forEach(linha => {
-        if (chavesAcessoNF.includes(linha[colChave])) {
+        const chaveLinha = linha[colChave];
+        if (chavesAcessoNF.includes(chaveLinha)) {
             itens.push({
+                chaveAcesso: chaveLinha, // [ADICIONADO] Retorna a chave de acesso para agrupar no controller
                 descricaoNF: linha[colDesc],
                 qtdNF: parseFloat(linha[colQtd]) || 0,
                 precoNF: parseFloat(linha[colPreco]) || 0
@@ -413,52 +377,52 @@ function ConciliacaoNFCrud_obterItensDasNFs(chavesAcessoNF) {
 }
 
 /**
- * Obtém os dados gerais agregados das NFs.
+ * [CORRIGIDO] Obtém os dados de tributos totais para cada NF individualmente.
  * @param {Array<string>} chavesAcessoNF - Array de chaves de acesso.
- * @returns {object} Objeto com dados gerais.
+ * @returns {Array<object>} Um array de objetos, onde cada objeto contém os totais de uma NF.
  */
 function ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesAcessoNF) {
     const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
-    const abaNF = planilha.getSheetByName(ABA_NF_NOTAS_FISCAIS);
     const abaTrib = planilha.getSheetByName(ABA_NF_TRIBUTOS_TOTAIS);
+    const dadosCompletos = abaTrib.getDataRange().getValues();
     
-    const dadosNF = abaNF.getDataRange().getValues();
-    const dadosTrib = abaTrib.getDataRange().getValues();
+    const cabecalhos = dadosCompletos.shift(); // Remove e armazena os cabeçalhos
+    const chavesSet = new Set(chavesAcessoNF);
+    const resultados = [];
 
-    let dataEmissao = null;
-    let valorTotalNF = 0;
-
-    const cabNF = CABECALHOS_NF_NOTAS_FISCAIS;
-    const colChaveNF = cabNF.indexOf("Chave de Acesso");
-    const colDataNF = cabNF.indexOf("Data e Hora Emissão");
-    
-    dadosNF.forEach(linha => {
-        if (chavesAcessoNF.includes(linha[colChaveNF])) {
-            if (!dataEmissao) dataEmissao = linha[colDataNF]; // Pega a data da primeira NF
-        }
+    // Mapeia os nomes dos cabeçalhos para seus índices de coluna para robustez
+    const colMap = {};
+    cabecalhos.forEach((header, index) => {
+        colMap[header] = index;
     });
 
-    const cabTrib = CABECALHOS_NF_TRIBUTOS_TOTAIS;
-    const colChaveTrib = cabTrib.indexOf("Chave de Acesso");
-    const colTotalTrib = cabTrib.indexOf("Valor Total da NF");
-    
-    dadosTrib.forEach(linha => {
-        if (chavesAcessoNF.includes(linha[colChaveTrib])) {
-            valorTotalNF += parseFloat(linha[colTotalTrib]) || 0;
+    for (const linha of dadosCompletos) {
+        const chaveAtual = linha[colMap["Chave de Acesso"]];
+        if (chavesSet.has(chaveAtual)) {
+            // Constrói um objeto com todos os totais para a NF encontrada
+            const totaisNF = {
+              chaveAcesso: chaveAtual,
+              totalBaseCalculoIcms: parseFloat(linha[colMap["Total Base Cálculo ICMS"]]) || 0,
+              totalValorIcms: parseFloat(linha[colMap["Total Valor ICMS"]]) || 0,
+              totalValorIcmsSt: parseFloat(linha[colMap["Total Valor ICMS ST"]]) || 0,
+              totalValorProdutos: parseFloat(linha[colMap["Total Valor Produtos"]]) || 0,
+              totalValorFrete: parseFloat(linha[colMap["Total Valor Frete"]]) || 0,
+              totalValorSeguro: parseFloat(linha[colMap["Total Valor Seguro"]]) || 0,
+              totalValorDesconto: parseFloat(linha[colMap["Total Valor Desconto"]]) || 0,
+              totalValorIpi: parseFloat(linha[colMap["Total Valor IPI"]]) || 0,
+              totalValorPis: parseFloat(linha[colMap["Total Valor PIS"]]) || 0,
+              totalValorCofins: parseFloat(linha[colMap["Total Valor COFINS"]]) || 0,
+              totalOutrasDespesas: parseFloat(linha[colMap["Total Outras Despesas"]]) || 0,
+              valorTotalNf: parseFloat(linha[colMap["Valor Total da NF"]]) || 0,
+            };
+            resultados.push(totaisNF);
         }
-    });
+    }
 
-    return {
-        dataEmissao: dataEmissao,
-        valorTotalNF: valorTotalNF
-    };
+    return resultados; // Retorna um array de objetos de totais
 }
 
-/**
- * Obtém o prazo de entrega de um fornecedor.
- * @param {string} nomeFornecedor - O nome do fornecedor.
- * @returns {number} O prazo de entrega em dias.
- */
+
 function ConciliacaoNFCrud_obterPrazoFornecedor(nomeFornecedor) {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
     const aba = planilha.getSheetByName(ABA_FORNECEDORES);
@@ -472,19 +436,9 @@ function ConciliacaoNFCrud_obterPrazoFornecedor(nomeFornecedor) {
             return parseInt(dados[i][colPrazo]) || 0;
         }
     }
-    return 0; // Padrão
+    return 0;
 }
 
-/**
- * [MODIFICADO] Atualiza o status na planilha de Cotações.
- * 1. Salva "Faturado" em "Status do SubProduto".
- * 2. Salva os dados de "Divergencia da Nota", "Quantidade na Nota" e "Preço da Nota".
- * @param {string} idCotacao - O ID da cotação.
- * @param {string} nomeFornecedor - O nome do fornecedor.
- * @param {Array<object>} itensConciliados - Itens que deram match.
- * @param {Array<object>} itensSomenteCotacao - Itens que foram cortados.
- * @returns {boolean} True se sucesso.
- */
 function ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, itensConciliados, itensSomenteCotacao) {
     try {
         const planilha = SpreadsheetApp.getActiveSpreadsheet();
@@ -493,7 +447,6 @@ function ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, ite
         const dados = range.getValues();
         const cabecalhos = dados[0];
 
-        // Mapeamento de colunas
         const colId = cabecalhos.indexOf("ID da Cotação");
         const colForn = cabecalhos.indexOf("Fornecedor");
         const colSubProd = cabecalhos.indexOf("SubProduto");
@@ -506,22 +459,17 @@ function ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, ite
             throw new Error("Uma ou mais colunas de destino ('Status do SubProduto', 'Divergencia da Nota', 'Quantidade na Nota', 'Preço da Nota') não foram encontradas.");
         }
 
-        // Mapeia os itens conciliados pelo nome do SubProduto para acesso rápido
         const mapaConciliados = new Map(itensConciliados.map(item => [item.subProduto, item]));
         const nomesCortados = new Set(itensSomenteCotacao.map(i => i.subProduto));
 
         for (let i = 1; i < dados.length; i++) {
-            // Filtra pela linha correta da cotação e fornecedor
             if (dados[i][colId] == idCotacao && dados[i][colForn] == nomeFornecedor) {
                 const subProdutoLinha = dados[i][colSubProd];
 
                 if (mapaConciliados.has(subProdutoLinha)) {
                     const itemConciliado = mapaConciliados.get(subProdutoLinha);
                     
-                    // REQUISITO 3: Salvar "Faturado" no Status do SubProduto
                     dados[i][colStatusSub] = "Faturado";
-                    
-                    // REQUISITO 4: Salvar os novos dados da conciliação
                     dados[i][colDivergencia] = itemConciliado.divergenciaNota;
                     dados[i][colQtdNota] = itemConciliado.quantidadeNota;
                     dados[i][colPrecoNota] = itemConciliado.precoNota;
@@ -540,12 +488,6 @@ function ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, ite
     }
 }
 
-/**
- * Atualiza o status na planilha de Notas Fiscais após a conciliação.
- * @param {Array<string>} chavesAcessoNF - As chaves das NFs conciliadas.
- * @param {string} idCotacao - O ID da cotação vinculada.
- * @returns {boolean} True se sucesso.
- */
 function ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao) {
     try {
         const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
