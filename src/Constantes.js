@@ -85,7 +85,8 @@ const CABECALHOS_COTACOES = [
   "Quantidade Recebida",
   "Divergencia da Nota",
   "Quantidade na Nota",
-  "Preço da Nota"
+  "Preço da Nota",
+  "Número da Nota"
 ]
 
 

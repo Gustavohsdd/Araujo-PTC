@@ -130,20 +130,37 @@ function ConciliacaoNFController_processarXmlsDaPasta() {
  */
 function ConciliacaoNFController_obterDadosParaPagina() {
   try {
-    Logger.log("ConciliacaoNFController: Obtendo dados para a página de conciliação.");
+    Logger.log("ConciliacaoNFController: Obtendo TODOS os dados para a página de conciliação.");
+    
+    // 1. Obtém as listas principais (isso você já faz)
     const cotacoes = ConciliacaoNFCrud_obterCotacoesAbertas();
     const notasFiscais = ConciliacaoNFCrud_obterNFsNaoConciliadas();
 
     if (cotacoes === null || notasFiscais === null) {
       throw new Error("Falha ao buscar dados das planilhas (Cotações ou Notas Fiscais).");
     }
-    
+
+    // 2. OTIMIZAÇÃO: Busca todos os dados secundários de uma só vez
+    const chavesNFsNaoConciliadas = notasFiscais.map(nf => nf.chaveAcesso);
+    const chavesCotacoesAbertas = cotacoes.map(c => ({ idCotacao: c.idCotacao, fornecedor: c.fornecedor }));
+
+    // Busca todos os itens e totais em lote, usando as chaves que coletamos
+    const todosOsItensNF = ConciliacaoNFCrud_obterItensDasNFs(chavesNFsNaoConciliadas);
+    const todosOsDadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesNFsNaoConciliadas);
+    const todosOsItensCotacao = ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoesAbertas); // Nova função que vamos criar
+
     Logger.log(`Dados carregados: ${cotacoes.length} cotações, ${notasFiscais.length} NFs.`);
+    
+    // 3. Retorna tudo para o frontend em um único objeto
     return {
       success: true,
       dados: {
         cotacoes: cotacoes,
-        notasFiscais: notasFiscais
+        notasFiscais: notasFiscais,
+        // --- DADOS ADICIONAIS PARA PERFORMANCE ---
+        itensNF: todosOsItensNF,
+        itensCotacao: todosOsItensCotacao,
+        dadosGeraisNF: todosOsDadosGeraisNF
       },
       message: null
     };
@@ -222,7 +239,7 @@ function ConciliacaoNFController_salvarConciliacao(dadosConciliacao) {
     }
     
     // Atualiza Planilha de Notas Fiscais
-    const sucessoNF = ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao);
+    const sucessoNF = ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao, "Conciliada");
     if (!sucessoNF) {
         throw new Error("Falha ao atualizar a planilha de notas fiscais.");
     }
@@ -232,6 +249,35 @@ function ConciliacaoNFController_salvarConciliacao(dadosConciliacao) {
 
   } catch (e) {
     Logger.log(`ERRO em ConciliacaoNFController_salvarConciliacao: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: e.message };
+  }
+}
+
+/**
+ * [NOVA FUNÇÃO] Atualiza o status de uma ou mais NFs para "Sem Pedido".
+ * @param {Array<string>} chavesAcessoNF - Um array de chaves de acesso das NFs a serem atualizadas.
+ * @returns {object} Objeto com { success: boolean, message: string|null }.
+ */
+function ConciliacaoNFController_marcarNFsSemPedido(chavesAcessoNF) {
+  try {
+    if (!chavesAcessoNF || !Array.isArray(chavesAcessoNF) || chavesAcessoNF.length === 0) {
+      throw new Error("Nenhuma chave de acesso foi fornecida.");
+    }
+    
+    Logger.log(`Marcando ${chavesAcessoNF.length} NF(s) como 'Sem Pedido'.`);
+
+    // A função de atualização no CRUD foi generalizada para aceitar qualquer status.
+    const sucesso = ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, null, "Sem Pedido");
+    
+    if (!sucesso) {
+      throw new Error("Falha ao atualizar o status das notas fiscais na planilha.");
+    }
+
+    Logger.log("Notas fiscais marcadas como 'Sem Pedido' com sucesso.");
+    return { success: true, message: `${chavesAcessoNF.length} nota(s) fiscal(is) marcada(s) como 'Sem Pedido' com sucesso!` };
+
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_marcarNFsSemPedido: ${e.toString()}\n${e.stack}`);
     return { success: false, message: e.message };
   }
 }

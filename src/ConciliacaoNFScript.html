@@ -1,6 +1,9 @@
 <script>
   let todasAsCotacoes = [];
   let todasAsNFs = [];
+  let todosOsItensNF = [];
+  let todosOsItensCotacao = [];
+  let todosOsDadosGeraisNF = [];
 
   function normalizarCNPJ(cnpj) {
     return cnpj ? String(cnpj).replace(/[^\d]/g, '') : '';
@@ -19,8 +22,6 @@
 
   document.addEventListener('DOMContentLoaded', function() {
     toggleLoader(true);
-    $('#nf-select').select2({ theme: "bootstrap-5" });
-    
     google.script.run
       .withSuccessHandler(onDadosIniciaisSuccess)
       .withFailureHandler(onFailure)
@@ -30,35 +31,175 @@
   });
   
   function addEventListeners() {
-    $('#nf-select').on('change', () => {
-        const nfKeys = $('#nf-select').val();
-        $('#btn-preparar').prop('disabled', !(nfKeys && nfKeys.length > 0));
-    });
-    $('#btn-preparar').on('click', onBtnPrepararClick);
-
+    $('#btn-processar-xml').on('click', onBtnProcessarXmlClick);
+    $('#search-input').on('input', onSearchInputChange);
+    $('#card-selecao').on('change', '.nf-select-checkbox', onNfCardSelectionChange);
+    $('#btn-processar-selecao').on('click', onBtnProcessarClick);
     $('#accordion-container').on('show.bs.collapse', onAccordionOpen);
     $('#accordion-container').on('change', '.select-cotacao-item', onAccordionCotacaoChange);
     $('#accordion-container').on('click', '.btn-save', onBtnSaveAccordionClick);
     $('#accordion-container').on('click', '.btn-cancel', onBtnCancelAccordionClick);
   }
 
+  function onBtnProcessarXmlClick() {
+    const btn = $('#btn-processar-xml');
+    const originalContent = btn.html();
+    
+    btn.prop('disabled', true).html(`<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span><span>Processando...</span>`);
+
+    google.script.run
+        .withSuccessHandler(function() {
+            alert('Processamento de novos arquivos XML concluído. A página será atualizada para exibir as novas notas.');
+            location.reload();
+        })
+        .withFailureHandler(function(error) {
+            btn.prop('disabled', false).html(originalContent);
+            onFailure(error);
+        })
+        .ConciliacaoNFController_processarXmlsDaPasta();
+  }
+
+  function onSearchInputChange() {
+      const searchTerm = $(this).val().toLowerCase().trim();
+      $('#nf-cards-container > div').each(function() {
+        const cardContainer = $(this);
+        const card = cardContainer.find('.card');
+        const nfInfo = card.data('nf-info');
+        let cardText = '';
+
+        if (nfInfo) {
+          cardText += `${nfInfo.numeroNF} ${nfInfo.nomeEmitente}`.toLowerCase();
+        }
+
+        card.find('.nf-items-body tr').each(function() {
+          cardText += $(this).find('td:first').text().toLowerCase();
+        });
+
+        const isMatch = cardText.includes(searchTerm);
+        cardContainer.toggle(isMatch);
+      });
+  }
+
   function onDadosIniciaisSuccess(response) {
     toggleLoader(false);
-    if (response.success) {
-      todasAsCotacoes = response.dados.cotacoes;
-      todasAsNFs = response.dados.notasFiscais;
-
-      const nfSelect = $('#nf-select');
-      nfSelect.empty();
-      todasAsNFs.forEach(nf => {
-        const displayText = `NF ${nf.numeroNF} - ${nf.nomeEmitente} (${nf.dataEmissao})`;
-        const option = new Option(displayText, nf.chaveAcesso);
-        $(option).data('nf', nf);
-        nfSelect.append(option);
-      });
-      nfSelect.val(null).trigger('change');
-    } else {
+    if (!response.success) {
       alert('Erro ao carregar dados: ' + response.message);
+      return;
+    }
+    todasAsNFs = response.dados.notasFiscais;
+    todosOsItensNF = response.dados.itensNF;
+    todosOsDadosGeraisNF = response.dados.dadosGeraisNF;
+    todasAsCotacoes = response.dados.cotacoes;
+    todosOsItensCotacao = response.dados.itensCotacao;
+
+    const cardsContainer = $('#nf-cards-container');
+    cardsContainer.empty();
+
+    if (todasAsNFs.length === 0) {
+        cardsContainer.html('<div class="col-12"><p class="text-center text-muted mt-3">Nenhuma nota fiscal pendente de conciliação foi encontrada.</p></div>');
+        return;
+    }
+
+    todasAsNFs.forEach(nf => {
+      const template = document.getElementById('template-nf-card').content.cloneNode(true);
+      const cardContainer = $(template.querySelector('div')); 
+      const card = cardContainer.find('.card');
+
+      card.data('nf-info', nf);
+      card.find('.nf-title').text(`NF ${nf.numeroNF} - ${nf.nomeEmitente}`);
+      card.find('.nf-data').text(nf.dataEmissao);
+      const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
+      card.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
+
+      const itemsBody = card.find('.nf-items-body');
+      const itensDaNF = todosOsItensNF.filter(i => i.chaveAcesso === nf.chaveAcesso);
+      itensDaNF.forEach(item => {
+        itemsBody.append(`<tr><td>${item.descricaoNF}</td><td class="text-end">${item.qtdNF.toFixed(2)}</td><td class="text-end">${formatarMoeda(item.precoNF)}</td></tr>`);
+      });
+      cardsContainer.append(cardContainer);
+    });
+  }
+  
+  function onNfCardSelectionChange() {
+    const anySelected = $('#nf-cards-container .nf-select-checkbox:checked').length > 0;
+    $('#btn-processar-selecao').prop('disabled', !anySelected);
+  }
+  
+  function onBtnProcessarClick() {
+    const nfsParaConciliar = [];
+    const chavesNfsSemPedido = [];
+
+    $('#nf-cards-container .nf-select-checkbox:checked').each(function() {
+      const card = $(this).closest('.card');
+      const nfInfo = card.data('nf-info');
+      const isSemPedido = card.find('.nf-sem-pedido-checkbox').is(':checked');
+
+      if (isSemPedido) {
+        chavesNfsSemPedido.push(nfInfo.chaveAcesso);
+      } else {
+        nfsParaConciliar.push(nfInfo);
+      }
+    });
+
+    toggleLoader(true);
+
+    if (chavesNfsSemPedido.length > 0) {
+      google.script.run
+        .withSuccessHandler(response => {
+          onMarcarSemPedidoSuccess(response, chavesNfsSemPedido);
+          prepararConciliacaoNormal(nfsParaConciliar);
+        })
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_marcarNFsSemPedido(chavesNfsSemPedido);
+    } else {
+      prepararConciliacaoNormal(nfsParaConciliar);
+    }
+  }
+
+  function onMarcarSemPedidoSuccess(response, chavesProcessadas) {
+    if (response.success) {
+      console.log(response.message);
+      chavesProcessadas.forEach(chave => {
+        $(`.card`).filter(function() {
+            return $(this).data('nf-info').chaveAcesso === chave;
+        }).closest('.col-xl-4').remove();
+      });
+    } else {
+      alert('Erro ao marcar NFs como "Sem Pedido": ' + response.message);
+    }
+    onNfCardSelectionChange();
+  }
+
+  function prepararConciliacaoNormal(nfsParaConciliar) {
+    const accordionContainer = $('#accordion-container');
+    accordionContainer.empty();
+
+    if (nfsParaConciliar.length === 0) {
+      toggleLoader(false);
+      if ($('#nf-cards-container > div').length === 0) {
+        $('#card-selecao').hide();
+        accordionContainer.html('<div class="alert alert-success text-center">Todas as operações foram concluídas com sucesso.</div>');
+      }
+      return;
+    }
+    
+    nfsParaConciliar.forEach((nfInfo, index) => {
+      const template = document.getElementById('template-accordion-item').content.cloneNode(true);
+      const accordionItem = $(template.querySelector('.accordion-item'));
+
+      accordionItem.find('.accordion-button').attr('data-bs-target', `#collapse-${index}`).attr('aria-controls', `collapse-${index}`);
+      accordionItem.find('.accordion-collapse').attr('id', `collapse-${index}`);
+      accordionItem.data('chave-acesso', nfInfo.chaveAcesso);
+      accordionItem.data('nf-info', nfInfo);
+      accordionItem.find('.header-text').text(`NF ${nfInfo.numeroNF} - ${nfInfo.nomeEmitente}`);
+      accordionContainer.append(accordionItem);
+    });
+
+    $('#card-selecao').addClass('d-none');
+    toggleLoader(false);
+    
+    if (nfsParaConciliar.length > 0) {
+      new bootstrap.Collapse(accordionContainer.find('.accordion-collapse').first(), { toggle: true });
     }
   }
 
@@ -67,40 +208,7 @@
     alert('Ocorreu um erro: ' + error.message);
     toggleLoader(false);
   }
-
-  function onBtnPrepararClick() {
-    const accordionContainer = $('#accordion-container');
-    accordionContainer.empty();
-    
-    const chavesNfSelecionadas = $('#nf-select').val();
-    if (!chavesNfSelecionadas || chavesNfSelecionadas.length === 0) return;
-
-    chavesNfSelecionadas.forEach((chaveAcesso, index) => {
-        const nfInfo = todasAsNFs.find(n => n.chaveAcesso === chaveAcesso);
-        if (!nfInfo) return;
-        
-        const template = document.getElementById('template-accordion-item').content.cloneNode(true);
-        const accordionItem = $(template.querySelector('.accordion-item'));
-
-        accordionItem.find('.accordion-button').attr('data-bs-target', `#collapse-${index}`).attr('aria-controls', `collapse-${index}`);
-        accordionItem.find('.accordion-collapse').attr('id', `collapse-${index}`);
-        accordionItem.data('chave-acesso', chaveAcesso);
-        accordionItem.data('nf-info', nfInfo);
-
-        accordionItem.find('.header-text').text(`NF ${nfInfo.numeroNF} - ${nfInfo.nomeEmitente}`);
-        
-        accordionContainer.append(accordionItem);
-    });
-
-    $('#card-selecao').addClass('d-none');
-    
-    if (chavesNfSelecionadas.length > 0) {
-        new bootstrap.Collapse(accordionContainer.find('.accordion-collapse').first(), {
-            toggle: true
-        });
-    }
-  }
-
+  
   function onAccordionOpen(event) {
       const accordionItem = $(event.target).closest('.accordion-item');
       if (accordionItem.data('loaded')) return;
@@ -139,10 +247,26 @@
     }
     
     toggleLoader(true);
-    google.script.run
-        .withSuccessHandler(response => onCompareSuccess(response, accordionItem))
-        .withFailureHandler(onFailure)
-        .ConciliacaoNFController_realizarComparacao(compositeKey, [chaveAcesso]);
+    
+    const parts = compositeKey.split('-');
+    const idCotacao = parts.shift();
+    const nomeFornecedor = parts.join('-');
+    
+    const itensNFFiltrados = todosOsItensNF.filter(item => item.chaveAcesso === chaveAcesso);
+    const itensCotacaoFiltrados = todosOsItensCotacao.filter(item => item.idCotacao == idCotacao && item.fornecedor == nomeFornecedor);
+    const dadosGeraisNFFiltrados = todosOsDadosGeraisNF.filter(total => total.chaveAcesso === chaveAcesso);
+
+    const dadosParaPagina = {
+      idCotacao: idCotacao,
+      nomeFornecedor: nomeFornecedor,
+      chavesAcessoNF: [chaveAcesso],
+      itensCotacao: itensCotacaoFiltrados,
+      itensNF: itensNFFiltrados,
+      dadosGeraisNF: dadosGeraisNFFiltrados,
+      analisePrazo: {}
+    };
+
+    onCompareSuccess({ success: true, dados: dadosParaPagina }, accordionItem);
   }
 
   function onCompareSuccess(response, accordionItem) {
@@ -154,7 +278,6 @@
       const dados = response.dados;
       accordionItem.data('dados-comparacao', dados);
 
-      // **NOVA LÓGICA PARA POPULAR OS TOTAIS**
       const totaisContainer = accordionItem.find('.totais-nf-container');
       const totaisNF = dados.dadosGeraisNF && dados.dadosGeraisNF[0] ? dados.dadosGeraisNF[0] : null;
 
@@ -171,7 +294,7 @@
       }
 
       construirTabelaComparacao(accordionItem, dados.itensNF, dados.itensCotacao);
-      accordionItem.find('.comparison-container').removeClass('d-none');
+      accordionItem.find('.comparison-container').removeClass('d-one');
   }
 
   function construirTabelaComparacao(accordionItem, itensNF, itensCotacao) {

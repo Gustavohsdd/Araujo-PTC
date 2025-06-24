@@ -488,7 +488,14 @@ function ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, ite
     }
 }
 
-function ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao) {
+/**
+ * [MODIFICADO] Atualiza o status e, opcionalmente, o ID da Cotação para uma lista de NFs.
+ * @param {Array<string>} chavesAcessoNF - Array com as chaves de acesso das NFs a serem atualizadas.
+ * @param {string|number|null} idCotacao - O ID da cotação para associar (pode ser nulo).
+ * @param {string} status - O novo status a ser definido (ex: "Conciliada", "Sem Pedido").
+ * @returns {boolean} True se sucesso, false se ocorrer um erro.
+ */
+function ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao, status = "Conciliada") {
     try {
         const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
         const aba = planilha.getSheetByName(ABA_NF_NOTAS_FISCAIS);
@@ -500,16 +507,69 @@ function ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao) {
         const colStatus = cabecalhos.indexOf("Status da Conciliação");
         const colIdCot = cabecalhos.indexOf("ID da Cotação (Sistema)");
 
+        if (colChave === -1 || colStatus === -1 || colIdCot === -1) {
+            throw new Error("Não foi possível encontrar as colunas necessárias na aba de Notas Fiscais.");
+        }
+
+        const chavesSet = new Set(chavesAcessoNF);
+
         for (let i = 1; i < dados.length; i++) {
-            if (chavesAcessoNF.includes(dados[i][colChave])) {
-                dados[i][colStatus] = "Conciliada";
-                dados[i][colIdCot] = idCotacao;
+            if (chavesSet.has(dados[i][colChave])) {
+                dados[i][colStatus] = status;
+                if (idCotacao) { // Só preenche o ID se ele for fornecido
+                  dados[i][colIdCot] = idCotacao;
+                }
             }
         }
         range.setValues(dados);
         return true;
     } catch(e) {
-        Logger.log(`Erro em ConciliacaoNFCrud_atualizarStatusNF: ${e.message}`);
+        Logger.log(`Erro em ConciliacaoNFCrud_atualizarStatusNF: ${e.message}\n${e.stack}`);
         return false;
     }
+}
+
+/**
+ * [NOVA FUNÇÃO OTIMIZADA]
+ * Obtém todos os itens de múltiplas cotações abertas de uma só vez.
+ * @param {Array<object>} chavesCotacoes - Array de objetos {idCotacao, fornecedor}.
+ * @returns {Array<object>} Lista de todos os itens encontrados.
+ */
+function ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoes) {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const aba = planilha.getSheetByName(ABA_COTACOES);
+    const dados = aba.getDataRange().getValues();
+    const cabecalhos = dados.shift(); // Remove cabeçalhos
+
+    const colMap = {};
+    const colunasNecessarias = ["ID da Cotação", "Fornecedor", "SubProduto", "Comprar", "Preço", "Fator", "Preço por Fator"];
+    colunasNecessarias.forEach(nome => { colMap[nome] = cabecalhos.indexOf(nome); });
+
+    // Cria um Set de chaves compostas para busca rápida em memória (O(1))
+    const setCotacoes = new Set(chavesCotacoes.map(c => `${c.idCotacao}-${c.fornecedor}`));
+    const itens = [];
+
+    for (const linha of dados) {
+        const id = linha[colMap["ID da Cotação"]];
+        const fornecedor = linha[colMap["Fornecedor"]];
+        const compositeKey = `${id}-${fornecedor}`;
+        
+        // Filtra em memória, o que é muito mais rápido que múltiplas leituras da planilha
+        if (setCotacoes.has(compositeKey)) {
+            const qtdComprar = parseFloat(linha[colMap["Comprar"]]);
+            if (!isNaN(qtdComprar) && qtdComprar > 0) {
+                 itens.push({
+                    // Adicionamos o id e fornecedor para permitir a filtragem no frontend
+                    idCotacao: id,
+                    fornecedor: fornecedor,
+                    subProduto: linha[colMap["SubProduto"]],
+                    qtdComprar: qtdComprar,
+                    preco: parseFloat(linha[colMap["Preço"]]) || 0,
+                    fator: parseFloat(linha[colMap["Fator"]]) || 1,
+                    precoPorFator: parseFloat(linha[colMap["Preço por Fator"]]) || 0
+                });
+            }
+        }
+    }
+    return itens;
 }
