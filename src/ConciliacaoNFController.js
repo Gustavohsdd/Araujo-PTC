@@ -6,7 +6,7 @@
 
 /**
  * Função principal para processar todos os arquivos XML da pasta de entrada.
- * Esta função deve ser executada manualmente ou por um acionador de tempo (trigger).
+ * Esta função deve ser executada manually ou por um acionador de tempo (trigger).
  */
 function ConciliacaoNFController_processarXmlsDaPasta() {
   const lock = LockService.getScriptLock();
@@ -17,7 +17,6 @@ function ConciliacaoNFController_processarXmlsDaPasta() {
 
   Logger.log('INICIANDO EXECUÇÃO OTIMIZADA...');
 
-  // MUDANÇA: Arrays para acumular todos os dados antes de escrever na planilha.
   const todosOsDados = {
     notasFiscais: [],
     itensNf: [],
@@ -79,7 +78,6 @@ function ConciliacaoNFController_processarXmlsDaPasta() {
           continue;
         }
         
-        // MUDANÇA: Em vez de salvar na planilha, acumula os dados nos arrays.
         todosOsDados.notasFiscais.push(dadosNf.notasFiscais);
         todosOsDados.itensNf.push(...dadosNf.itensNf);
         todosOsDados.faturasNf.push(...dadosNf.faturasNf);
@@ -99,7 +97,6 @@ function ConciliacaoNFController_processarXmlsDaPasta() {
       }
     }
     
-    // MUDANÇA: Após o loop, se houver dados para salvar, chama a nova função de salvamento em lote.
     if (todosOsDados.notasFiscais.length > 0) {
         Logger.log(`Iniciando salvamento em lote de ${todosOsDados.notasFiscais.length} nota(s) fiscal(is).`);
         ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados);
@@ -118,46 +115,31 @@ function ConciliacaoNFController_processarXmlsDaPasta() {
   }
 }
 
-/**
- * @file ConciliacaoNFController.gs
- * @description Funções adicionadas para o processo de conciliação.
- */
-
-/**
- * Obtém os dados necessários para popular a página de conciliação.
- * Retorna uma lista de cotações abertas e notas fiscais não conciliadas.
- * @returns {object} Objeto com { success: boolean, dados: object|null, message: string|null }.
- */
 function ConciliacaoNFController_obterDadosParaPagina() {
   try {
     Logger.log("ConciliacaoNFController: Obtendo TODOS os dados para a página de conciliação.");
     
-    // 1. Obtém as listas principais (isso você já faz)
     const cotacoes = ConciliacaoNFCrud_obterCotacoesAbertas();
-    const notasFiscais = ConciliacaoNFCrud_obterNFsNaoConciliadas();
+    const notasFiscais = ConciliacaoNFCrud_obterNFsNaoConciliadas(); // Já está corrigido para o filtro novo
 
     if (cotacoes === null || notasFiscais === null) {
       throw new Error("Falha ao buscar dados das planilhas (Cotações ou Notas Fiscais).");
     }
 
-    // 2. OTIMIZAÇÃO: Busca todos os dados secundários de uma só vez
     const chavesNFsNaoConciliadas = notasFiscais.map(nf => nf.chaveAcesso);
     const chavesCotacoesAbertas = cotacoes.map(c => ({ idCotacao: c.idCotacao, fornecedor: c.fornecedor }));
 
-    // Busca todos os itens e totais em lote, usando as chaves que coletamos
     const todosOsItensNF = ConciliacaoNFCrud_obterItensDasNFs(chavesNFsNaoConciliadas);
     const todosOsDadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesNFsNaoConciliadas);
-    const todosOsItensCotacao = ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoesAbertas); // Nova função que vamos criar
+    const todosOsItensCotacao = ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoesAbertas);
 
     Logger.log(`Dados carregados: ${cotacoes.length} cotações, ${notasFiscais.length} NFs.`);
     
-    // 3. Retorna tudo para o frontend em um único objeto
     return {
       success: true,
       dados: {
         cotacoes: cotacoes,
         notasFiscais: notasFiscais,
-        // --- DADOS ADICIONAIS PARA PERFORMANCE ---
         itensNF: todosOsItensNF,
         itensCotacao: todosOsItensCotacao,
         dadosGeraisNF: todosOsDadosGeraisNF
@@ -171,45 +153,33 @@ function ConciliacaoNFController_obterDadosParaPagina() {
   }
 }
 
-/**
- * [MODIFICADO] Apenas coleta os dados da Cotação e das NFs para a conciliação manual na interface.
- * @param {string} compositeKeyCotacao - A chave composta da cotação (ex: "54-Ambev").
- * @param {Array<string>} chavesAcessoNF - Um array de chaves de acesso das NFs.
- * @returns {object} Objeto com { success: boolean, dados: object|null, message: string|null }.
- */
 function ConciliacaoNFController_realizarComparacao(compositeKeyCotacao, chavesAcessoNF) {
   try {
     if (!compositeKeyCotacao || !chavesAcessoNF || chavesAcessoNF.length === 0) {
       throw new Error("Chave da Cotação e Chaves de Acesso das NFs são obrigatórios.");
     }
     
-    // Interpreta a chave composta
     const parts = compositeKeyCotacao.split('-');
     const idCotacao = parts.shift();
     const nomeFornecedor = parts.join('-');
 
     Logger.log(`Coletando dados para conciliação manual. Cotação ID: ${idCotacao}, Fornecedor: ${nomeFornecedor}`);
     
-    // 1. Obter itens da Cotação
     const itensCotacao = ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor);
     if (itensCotacao.length === 0) {
       return { success: false, message: "Nenhum item marcado para comprar nesta cotação para este fornecedor." };
     }
 
-    // 2. Obter itens das NFs
     const itensNF = ConciliacaoNFCrud_obterItensDasNFs(chavesAcessoNF);
-
-    // 3. Obter dados gerais (continuam úteis)
     const dadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesAcessoNF);
-    const analisePrazo = {}; // Lógica de prazo pode ser mantida ou simplificada se necessário
+    const analisePrazo = {}; 
 
-    // 4. Montar o objeto de dados brutos para a interface
     const dadosParaPagina = {
       idCotacao: idCotacao,
       nomeFornecedor: nomeFornecedor,
       chavesAcessoNF: chavesAcessoNF,
-      itensCotacao: itensCotacao, // Lista de itens da cotação
-      itensNF: itensNF,           // Lista de itens da NF
+      itensCotacao: itensCotacao,
+      itensNF: itensNF,
       dadosGeraisNF: dadosGeraisNF,
       analisePrazo: analisePrazo
     };
@@ -223,22 +193,22 @@ function ConciliacaoNFController_realizarComparacao(compositeKeyCotacao, chavesA
 }
 
 /**
- * [CORRIGIDO] Salva o resultado da conciliação. Usa o ID da Cotação e o Nome do Fornecedor.
- * @param {object} dadosConciliacao - O objeto de resultado gerado por realizarComparacao.
+ * [FUNÇÃO ALTERADA] 
+ * Salva o resultado da conciliação e passa o número da NF para a função CRUD.
+ * @param {object} dadosConciliacao - O objeto de resultado.
  * @returns {object} Objeto com { success: boolean, message: string|null }.
  */
 function ConciliacaoNFController_salvarConciliacao(dadosConciliacao) {
   try {
-    const { idCotacao, nomeFornecedor, chavesAcessoNF, itensConciliados, itensSomenteCotacao } = dadosConciliacao;
-    Logger.log(`Salvando conciliação para Cotação ID: ${idCotacao}, Fornecedor: ${nomeFornecedor}`);
+    const { idCotacao, nomeFornecedor, numeroNF, chavesAcessoNF, itensConciliados } = dadosConciliacao;
+    Logger.log(`Salvando conciliação para Cotação ID: ${idCotacao}, NF: ${numeroNF}`);
 
-    // Atualiza Planilha de Cotações usando id e fornecedor
-    const sucessoCotacoes = ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, itensConciliados, itensSomenteCotacao);
+    // ALTERAÇÃO: Passa o numeroNF para a função de atualização
+    const sucessoCotacoes = ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, numeroNF, itensConciliados);
     if (!sucessoCotacoes) {
         throw new Error("Falha ao atualizar a planilha de cotações.");
     }
     
-    // Atualiza Planilha de Notas Fiscais
     const sucessoNF = ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao, "Conciliada");
     if (!sucessoNF) {
         throw new Error("Falha ao atualizar a planilha de notas fiscais.");
@@ -254,10 +224,35 @@ function ConciliacaoNFController_salvarConciliacao(dadosConciliacao) {
 }
 
 /**
- * [NOVA FUNÇÃO] Atualiza o status de uma ou mais NFs para "Sem Pedido".
- * @param {Array<string>} chavesAcessoNF - Um array de chaves de acesso das NFs a serem atualizadas.
- * @returns {object} Objeto com { success: boolean, message: string|null }.
+ * [NOVA FUNÇÃO]
+ * Recebe a lista de itens da cotação que não foram conciliados e os marca como 'Cortado'.
+ * @param {object} dados - Objeto contendo { idCotacao, nomeFornecedor, subProdutosCortados }.
+ * @returns {object} Objeto com { success: boolean, message: string }.
  */
+function ConciliacaoNFController_marcarItensCortados(dados) {
+  try {
+    const { idCotacao, nomeFornecedor, subProdutosCortados } = dados;
+    if (!idCotacao || !nomeFornecedor || !Array.isArray(subProdutosCortados)) {
+      throw new Error("Dados inválidos para marcar itens como cortados.");
+    }
+
+    const sucesso = ConciliacaoNFCrud_marcarItensComoCortado(idCotacao, nomeFornecedor, subProdutosCortados);
+    if (!sucesso) {
+      throw new Error("Falha ao atualizar o status dos itens para 'Cortado' na planilha.");
+    }
+
+    const message = subProdutosCortados.length > 0
+      ? `${subProdutosCortados.length} iten(s) foram marcados como 'Cortado'.`
+      : 'Nenhum item foi marcado como cortado.';
+    
+    return { success: true, message: message };
+
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_marcarItensCortados: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: e.message };
+  }
+}
+
 function ConciliacaoNFController_marcarNFsSemPedido(chavesAcessoNF) {
   try {
     if (!chavesAcessoNF || !Array.isArray(chavesAcessoNF) || chavesAcessoNF.length === 0) {
@@ -266,7 +261,6 @@ function ConciliacaoNFController_marcarNFsSemPedido(chavesAcessoNF) {
     
     Logger.log(`Marcando ${chavesAcessoNF.length} NF(s) como 'Sem Pedido'.`);
 
-    // A função de atualização no CRUD foi generalizada para aceitar qualquer status.
     const sucesso = ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, null, "Sem Pedido");
     
     if (!sucesso) {

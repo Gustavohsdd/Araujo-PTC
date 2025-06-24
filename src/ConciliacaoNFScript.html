@@ -4,6 +4,7 @@
   let todosOsItensNF = [];
   let todosOsItensCotacao = [];
   let todosOsDadosGeraisNF = [];
+  let resumoModalInstance = null; // Guarda a instância do Modal
 
   function normalizarCNPJ(cnpj) {
     return cnpj ? String(cnpj).replace(/[^\d]/g, '') : '';
@@ -21,6 +22,8 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
+    resumoModalInstance = new bootstrap.Modal(document.getElementById('resumoModal'));
+
     toggleLoader(true);
     google.script.run
       .withSuccessHandler(onDadosIniciaisSuccess)
@@ -39,6 +42,9 @@
     $('#accordion-container').on('change', '.select-cotacao-item', onAccordionCotacaoChange);
     $('#accordion-container').on('click', '.btn-save', onBtnSaveAccordionClick);
     $('#accordion-container').on('click', '.btn-cancel', onBtnCancelAccordionClick);
+    // LISTENERS NOVOS
+    $('#btn-finalizar-voltar').on('click', () => location.reload());
+    $('#btn-marcar-cortado').on('click', onBtnMarcarCortadoClick);
   }
 
   function onBtnProcessarXmlClick() {
@@ -105,7 +111,7 @@
       const cardContainer = $(template.querySelector('div')); 
       const card = cardContainer.find('.card');
 
-      card.data('nf-info', nf);
+      card.data('nf-info', nf); // Salva o objeto nf inteiro
       card.find('.nf-title').text(`NF ${nf.numeroNF} - ${nf.nomeEmitente}`);
       card.find('.nf-data').text(nf.dataEmissao);
       const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
@@ -161,7 +167,8 @@
       console.log(response.message);
       chavesProcessadas.forEach(chave => {
         $(`.card`).filter(function() {
-            return $(this).data('nf-info').chaveAcesso === chave;
+            const nfInfo = $(this).data('nf-info');
+            return nfInfo && nfInfo.chaveAcesso === chave;
         }).closest('.col-xl-4').remove();
       });
     } else {
@@ -238,7 +245,7 @@
     const comparisonContainer = accordionItem.find('.comparison-container');
     const totaisContainer = accordionItem.find('.totais-nf-container');
     const compositeKey = select.val();
-    const chaveAcesso = accordionItem.data('chave-acesso');
+    const nfInfo = accordionItem.data('nf-info'); // Pega o nfInfo completo
 
     if (!compositeKey) {
         comparisonContainer.addClass('d-none');
@@ -252,18 +259,18 @@
     const idCotacao = parts.shift();
     const nomeFornecedor = parts.join('-');
     
-    const itensNFFiltrados = todosOsItensNF.filter(item => item.chaveAcesso === chaveAcesso);
+    const itensNFFiltrados = todosOsItensNF.filter(item => item.chaveAcesso === nfInfo.chaveAcesso);
     const itensCotacaoFiltrados = todosOsItensCotacao.filter(item => item.idCotacao == idCotacao && item.fornecedor == nomeFornecedor);
-    const dadosGeraisNFFiltrados = todosOsDadosGeraisNF.filter(total => total.chaveAcesso === chaveAcesso);
+    const dadosGeraisNFFiltrados = todosOsDadosGeraisNF.filter(total => total.chaveAcesso === nfInfo.chaveAcesso);
 
     const dadosParaPagina = {
+      nfInfo: nfInfo, // ALTERAÇÃO: Adiciona o nfInfo para ter o número da NF
       idCotacao: idCotacao,
       nomeFornecedor: nomeFornecedor,
-      chavesAcessoNF: [chaveAcesso],
+      chavesAcessoNF: [nfInfo.chaveAcesso],
       itensCotacao: itensCotacaoFiltrados,
       itensNF: itensNFFiltrados,
-      dadosGeraisNF: dadosGeraisNFFiltrados,
-      analisePrazo: {}
+      dadosGeraisNF: dadosGeraisNFFiltrados
     };
 
     onCompareSuccess({ success: true, dados: dadosParaPagina }, accordionItem);
@@ -276,7 +283,7 @@
           return;
       }
       const dados = response.dados;
-      accordionItem.data('dados-comparacao', dados);
+      accordionItem.data('dados-comparacao', dados); // Salva todos os dados, incluindo nfInfo
 
       const totaisContainer = accordionItem.find('.totais-nf-container');
       const totaisNF = dados.dadosGeraisNF && dados.dadosGeraisNF[0] ? dados.dadosGeraisNF[0] : null;
@@ -294,7 +301,7 @@
       }
 
       construirTabelaComparacao(accordionItem, dados.itensNF, dados.itensCotacao);
-      accordionItem.find('.comparison-container').removeClass('d-one');
+      accordionItem.find('.comparison-container').removeClass('d-none');
   }
 
   function construirTabelaComparacao(accordionItem, itensNF, itensCotacao) {
@@ -328,7 +335,8 @@
         const selectMatch = row.find('.select-item-match');
         selectMatch.append(new Option('Escolha o item...', '', true, true));
         itensCotacao.forEach((itemCot, cotIndex) => {
-            const option = new Option(`${itemCot.subProduto} (Qtd: ${itemCot.qtdComprar})`, cotIndex);
+            const optionText = `${itemCot.subProduto} (Qtd: ${itemCot.qtdComprar.toFixed(2)})`;
+            const option = new Option(optionText, cotIndex);
             $(option).data('item-cot', itemCot);
             selectMatch.append(option);
         });
@@ -388,19 +396,25 @@
     const resultado = {
       idCotacao: dadosComparacao.idCotacao,
       nomeFornecedor: dadosComparacao.nomeFornecedor,
+      numeroNF: dadosComparacao.nfInfo.numeroNF, // ALTERAÇÃO: Passa o número da NF
       chavesAcessoNF: dadosComparacao.chavesAcessoNF,
-      itensConciliados: [],
-      itensSomenteCotacao: []
+      itensConciliados: []
     };
     
     const itensCotacaoConciliados = new Set();
+    const indicesItensNfConciliados = new Set();
+
     accordionItem.find('.comparison-table-body tr').each(function() {
       const row = $(this);
       const selectedMatch = row.find('.select-item-match option:selected');
       if (selectedMatch.val()) {
           const itemCot = $(selectedMatch).data('item-cot');
-          const itemNF = dadosComparacao.itensNF[row.data('item-nf-index')];
+          const itemNfIndex = row.data('item-nf-index');
+          const itemNF = dadosComparacao.itensNF[itemNfIndex];
+
           itensCotacaoConciliados.add(itemCot.subProduto);
+          indicesItensNfConciliados.add(itemNfIndex);
+
           resultado.itensConciliados.push({
             subProduto: itemCot.subProduto,
             divergenciaNota: formatarMoeda(itemNF.precoNF - itemCot.preco),
@@ -410,25 +424,107 @@
       }
     });
 
-    resultado.itensSomenteCotacao = dadosComparacao.itensCotacao.filter(item => !itensCotacaoConciliados.has(item.subProduto));
+    // LÓGICA DO RESUMO PÓS-CONCILIAÇÃO
+    const itensSomenteCotacao = dadosComparacao.itensCotacao.filter(item => !itensCotacaoConciliados.has(item.subProduto));
+    const itensSomenteNF = dadosComparacao.itensNF.filter((item, index) => !indicesItensNfConciliados.has(index));
+    
+    const dadosResumo = {
+        idCotacao: dadosComparacao.idCotacao,
+        nomeFornecedor: dadosComparacao.nomeFornecedor,
+        itensSomenteCotacao,
+        itensSomenteNF
+    };
 
     google.script.run
-        .withSuccessHandler(res => onSaveSuccess(res, accordionItem))
+        .withSuccessHandler(res => onSaveSuccess(res, accordionItem, dadosResumo))
         .withFailureHandler(onFailure)
         .ConciliacaoNFController_salvarConciliacao(resultado);
   }
 
-  function onSaveSuccess(response, accordionItem) {
+  function onSaveSuccess(response, accordionItem, dadosResumo) {
     toggleLoader(false);
     if (response.success) {
+        // Atualiza a UI do accordion
         accordionItem.find('.accordion-button').addClass('bg-success-subtle');
         accordionItem.find('.status-badge').text('Conciliado').removeClass('d-none text-bg-light').addClass('text-bg-success');
-        accordionItem.find('.accordion-body').empty().html(`<div class="p-3 text-center text-success fw-bold">${response.message}</div>`);
         const collapse = bootstrap.Collapse.getInstance(accordionItem.find('.accordion-collapse'));
         if (collapse) collapse.hide();
+        accordionItem.find('.action-buttons').remove(); // Remove botões para evitar re-salvar
+
+        // Prepara e exibe o modal de resumo
+        prepararEExibirModalResumo(dadosResumo, response.message);
     } else {
         onFailure(response);
     }
+  }
+
+  function prepararEExibirModalResumo(dadosResumo, mensagemSucesso) {
+    $('#resumo-status-message').text(mensagemSucesso);
+    const modal = $('#resumoModal');
+    
+    // Armazena os dados no modal para uso posterior
+    modal.data('dados-resumo', dadosResumo);
+
+    const listaNf = $('#lista-itens-nao-conciliados-nf');
+    listaNf.empty();
+    if (dadosResumo.itensSomenteNF.length > 0) {
+        dadosResumo.itensSomenteNF.forEach(item => {
+            listaNf.append(`<li class="list-group-item">${item.descricaoNF} (Qtd: ${item.qtdNF.toFixed(2)})</li>`);
+        });
+        $('#collapseResumoNF').collapse('show');
+    } else {
+        listaNf.append('<li class="list-group-item text-muted">Todos os itens da nota foram conciliados.</li>');
+        $('#collapseResumoNF').collapse('hide');
+    }
+
+    const listaCotacao = $('#lista-itens-nao-conciliados-cotacao');
+    listaCotacao.empty();
+    if (dadosResumo.itensSomenteCotacao.length > 0) {
+        dadosResumo.itensSomenteCotacao.forEach((item, index) => {
+            const li = `
+                <li class="list-group-item">
+                    <input class="form-check-input me-1" type="checkbox" value="${item.subProduto}" id="check-cortado-${index}">
+                    <label class="form-check-label" for="check-cortado-${index}">${item.subProduto} (Qtd Pedida: ${item.qtdComprar.toFixed(2)})</label>
+                </li>`;
+            listaCotacao.append(li);
+        });
+        $('#collapseResumoCotacao').collapse('show');
+    } else {
+        listaCotacao.append('<li class="list-group-item text-muted">Todos os itens do pedido foram recebidos.</li>');
+        $('#collapseResumoCotacao').collapse('hide');
+    }
+    
+    resumoModalInstance.show();
+  }
+
+  function onBtnMarcarCortadoClick() {
+      toggleLoader(true);
+      const modal = $('#resumoModal');
+      const dadosResumo = modal.data('dados-resumo');
+      const subProdutosCortados = [];
+      
+      $('#lista-itens-nao-conciliados-cotacao .form-check-input:checked').each(function() {
+          subProdutosCortados.push($(this).val());
+      });
+
+      const dadosParaEnviar = {
+          idCotacao: dadosResumo.idCotacao,
+          nomeFornecedor: dadosResumo.nomeFornecedor,
+          subProdutosCortados: subProdutosCortados
+      };
+
+      google.script.run
+          .withSuccessHandler(response => {
+              toggleLoader(false);
+              if(response.success) {
+                  alert(response.message);
+                  resumoModalInstance.hide();
+              } else {
+                  onFailure(response);
+              }
+          })
+          .withFailureHandler(onFailure)
+          .ConciliacaoNFController_marcarItensCortados(dadosParaEnviar);
   }
   
   function onBtnCancelAccordionClick(event) {
