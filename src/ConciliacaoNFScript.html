@@ -1,103 +1,113 @@
 <script>
-  let todasAsCotacoes = [];
-  let todasAsNFs = [];
-  let todosOsItensNF = [];
-  let todosOsItensCotacao = [];
-  let todosOsDadosGeraisNF = [];
-  let resumoModalInstance = null; // Guarda a instância do Modal
+// Variáveis globais para armazenar os dados carregados
+let todasAsCotacoes = [];
+let todasAsNFs = [];
+let todosOsItensNF = [];
+let todosOsItensCotacao = [];
+let todosOsDadosGeraisNF = [];
+let resumoModalInstance = null;
 
-  function normalizarCNPJ(cnpj) {
+// Funções utilitárias
+function normalizarCNPJ(cnpj) {
     return cnpj ? String(cnpj).replace(/[^\d]/g, '') : '';
-  }
-  
-  function formatarMoeda(valor) {
-    if (typeof valor !== 'number' || isNaN(valor)) {
-      return "R$ 0,00";
-    }
-    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  }
-  
-  function toggleLoader(show) {
-    document.getElementById('loader').classList.toggle('d-none', !show);
-  }
+}
 
-  document.addEventListener('DOMContentLoaded', function() {
+function formatarMoeda(valor) {
+    if (typeof valor !== 'number' || isNaN(valor)) {
+        return "R$ 0,00";
+    }
+    return valor.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    });
+}
+
+function toggleLoader(show) {
+    document.getElementById('loader').classList.toggle('d-none', !show);
+}
+
+// Função principal que roda ao carregar a página
+document.addEventListener('DOMContentLoaded', function() {
     resumoModalInstance = new bootstrap.Modal(document.getElementById('resumoModal'));
 
     toggleLoader(true);
     google.script.run
-      .withSuccessHandler(onDadosIniciaisSuccess)
-      .withFailureHandler(onFailure)
-      .ConciliacaoNFController_obterDadosParaPagina();
-      
+        .withSuccessHandler(onDadosIniciaisSuccess)
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_obterDadosParaPagina();
+
     addEventListeners();
-  });
-  
-  function addEventListeners() {
+});
+
+// Adiciona todos os event listeners da página
+function addEventListeners() {
+    // Etapa 1: Seleção
     $('#btn-processar-xml').on('click', onBtnProcessarXmlClick);
     $('#search-input').on('input', onSearchInputChange);
     $('#card-selecao').on('change', '.nf-select-checkbox', onNfCardSelectionChange);
-    $('#btn-processar-selecao').on('click', onBtnProcessarClick);
-    $('#accordion-container').on('show.bs.collapse', onAccordionOpen);
-    $('#accordion-container').on('change', '.select-cotacao-item', onAccordionCotacaoChange);
-    $('#accordion-container').on('click', '.btn-save', onBtnSaveAccordionClick);
-    $('#accordion-container').on('click', '.btn-cancel', onBtnCancelAccordionClick);
-    // LISTENERS NOVOS
-    $('#btn-finalizar-voltar').on('click', () => location.reload());
-    $('#btn-marcar-cortado').on('click', onBtnMarcarCortadoClick);
-  }
+    $('#btn-processar-selecao').on('click', onBtnProcessarSelecaoClick);
 
-  function onBtnProcessarXmlClick() {
-    const btn = $('#btn-processar-xml');
-    const originalContent = btn.html();
+    // Etapa 2: Conciliação
+    $('#btn-cancelar-conciliacao').on('click', resetToInitialState); // MODIFICADO
+    $('#area-conciliacao').on('change', '.select-cotacao-fornecedor', onSelectCotacaoFornecedorChange);
+    $('#area-conciliacao').on('change', '.select-item-match', onMatchItemChange);
+    $('#btn-salvar-tudo').on('click', onBtnSalvarTudoClick);
     
-    btn.prop('disabled', true).html(`<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span><span>Processando...</span>`);
+    // Modal Final
+    $('#btn-confirmar-cortados-e-salvar').on('click', onBtnConfirmarCortadosESalvarClick);
+}
 
+/**
+ * [NOVA FUNÇÃO]
+ * Reseta a aplicação para seu estado inicial sem recarregar a página.
+ * Isso evita o problema da tela branca.
+ */
+function resetToInitialState() {
+    console.log("Resetando a visualização para o estado inicial.");
+    toggleLoader(true);
+
+    // Esconde a área de conciliação e mostra a de seleção
+    $('#area-conciliacao').addClass('d-none');
+    $('#container-fornecedores').empty();
+    $('#card-selecao').removeClass('d-none');
+
+    // Desabilita o botão de processar seleção novamente
+    $('#btn-processar-selecao').prop('disabled', true);
+
+    // Busca os dados mais recentes do servidor
     google.script.run
-        .withSuccessHandler(function() {
-            alert('Processamento de novos arquivos XML concluído. A página será atualizada para exibir as novas notas.');
-            location.reload();
-        })
-        .withFailureHandler(function(error) {
-            btn.prop('disabled', false).html(originalContent);
-            onFailure(error);
-        })
-        .ConciliacaoNFController_processarXmlsDaPasta();
-  }
+        .withSuccessHandler(onDadosIniciaisSuccess)
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_obterDadosParaPagina();
+}
 
-  function onSearchInputChange() {
-      const searchTerm = $(this).val().toLowerCase().trim();
-      $('#nf-cards-container > div').each(function() {
-        const cardContainer = $(this);
-        const card = cardContainer.find('.card');
-        const nfInfo = card.data('nf-info');
-        let cardText = '';
 
-        if (nfInfo) {
-          cardText += `${nfInfo.numeroNF} ${nfInfo.nomeEmitente}`.toLowerCase();
-        }
-
-        card.find('.nf-items-body tr').each(function() {
-          cardText += $(this).find('td:first').text().toLowerCase();
-        });
-
-        const isMatch = cardText.includes(searchTerm);
-        cardContainer.toggle(isMatch);
-      });
-  }
-
-  function onDadosIniciaisSuccess(response) {
+// == Funções de Callback do Servidor ==
+function onDadosIniciaisSuccess(response) {
     toggleLoader(false);
     if (!response.success) {
-      alert('Erro ao carregar dados: ' + response.message);
-      return;
+        alert('Erro ao carregar dados: ' + response.message);
+        return;
     }
+    // Armazena dados globalmente
     todasAsNFs = response.dados.notasFiscais;
     todosOsItensNF = response.dados.itensNF;
     todosOsDadosGeraisNF = response.dados.dadosGeraisNF;
     todasAsCotacoes = response.dados.cotacoes;
     todosOsItensCotacao = response.dados.itensCotacao;
 
+    renderizarCardsNFs();
+}
+
+function onFailure(error) {
+    console.error('Erro na chamada ao servidor:', error);
+    alert('Ocorreu um erro: ' + error.message);
+    toggleLoader(false);
+}
+
+// == Funções da Etapa 1: Seleção de NFs ==
+
+function renderizarCardsNFs() {
     const cardsContainer = $('#nf-cards-container');
     cardsContainer.empty();
 
@@ -107,431 +117,483 @@
     }
 
     todasAsNFs.forEach(nf => {
-      const template = document.getElementById('template-nf-card').content.cloneNode(true);
-      const cardContainer = $(template.querySelector('div')); 
-      const card = cardContainer.find('.card');
+        const template = document.getElementById('template-nf-card').content.cloneNode(true);
+        const cardContainer = $(template.querySelector('div'));
+        const card = cardContainer.find('.card');
 
-      card.data('nf-info', nf); // Salva o objeto nf inteiro
-      card.find('.nf-title').text(`NF ${nf.numeroNF} - ${nf.nomeEmitente}`);
-      card.find('.nf-data').text(nf.dataEmissao);
-      const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
-      card.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
+        card.data('nf-info', nf);
+        card.data('chave-acesso', nf.chaveAcesso);
 
-      const itemsBody = card.find('.nf-items-body');
-      const itensDaNF = todosOsItensNF.filter(i => i.chaveAcesso === nf.chaveAcesso);
-      itensDaNF.forEach(item => {
-        itemsBody.append(`<tr><td>${item.descricaoNF}</td><td class="text-end">${item.qtdNF.toFixed(2)}</td><td class="text-end">${formatarMoeda(item.precoNF)}</td></tr>`);
-      });
-      cardsContainer.append(cardContainer);
+        card.find('.nf-title').text(`NF ${nf.numeroNF} - ${nf.nomeEmitente}`);
+        card.find('.nf-data').text(nf.dataEmissao);
+        const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
+        card.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
+
+        const itemsBody = card.find('.nf-items-body');
+        const itensDaNF = todosOsItensNF.filter(i => i.chaveAcesso === nf.chaveAcesso);
+        itensDaNF.forEach(item => {
+            itemsBody.append(`<tr><td>${item.descricaoNF}</td><td class="text-end">${item.qtdNF.toFixed(2)}</td><td class="text-end">${formatarMoeda(item.precoNF)}</td></tr>`);
+        });
+        cardsContainer.append(cardContainer);
     });
-  }
-  
-  function onNfCardSelectionChange() {
+}
+
+function onBtnProcessarXmlClick() {
+    const btn = $(this);
+    const originalContent = btn.html();
+    btn.prop('disabled', true).html(`<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span><span>Processando...</span>`);
+
+    google.script.run
+        .withSuccessHandler(resetToInitialState) // MODIFICADO
+        .withFailureHandler(error => {
+            btn.prop('disabled', false).html(originalContent);
+            onFailure(error);
+        })
+        .ConciliacaoNFController_processarXmlsDaPasta();
+}
+
+function onSearchInputChange() {
+    const searchTerm = $(this).val().toLowerCase().trim();
+    $('#nf-cards-container > div').each(function() {
+        const cardContainer = $(this);
+        const card = cardContainer.find('.card');
+        const nfInfo = card.data('nf-info');
+        let cardText = `${nfInfo.numeroNF} ${nfInfo.nomeEmitente}`.toLowerCase();
+        const isMatch = cardText.includes(searchTerm);
+        cardContainer.toggle(isMatch);
+    });
+}
+
+function onNfCardSelectionChange() {
     const anySelected = $('#nf-cards-container .nf-select-checkbox:checked').length > 0;
     $('#btn-processar-selecao').prop('disabled', !anySelected);
-  }
-  
-  function onBtnProcessarClick() {
+}
+
+function onBtnProcessarSelecaoClick() {
     const nfsParaConciliar = [];
     const chavesNfsSemPedido = [];
 
     $('#nf-cards-container .nf-select-checkbox:checked').each(function() {
-      const card = $(this).closest('.card');
-      const nfInfo = card.data('nf-info');
-      const isSemPedido = card.find('.nf-sem-pedido-checkbox').is(':checked');
+        const card = $(this).closest('.card');
+        const nfInfo = card.data('nf-info');
+        const isSemPedido = card.find('.nf-sem-pedido-checkbox').is(':checked');
 
-      if (isSemPedido) {
-        chavesNfsSemPedido.push(nfInfo.chaveAcesso);
-      } else {
-        nfsParaConciliar.push(nfInfo);
-      }
+        if (isSemPedido) {
+            chavesNfsSemPedido.push(nfInfo.chaveAcesso);
+        } else {
+            nfsParaConciliar.push(nfInfo);
+        }
     });
 
     toggleLoader(true);
 
     if (chavesNfsSemPedido.length > 0) {
-      google.script.run
-        .withSuccessHandler(response => {
-          onMarcarSemPedidoSuccess(response, chavesNfsSemPedido);
-          prepararConciliacaoNormal(nfsParaConciliar);
-        })
-        .withFailureHandler(onFailure)
-        .ConciliacaoNFController_marcarNFsSemPedido(chavesNfsSemPedido);
+        google.script.run
+            .withSuccessHandler(response => {
+                if (response.success) {
+                    console.log(response.message);
+                } else {
+                    alert('Erro ao marcar NFs como "Sem Pedido": ' + response.message);
+                }
+                iniciarAreaDeConciliacao(nfsParaConciliar);
+            })
+            .withFailureHandler(onFailure)
+            .ConciliacaoNFController_marcarNFsSemPedido(chavesNfsSemPedido);
     } else {
-      prepararConciliacaoNormal(nfsParaConciliar);
+        iniciarAreaDeConciliacao(nfsParaConciliar);
     }
-  }
+}
 
-  function onMarcarSemPedidoSuccess(response, chavesProcessadas) {
-    if (response.success) {
-      console.log(response.message);
-      chavesProcessadas.forEach(chave => {
-        $(`.card`).filter(function() {
-            const nfInfo = $(this).data('nf-info');
-            return nfInfo && nfInfo.chaveAcesso === chave;
-        }).closest('.col-xl-4').remove();
-      });
-    } else {
-      alert('Erro ao marcar NFs como "Sem Pedido": ' + response.message);
-    }
-    onNfCardSelectionChange();
-  }
+// == Funções da Etapa 2: Área de Conciliação ==
 
-  function prepararConciliacaoNormal(nfsParaConciliar) {
-    const accordionContainer = $('#accordion-container');
-    accordionContainer.empty();
-
+function iniciarAreaDeConciliacao(nfsParaConciliar) {
     if (nfsParaConciliar.length === 0) {
-      toggleLoader(false);
-      if ($('#nf-cards-container > div').length === 0) {
-        $('#card-selecao').hide();
-        accordionContainer.html('<div class="alert alert-success text-center">Todas as operações foram concluídas com sucesso.</div>');
-      }
-      return;
+        console.log("Nenhuma nota fiscal para conciliar. Resetando a visualização.");
+        resetToInitialState(); // MODIFICADO
+        return;
     }
-    
-    nfsParaConciliar.forEach((nfInfo, index) => {
-      const template = document.getElementById('template-accordion-item').content.cloneNode(true);
-      const accordionItem = $(template.querySelector('.accordion-item'));
 
-      accordionItem.find('.accordion-button').attr('data-bs-target', `#collapse-${index}`).attr('aria-controls', `collapse-${index}`);
-      accordionItem.find('.accordion-collapse').attr('id', `collapse-${index}`);
-      accordionItem.data('chave-acesso', nfInfo.chaveAcesso);
-      accordionItem.data('nf-info', nfInfo);
-      accordionItem.find('.header-text').text(`NF ${nfInfo.numeroNF} - ${nfInfo.nomeEmitente}`);
-      accordionContainer.append(accordionItem);
+    const nfsPorFornecedor = nfsParaConciliar.reduce((acc, nf) => {
+        const cnpj = normalizarCNPJ(nf.cnpjEmitente);
+        if (!acc[cnpj]) {
+            acc[cnpj] = {
+                nomeFornecedor: nf.nomeEmitente,
+                cnpj: cnpj,
+                nfs: []
+            };
+        }
+        acc[cnpj].nfs.push(nf);
+        return acc;
+    }, {});
+
+    const containerFornecedores = $('#container-fornecedores');
+    containerFornecedores.empty();
+
+    Object.values(nfsPorFornecedor).forEach(grupo => {
+        const template = document.getElementById('template-fornecedor-block').content.cloneNode(true);
+        const block = $(template.querySelector('.fornecedor-block'));
+
+        block.data('grupo-fornecedor', grupo);
+        block.find('.nome-fornecedor').text(grupo.nomeFornecedor);
+
+        const listaNFs = block.find('.lista-nfs-fornecedor');
+        const totalNotasGrupo = grupo.nfs.reduce((sum, nf) => {
+            const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
+            const valorNF = totaisNF ? totaisNF.valorTotalNf : 0;
+            listaNFs.append(`<li class="list-group-item">NF ${nf.numeroNF} (${formatarMoeda(valorNF)})</li>`);
+            return sum + valorNF;
+        }, 0);
+        
+        block.data('total-notas', totalNotasGrupo);
+        block.find('.total-notas-valor').text(formatarMoeda(totalNotasGrupo));
+        
+        const selectCotacao = block.find('.select-cotacao-fornecedor');
+        const cotacoesDoFornecedor = todasAsCotacoes.filter(c => normalizarCNPJ(c.fornecedorCnpj) === grupo.cnpj);
+
+        if (cotacoesDoFornecedor.length > 0) {
+            cotacoesDoFornecedor.forEach(c => {
+                selectCotacao.append(new Option(`ID ${c.idCotacao} - ${c.fornecedor} (${c.dataAbertura})`, c.compositeKey));
+            });
+            selectCotacao.prop('disabled', false);
+        } else {
+            selectCotacao.append(new Option('Nenhuma cotação aberta encontrada', '', true, true));
+        }
+
+        containerFornecedores.append(block);
+        atualizarTotaisFornecedor(block);
+    });
+
+    $('.select-cotacao-fornecedor').select2({
+        theme: "bootstrap-5",
+        dropdownParent: $('#area-conciliacao'),
+        width: '100%'
     });
 
     $('#card-selecao').addClass('d-none');
+    $('#area-conciliacao').removeClass('d-none');
     toggleLoader(false);
-    
-    if (nfsParaConciliar.length > 0) {
-      new bootstrap.Collapse(accordionContainer.find('.accordion-collapse').first(), { toggle: true });
+}
+
+function atualizarTotaisFornecedor(block) {
+    const totalNotas = block.data('total-notas') || 0;
+    let totalConciliado = 0;
+
+    block.find('.comparison-table-body tr').each(function() {
+        const row = $(this);
+        const select = row.find('.select-item-match');
+        if (select.val()) {
+            const itemNF = select.find('option:selected').data('item-nf-info');
+            if (itemNF) {
+                const subtotalItem = itemNF.qtdNF * itemNF.precoNF;
+                totalConciliado += subtotalItem;
+            }
+        }
+    });
+
+    const diferenca = totalNotas - totalConciliado;
+
+    block.find('.total-conciliado-valor').text(formatarMoeda(totalConciliado));
+    const diferencaEl = block.find('.diferenca-totais-valor');
+    diferencaEl.text(formatarMoeda(diferenca));
+
+    if (Math.abs(diferenca) < 0.01) {
+        diferencaEl.removeClass('text-danger').addClass('text-success');
+    } else {
+        diferencaEl.removeClass('text-success').addClass('text-danger');
     }
-  }
+}
 
-  function onFailure(error) {
-    console.error('Erro na chamada ao servidor:', error);
-    alert('Ocorreu um erro: ' + error.message);
-    toggleLoader(false);
-  }
-  
-  function onAccordionOpen(event) {
-      const accordionItem = $(event.target).closest('.accordion-item');
-      if (accordionItem.data('loaded')) return;
 
-      const nfInfo = accordionItem.data('nf-info');
-      const selectCotacao = accordionItem.find('.select-cotacao-item');
-      const cnpjNormalizadoNF = normalizarCNPJ(nfInfo.cnpjEmitente);
-      const cotacoesFiltradas = todasAsCotacoes.filter(c => normalizarCNPJ(c.fornecedorCnpj) === cnpjNormalizadoNF);
-      
-      selectCotacao.empty().append(new Option('Selecione a cotação...', '', true, true));
-      if(cotacoesFiltradas.length > 0) {
-          cotacoesFiltradas.forEach(c => {
-              selectCotacao.append(new Option(`ID ${c.idCotacao} - ${c.fornecedor} (${c.dataAbertura})`, c.compositeKey));
-          });
-          selectCotacao.prop('disabled', false);
-      } else {
-          selectCotacao.append(new Option('Nenhuma cotação aberta para este fornecedor', '', true, true)).prop('disabled', true);
-      }
-      
-      selectCotacao.select2({ theme: "bootstrap-5", dropdownParent: accordionItem });
-      accordionItem.data('loaded', true);
-  }
-
-  function onAccordionCotacaoChange(event) {
+function onSelectCotacaoFornecedorChange(event) {
     const select = $(event.target);
-    const accordionItem = select.closest('.accordion-item');
-    const comparisonContainer = accordionItem.find('.comparison-container');
-    const totaisContainer = accordionItem.find('.totais-nf-container');
+    const block = select.closest('.fornecedor-block');
+    const comparisonContainer = block.find('.comparison-container');
     const compositeKey = select.val();
-    const nfInfo = accordionItem.data('nf-info'); // Pega o nfInfo completo
 
     if (!compositeKey) {
         comparisonContainer.addClass('d-none');
-        totaisContainer.addClass('d-none');
         return;
     }
-    
-    toggleLoader(true);
-    
+
+    const grupo = block.data('grupo-fornecedor');
     const parts = compositeKey.split('-');
     const idCotacao = parts.shift();
     const nomeFornecedor = parts.join('-');
-    
-    const itensNFFiltrados = todosOsItensNF.filter(item => item.chaveAcesso === nfInfo.chaveAcesso);
-    const itensCotacaoFiltrados = todosOsItensCotacao.filter(item => item.idCotacao == idCotacao && item.fornecedor == nomeFornecedor);
-    const dadosGeraisNFFiltrados = todosOsDadosGeraisNF.filter(total => total.chaveAcesso === nfInfo.chaveAcesso);
 
-    const dadosParaPagina = {
-      nfInfo: nfInfo, // ALTERAÇÃO: Adiciona o nfInfo para ter o número da NF
-      idCotacao: idCotacao,
-      nomeFornecedor: nomeFornecedor,
-      chavesAcessoNF: [nfInfo.chaveAcesso],
-      itensCotacao: itensCotacaoFiltrados,
-      itensNF: itensNFFiltrados,
-      dadosGeraisNF: dadosGeraisNFFiltrados
-    };
+    const chavesAcessoNesteGrupo = grupo.nfs.map(nf => nf.chaveAcesso);
+    const itensNFNesteGrupo = todosOsItensNF.filter(item => chavesAcessoNesteGrupo.includes(item.chaveAcesso));
+    const itensCotacaoSelecionada = todosOsItensCotacao.filter(item => item.idCotacao == idCotacao && item.fornecedor == nomeFornecedor);
 
-    onCompareSuccess({ success: true, dados: dadosParaPagina }, accordionItem);
-  }
+    construirTabelaComparacao(block, itensCotacaoSelecionada, itensNFNesteGrupo);
+    comparisonContainer.removeClass('d-none');
+    atualizarTotaisFornecedor(block);
+}
 
-  function onCompareSuccess(response, accordionItem) {
-      toggleLoader(false);
-      if (!response.success) {
-          onFailure(response);
-          return;
-      }
-      const dados = response.dados;
-      accordionItem.data('dados-comparacao', dados); // Salva todos os dados, incluindo nfInfo
+function construirTabelaComparacao(block, itensCotacao, itensNF) {
+    const tbody = block.find('.comparison-table-body');
+    tbody.empty();
 
-      const totaisContainer = accordionItem.find('.totais-nf-container');
-      const totaisNF = dados.dadosGeraisNF && dados.dadosGeraisNF[0] ? dados.dadosGeraisNF[0] : null;
-
-      if (totaisNF) {
-        const impostosSum = (totaisNF.totalValorIcms || 0) + (totaisNF.totalValorIcmsSt || 0) + (totaisNF.totalValorPis || 0) + (totaisNF.totalValorCofins || 0);
-        totaisContainer.find('.total-produtos').text(formatarMoeda(totaisNF.totalValorProdutos));
-        totaisContainer.find('.total-frete').text(formatarMoeda(totaisNF.totalValorFrete));
-        totaisContainer.find('.total-ipi').text(formatarMoeda(totaisNF.totalValorIpi));
-        totaisContainer.find('.total-outras').text(formatarMoeda(totaisNF.totalOutrasDespesas));
-        totaisContainer.find('.total-desconto').text(formatarMoeda(totaisNF.totalValorDesconto));
-        totaisContainer.find('.total-impostos').text(formatarMoeda(impostosSum));
-        totaisContainer.find('.valor-total').text(formatarMoeda(totaisNF.valorTotalNf));
-        totaisContainer.removeClass('d-none');
-      }
-
-      construirTabelaComparacao(accordionItem, dados.itensNF, dados.itensCotacao);
-      accordionItem.find('.comparison-container').removeClass('d-none');
-  }
-
-  function construirTabelaComparacao(accordionItem, itensNF, itensCotacao) {
-      const tbody = accordionItem.find('.comparison-table-body');
-      tbody.empty();
-      
-      itensNF.forEach((itemNF, index) => {
-        const subtotalNF = itemNF.qtdNF * itemNF.precoNF;
+    itensCotacao.forEach((itemCot, index) => {
         const rowHTML = `
-          <tr data-item-nf-index="${index}">
-            <td>${itemNF.descricaoNF}</td>
-            <td class="dados-condensados text-end">
-              <div><small>Qtd:</small> <span>${itemNF.qtdNF.toFixed(2)}</span></div>
-              <div><small>Preço:</small> <span>${formatarMoeda(itemNF.precoNF)}</span></div>
-              <div><small>Subtotal:</small> <strong class="text-primary">${formatarMoeda(subtotalNF)}</strong></div>
-            </td>
-            <td><select class="form-select select-item-match"></select></td>
-            <td class="dados-condensados text-end">
-              <div><small>Qtd Pedida:</small> <span class="cot-qtd"></span></div>
-              <div><small>Preço Unit.:</small> <span class="cot-preco"></span></div>
-              <div><small>Preço Fator:</small> <span class="cot-preco-fator"></span></div>
-            </td>
-            <td class="dados-condensados text-center">
-              <div><small>Div. Preço:</small> <span class="divergencia-preco fw-bold"></span></div>
-              <div><small>Div. Qtd:</small> <span class="divergencia-qtd fw-bold"></span></div>
-            </td>
-          </tr>
-        `;
+      <tr data-item-cot-index="${index}">
+        <td>${itemCot.subProduto}</td>
+        <td class="dados-condensados text-end">
+          <div><small>Qtd Pedida:</small> <span>${itemCot.qtdComprar.toFixed(2)}</span></div>
+          <div><small>Preço Unit.:</small> <span>${formatarMoeda(itemCot.preco)}</span></div>
+          <div><small>Preço Fator:</small> <span>${formatarMoeda(itemCot.precoPorFator)}</span></div>
+        </td>
+        <td><select class="form-select form-select-sm select-item-match"></select></td>
+        <td class="dados-condensados text-end">
+          <div><small>NF:</small> <span class="nf-numero"></span></div>
+          <div><small>Qtd:</small> <span class="nf-qtd"></span></div>
+          <div><small>Preço:</small> <span class="nf-preco"></span></div>
+        </td>
+        <td class="dados-condensados text-center">
+          <div><small>Div. Preço:</small> <span class="divergencia-preco fw-bold"></span></div>
+          <div><small>Div. Qtd:</small> <span class="divergencia-qtd fw-bold"></span></div>
+        </td>
+      </tr>
+    `;
         const row = $(rowHTML);
-        
+        row.data('item-cot-info', itemCot);
+
         const selectMatch = row.find('.select-item-match');
-        selectMatch.append(new Option('Escolha o item...', '', true, true));
-        itensCotacao.forEach((itemCot, cotIndex) => {
-            const optionText = `${itemCot.subProduto} (Qtd: ${itemCot.qtdComprar.toFixed(2)})`;
-            const option = new Option(optionText, cotIndex);
-            $(option).data('item-cot', itemCot);
+        selectMatch.append(new Option('Não conciliar', '', true, true));
+        itensNF.forEach((itemNF, nfIndex) => {
+            const nfOrigem = todasAsNFs.find(nf => nf.chaveAcesso === itemNF.chaveAcesso);
+            const optionText = `NF ${nfOrigem.numeroNF} - ${itemNF.descricaoNF} (Qtd: ${itemNF.qtdNF.toFixed(2)})`;
+            const option = new Option(optionText, nfIndex);
+            $(option).data('item-nf-info', itemNF);
             selectMatch.append(option);
         });
-        
+
         tbody.append(row);
-      });
+    });
 
-      tbody.find('.select-item-match').select2({ theme: "bootstrap-5", allowClear: true, dropdownParent: accordionItem })
-        .on('change', onMatchItem);
-  }
+    tbody.find('.select-item-match').select2({
+        theme: "bootstrap-5",
+        allowClear: true,
+        dropdownParent: block,
+        width: '100%'
+    });
+}
 
-  function onMatchItem(event) {
+function onMatchItemChange(event) {
     const select = $(event.target);
     const selectedOption = select.find('option:selected');
     const row = select.closest('tr');
-    
-    row.find('.cot-qtd, .cot-preco, .cot-preco-fator, .divergencia-preco, .divergencia-qtd').empty().removeClass('text-success text-danger text-warning');
+    const block = select.closest('.fornecedor-block');
 
-    if (!select.val()) return;
-    
-    const itemCotacao = $(selectedOption).data('item-cot');
-    const accordionItem = row.closest('.accordion-item');
-    const dadosComparacao = accordionItem.data('dados-comparacao');
-    const itemNFIndex = row.data('item-nf-index');
-    const itemNF = dadosComparacao.itensNF[itemNFIndex];
-    
-    row.find('.cot-qtd').text(itemCotacao.qtdComprar.toFixed(2));
-    row.find('.cot-preco').text(formatarMoeda(itemCotacao.preco));
-    row.find('.cot-preco-fator').text(formatarMoeda(itemCotacao.precoPorFator));
+    row.find('.nf-numero, .nf-qtd, .nf-preco, .divergencia-preco, .divergencia-qtd').empty().removeClass('text-success text-danger text-warning');
 
-    const diffPreco = itemNF.precoNF - itemCotacao.preco;
-    const diffPrecoFator = itemNF.precoNF - itemCotacao.precoPorFator;
+    if (!select.val()) {
+        atualizarTotaisFornecedor(block);
+        return;
+    }
+
+    const itemCotacao = row.data('item-cot-info');
+    const itemNF = $(selectedOption).data('item-nf-info');
+    const nfOrigem = todasAsNFs.find(nf => nf.chaveAcesso === itemNF.chaveAcesso);
+
+    row.find('.nf-numero').text(nfOrigem.numeroNF);
+    row.find('.nf-qtd').text(itemNF.qtdNF.toFixed(2));
+    row.find('.nf-preco').text(formatarMoeda(itemNF.precoNF));
+
+    const diffPreco = itemNF.precoNF - itemCotacao.precoPorFator;
     const elDivPreco = row.find('.divergencia-preco');
-    if (Math.abs(diffPreco) < 0.01 || Math.abs(diffPrecoFator) < 0.01) {
+    if (Math.abs(diffPreco) < 0.01) {
         elDivPreco.text('OK').addClass('text-success');
     } else {
-        elDivPreco.text(formatarMoeda(Math.abs(diffPreco) < Math.abs(diffPrecoFator) ? diffPreco : diffPrecoFator)).addClass('text-danger');
+        elDivPreco.text(formatarMoeda(diffPreco)).addClass(diffPreco > 0 ? 'text-danger' : 'text-warning');
     }
 
     const diffQtd = itemNF.qtdNF - itemCotacao.qtdComprar;
     const elDivQtd = row.find('.divergencia-qtd');
     if (Math.abs(diffQtd) < 0.001) {
         elDivQtd.text('OK').addClass('text-success');
-    } else if (diffQtd < 0) {
-        elDivQtd.text(`${diffQtd.toFixed(2)}`).addClass('text-danger');
     } else {
-        elDivQtd.text(`+${diffQtd.toFixed(2)}`).addClass('text-warning');
+        elDivQtd.text(diffQtd.toFixed(2)).addClass(diffQtd > 0 ? 'text-warning' : 'text-danger');
     }
-  }
-
-  function onBtnSaveAccordionClick(event) {
-    const accordionItem = $(event.target).closest('.accordion-item');
-    const dadosComparacao = accordionItem.data('dados-comparacao');
-    if (!dadosComparacao) return;
-
-    toggleLoader(true);
-    const resultado = {
-      idCotacao: dadosComparacao.idCotacao,
-      nomeFornecedor: dadosComparacao.nomeFornecedor,
-      numeroNF: dadosComparacao.nfInfo.numeroNF, // ALTERAÇÃO: Passa o número da NF
-      chavesAcessoNF: dadosComparacao.chavesAcessoNF,
-      itensConciliados: []
-    };
     
-    const itensCotacaoConciliados = new Set();
-    const indicesItensNfConciliados = new Set();
+    atualizarTotaisFornecedor(block);
+}
 
-    accordionItem.find('.comparison-table-body tr').each(function() {
-      const row = $(this);
-      const selectedMatch = row.find('.select-item-match option:selected');
-      if (selectedMatch.val()) {
-          const itemCot = $(selectedMatch).data('item-cot');
-          const itemNfIndex = row.data('item-nf-index');
-          const itemNF = dadosComparacao.itensNF[itemNfIndex];
+// == Funções de Salvamento e Modal Final ==
 
-          itensCotacaoConciliados.add(itemCot.subProduto);
-          indicesItensNfConciliados.add(itemNfIndex);
+function onBtnSalvarTudoClick() {
+    const dadosParaResumo = {
+        conciliacoes: [],
+        itensNaoConciliadosNF: [],
+        itensNaoConciliadosCotacao: []
+    };
 
-          resultado.itensConciliados.push({
-            subProduto: itemCot.subProduto,
-            divergenciaNota: formatarMoeda(itemNF.precoNF - itemCot.preco),
-            quantidadeNota: itemNF.qtdNF,
-            precoNota: itemNF.precoNF
-          });
-      }
+    const todosItensNFAssociados = new Set();
+    const todosItensCotacaoAssociados = new Set();
+
+    $('.fornecedor-block').each(function() {
+        const block = $(this);
+        const grupo = block.data('grupo-fornecedor');
+        const compositeKeyCotacao = block.find('.select-cotacao-fornecedor').val();
+
+        if (!compositeKeyCotacao) return;
+
+        const parts = compositeKeyCotacao.split('-');
+        const idCotacao = parts.shift();
+        const nomeFornecedor = parts.join('-');
+
+        const conciliacaoAtual = {
+            idCotacao: idCotacao,
+            nomeFornecedor: nomeFornecedor,
+            numeroNF: grupo.nfs.map(n => n.numeroNF).join(', '),
+            chavesAcessoNF: grupo.nfs.map(n => n.chaveAcesso),
+            itensConciliados: []
+        };
+        
+        block.find('.comparison-table-body tr').each(function() {
+            const row = $(this);
+            const select = row.find('.select-item-match');
+            if (select.val()) {
+                const itemCot = row.data('item-cot-info');
+                const itemNF = select.find('option:selected').data('item-nf-info');
+                
+                conciliacaoAtual.itensConciliados.push({
+                    subProduto: itemCot.subProduto,
+                    divergenciaNota: formatarMoeda(itemNF.precoNF - itemCot.precoPorFator),
+                    quantidadeNota: itemNF.qtdNF,
+                    precoNota: itemNF.precoNF
+                });
+                
+                todosItensNFAssociados.add(`${itemNF.chaveAcesso}-${itemNF.numeroItem}`);
+                todosItensCotacaoAssociados.add(`${itemCot.idCotacao}-${itemCot.fornecedor}-${itemCot.subProduto}`);
+            }
+        });
+
+        if (conciliacaoAtual.itensConciliados.length > 0) {
+            dadosParaResumo.conciliacoes.push(conciliacaoAtual);
+        }
+        
+        const itensCotacaoDoGrupo = todosOsItensCotacao.filter(item => item.idCotacao == idCotacao && item.fornecedor == nomeFornecedor);
+        itensCotacaoDoGrupo.forEach(item => {
+            const key = `${item.idCotacao}-${item.fornecedor}-${item.subProduto}`;
+            if (!todosItensCotacaoAssociados.has(key)) {
+                dadosParaResumo.itensNaoConciliadosCotacao.push(item);
+            }
+        });
     });
 
-    // LÓGICA DO RESUMO PÓS-CONCILIAÇÃO
-    const itensSomenteCotacao = dadosComparacao.itensCotacao.filter(item => !itensCotacaoConciliados.has(item.subProduto));
-    const itensSomenteNF = dadosComparacao.itensNF.filter((item, index) => !indicesItensNfConciliados.has(index));
+    const chavesNFsSelecionadas = new Set();
+    $('.fornecedor-block').each(function(){
+      $(this).data('grupo-fornecedor').nfs.forEach(nf => chavesNFsSelecionadas.add(nf.chaveAcesso));
+    });
+
+    const todosItensNFSelecionados = todosOsItensNF.filter(item => chavesNFsSelecionadas.has(item.chaveAcesso));
+    todosItensNFSelecionados.forEach(item => {
+        const key = `${item.chaveAcesso}-${item.numeroItem}`;
+        if (!todosItensNFAssociados.has(key)) {
+            dadosParaResumo.itensNaoConciliadosNF.push(item);
+        }
+    });
     
-    const dadosResumo = {
-        idCotacao: dadosComparacao.idCotacao,
-        nomeFornecedor: dadosComparacao.nomeFornecedor,
-        itensSomenteCotacao,
-        itensSomenteNF
-    };
+    $('#resumoModal').data('dados-lote', dadosParaResumo);
+    prepararEExibirModalResumo(dadosParaResumo);
+}
 
-    google.script.run
-        .withSuccessHandler(res => onSaveSuccess(res, accordionItem, dadosResumo))
-        .withFailureHandler(onFailure)
-        .ConciliacaoNFController_salvarConciliacao(resultado);
-  }
+function prepararEExibirModalResumo(dadosResumo) {
+    const container = $('#resumo-container');
+    container.empty();
 
-  function onSaveSuccess(response, accordionItem, dadosResumo) {
-    toggleLoader(false);
-    if (response.success) {
-        // Atualiza a UI do accordion
-        accordionItem.find('.accordion-button').addClass('bg-success-subtle');
-        accordionItem.find('.status-badge').text('Conciliado').removeClass('d-none text-bg-light').addClass('text-bg-success');
-        const collapse = bootstrap.Collapse.getInstance(accordionItem.find('.accordion-collapse'));
-        if (collapse) collapse.hide();
-        accordionItem.find('.action-buttons').remove(); // Remove botões para evitar re-salvar
-
-        // Prepara e exibe o modal de resumo
-        prepararEExibirModalResumo(dadosResumo, response.message);
-    } else {
-        onFailure(response);
-    }
-  }
-
-  function prepararEExibirModalResumo(dadosResumo, mensagemSucesso) {
-    $('#resumo-status-message').text(mensagemSucesso);
-    const modal = $('#resumoModal');
+    const resumoPorFornecedor = {};
     
-    // Armazena os dados no modal para uso posterior
-    modal.data('dados-resumo', dadosResumo);
+    dadosResumo.itensNaoConciliadosCotacao.forEach(item => {
+        const key = item.fornecedor;
+        if (!resumoPorFornecedor[key]) resumoPorFornecedor[key] = { cotacao: [], nf: [] };
+        resumoPorFornecedor[key].cotacao.push(item);
+    });
 
-    const listaNf = $('#lista-itens-nao-conciliados-nf');
-    listaNf.empty();
-    if (dadosResumo.itensSomenteNF.length > 0) {
-        dadosResumo.itensSomenteNF.forEach(item => {
-            listaNf.append(`<li class="list-group-item">${item.descricaoNF} (Qtd: ${item.qtdNF.toFixed(2)})</li>`);
-        });
-        $('#collapseResumoNF').collapse('show');
-    } else {
-        listaNf.append('<li class="list-group-item text-muted">Todos os itens da nota foram conciliados.</li>');
-        $('#collapseResumoNF').collapse('hide');
-    }
+    dadosResumo.itensNaoConciliadosNF.forEach(item => {
+        const nf = todasAsNFs.find(n => n.chaveAcesso === item.chaveAcesso);
+        const key = nf.nomeEmitente;
+        if (!resumoPorFornecedor[key]) resumoPorFornecedor[key] = { cotacao: [], nf: [] };
+        resumoPorFornecedor[key].nf.push(item);
+    });
 
-    const listaCotacao = $('#lista-itens-nao-conciliados-cotacao');
-    listaCotacao.empty();
-    if (dadosResumo.itensSomenteCotacao.length > 0) {
-        dadosResumo.itensSomenteCotacao.forEach((item, index) => {
-            const li = `
-                <li class="list-group-item">
-                    <input class="form-check-input me-1" type="checkbox" value="${item.subProduto}" id="check-cortado-${index}">
-                    <label class="form-check-label" for="check-cortado-${index}">${item.subProduto} (Qtd Pedida: ${item.qtdComprar.toFixed(2)})</label>
-                </li>`;
-            listaCotacao.append(li);
-        });
-        $('#collapseResumoCotacao').collapse('show');
-    } else {
-        listaCotacao.append('<li class="list-group-item text-muted">Todos os itens do pedido foram recebidos.</li>');
-        $('#collapseResumoCotacao').collapse('hide');
-    }
+    Object.keys(resumoPorFornecedor).forEach((nomeFornecedor, index) => {
+        const dados = resumoPorFornecedor[nomeFornecedor];
+        let html = `
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header"><strong>Fornecedor: ${nomeFornecedor}</strong></div>
+                    <div class="card-body">
+        `;
+
+        if (dados.cotacao.length > 0) {
+            html += `<h6>Itens da Cotação não recebidos:</h6><ul class="list-group mb-3">`;
+            dados.cotacao.forEach((item, i) => {
+                html += `
+                    <li class="list-group-item">
+                        <input class="form-check-input me-1 item-cortado-check" type="checkbox" value="${item.subProduto}" id="cot-${index}-${i}"
+                               data-id-cotacao="${item.idCotacao}" data-fornecedor="${item.fornecedor}" data-subproduto="${item.subProduto}">
+                        <label class="form-check-label" for="cot-${index}-${i}">${item.subProduto} (Pedido: ${item.qtdComprar.toFixed(2)})</label>
+                    </li>
+                `;
+            });
+            html += `</ul>`;
+        } else {
+            html += `<p class="text-muted">Todos os itens da cotação foram recebidos.</p>`;
+        }
+        
+        if (dados.nf.length > 0) {
+            html += `<h6>Itens da NF não associados:</h6><ul class="list-group">`;
+            dados.nf.forEach(item => {
+                const nf = todasAsNFs.find(n => n.chaveAcesso === item.chaveAcesso);
+                html += `<li class="list-group-item text-muted">NF ${nf.numeroNF}: ${item.descricaoNF} (Qtd: ${item.qtdNF.toFixed(2)})</li>`;
+            });
+            html += `</ul>`;
+        }
+
+        html += `</div></div></div>`;
+        container.append(html);
+    });
     
     resumoModalInstance.show();
-  }
+}
 
-  function onBtnMarcarCortadoClick() {
-      toggleLoader(true);
-      const modal = $('#resumoModal');
-      const dadosResumo = modal.data('dados-resumo');
-      const subProdutosCortados = [];
-      
-      $('#lista-itens-nao-conciliados-cotacao .form-check-input:checked').each(function() {
-          subProdutosCortados.push($(this).val());
-      });
+function onBtnConfirmarCortadosESalvarClick() {
+    toggleLoader(true);
+    resumoModalInstance.hide();
 
-      const dadosParaEnviar = {
-          idCotacao: dadosResumo.idCotacao,
-          nomeFornecedor: dadosResumo.nomeFornecedor,
-          subProdutosCortados: subProdutosCortados
-      };
+    const dadosLote = $('#resumoModal').data('dados-lote');
+    
+    const itensCortados = [];
+    $('.item-cortado-check:checked').each(function() {
+        const check = $(this);
+        itensCortados.push({
+            idCotacao: check.data('id-cotacao'),
+            nomeFornecedor: check.data('fornecedor'),
+            subProduto: check.data('subproduto')
+        });
+    });
 
-      google.script.run
-          .withSuccessHandler(response => {
-              toggleLoader(false);
-              if(response.success) {
-                  alert(response.message);
-                  resumoModalInstance.hide();
-              } else {
-                  onFailure(response);
-              }
-          })
-          .withFailureHandler(onFailure)
-          .ConciliacaoNFController_marcarItensCortados(dadosParaEnviar);
-  }
-  
-  function onBtnCancelAccordionClick(event) {
-    const accordionItem = $(event.target).closest('.accordion-item');
-    accordionItem.find('.select-cotacao-item').val('').trigger('change');
-    accordionItem.find('.comparison-container').addClass('d-none');
-    accordionItem.find('.totais-nf-container').addClass('d-none');
-    accordionItem.find('.comparison-table-body').empty();
-  }
+    const payloadFinal = {
+        conciliacoes: dadosLote.conciliacoes,
+        itensCortados: itensCortados
+    };
+    
+    google.script.run
+        .withSuccessHandler(response => {
+            if (response.success) {
+                console.log(response.message);
+                resetToInitialState(); // MODIFICADO
+            } else {
+                toggleLoader(false);
+                onFailure(response);
+            }
+        })
+        .withFailureHandler(error => {
+            toggleLoader(false);
+            onFailure(error);
+        })
+        .ConciliacaoNFController_salvarConciliacaoEmLote(payloadFinal);
+}
+
 </script>

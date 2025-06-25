@@ -193,63 +193,40 @@ function ConciliacaoNFController_realizarComparacao(compositeKeyCotacao, chavesA
 }
 
 /**
- * [FUNÇÃO ALTERADA] 
- * Salva o resultado da conciliação e passa o número da NF para a função CRUD.
- * @param {object} dadosConciliacao - O objeto de resultado.
- * @returns {object} Objeto com { success: boolean, message: string|null }.
- */
-function ConciliacaoNFController_salvarConciliacao(dadosConciliacao) {
-  try {
-    const { idCotacao, nomeFornecedor, numeroNF, chavesAcessoNF, itensConciliados } = dadosConciliacao;
-    Logger.log(`Salvando conciliação para Cotação ID: ${idCotacao}, NF: ${numeroNF}`);
-
-    // ALTERAÇÃO: Passa o numeroNF para a função de atualização
-    const sucessoCotacoes = ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, numeroNF, itensConciliados);
-    if (!sucessoCotacoes) {
-        throw new Error("Falha ao atualizar a planilha de cotações.");
-    }
-    
-    const sucessoNF = ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao, "Conciliada");
-    if (!sucessoNF) {
-        throw new Error("Falha ao atualizar a planilha de notas fiscais.");
-    }
-
-    Logger.log("Conciliação salva com sucesso.");
-    return { success: true, message: "Conciliação salva com sucesso!" };
-
-  } catch (e) {
-    Logger.log(`ERRO em ConciliacaoNFController_salvarConciliacao: ${e.toString()}\n${e.stack}`);
-    return { success: false, message: e.message };
-  }
-}
-
-/**
  * [NOVA FUNÇÃO]
- * Recebe a lista de itens da cotação que não foram conciliados e os marca como 'Cortado'.
- * @param {object} dados - Objeto contendo { idCotacao, nomeFornecedor, subProdutosCortados }.
+ * Recebe um grande objeto do cliente com todas as conciliações e itens cortados
+ * e orquestra o salvamento em lote.
+ * @param {object} dadosLote - Objeto contendo { conciliacoes: Array, itensCortados: Array }.
  * @returns {object} Objeto com { success: boolean, message: string }.
  */
-function ConciliacaoNFController_marcarItensCortados(dados) {
+function ConciliacaoNFController_salvarConciliacaoEmLote(dadosLote) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return { success: false, message: 'Outro processo de salvamento já está em execução. Tente novamente em alguns instantes.' };
+  }
+
   try {
-    const { idCotacao, nomeFornecedor, subProdutosCortados } = dados;
-    if (!idCotacao || !nomeFornecedor || !Array.isArray(subProdutosCortados)) {
-      throw new Error("Dados inválidos para marcar itens como cortados.");
+    Logger.log("Recebidos dados para salvamento em lote.");
+    const { conciliacoes, itensCortados } = dadosLote;
+
+    if (!Array.isArray(conciliacoes) || !Array.isArray(itensCortados)) {
+      throw new Error("Formato de dados inválido para salvamento em lote.");
     }
 
-    const sucesso = ConciliacaoNFCrud_marcarItensComoCortado(idCotacao, nomeFornecedor, subProdutosCortados);
+    const sucesso = ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados);
+
     if (!sucesso) {
-      throw new Error("Falha ao atualizar o status dos itens para 'Cortado' na planilha.");
+      throw new Error("Ocorreu uma falha no backend ao tentar salvar os dados nas planilhas.");
     }
 
-    const message = subProdutosCortados.length > 0
-      ? `${subProdutosCortados.length} iten(s) foram marcados como 'Cortado'.`
-      : 'Nenhum item foi marcado como cortado.';
-    
-    return { success: true, message: message };
+    Logger.log("Salvamento em lote concluído com sucesso.");
+    return { success: true, message: "Todas as conciliações e itens cortados foram salvos com sucesso!" };
 
   } catch (e) {
-    Logger.log(`ERRO em ConciliacaoNFController_marcarItensCortados: ${e.toString()}\n${e.stack}`);
+    Logger.log(`ERRO em ConciliacaoNFController_salvarConciliacaoEmLote: ${e.toString()}\n${e.stack}`);
     return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
   }
 }
 

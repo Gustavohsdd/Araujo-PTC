@@ -10,10 +10,8 @@
     .container-main { max-width: 1800px; }
     .card { margin-top: 20px; }
     .loading-spinner { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.8); z-index: 1060; display: flex; justify-content: center; align-items: center; }
-    .table-responsive { max-height: 60vh; }
-    .nf-card-items-table { font-size: 0.8rem; max-height: 150px; overflow-y: auto; }
-    .accordion-button:not(.collapsed) { background-color: #e7f1ff; }
-    .status-badge { font-size: 0.9rem; margin-left: 15px; }
+    .table-responsive { max-height: 150px; overflow-y: auto; }
+    .nf-card-items-table { font-size: 0.8rem; }
     .card-header .form-check { margin-bottom: 0; }
     .card-header-main { display: flex; justify-content: space-between; align-items: center; }
     .nf-title { font-size: 0.9rem; font-weight: bold; }
@@ -24,6 +22,16 @@
     .card-header .form-switch .form-check-label { font-size: 0.8rem; }
     #resumoModal .list-group-item { font-size: 0.9rem; }
     #resumoModal .form-check-label { margin-left: 0.5rem; }
+
+    /* == NOVOS ESTILOS PARA MELHORIAS == */
+    .fornecedor-block h5 { font-size: 1.0rem; font-weight: bold; color: #495057; } /* Letra menor para títulos */
+    .nome-fornecedor { font-size: 1.25rem; } /* Letra menor para nome do fornecedor */
+    .comparison-container .table-responsive { max-height: 65vh; } /* Altura maior para a tabela de itens */
+    .comparison-table-body td, .comparison-table-body .dados-condensados { font-size: 0.8rem; } /* Letra menor nos itens */
+    .dados-condensados div { line-height: 1.3; }
+    .lista-nfs-fornecedor .list-group-item { font-size: 0.85rem; padding: 0.4rem 0.8rem; } /* Letra menor na lista de NFs */
+    .totais-bloco { font-size: 1.0rem; } /* Tamanho da fonte para o bloco de totais */
+    .totais-bloco strong { font-size: 1.1rem; }
   </style>
 </head>
 <body>
@@ -34,6 +42,7 @@
   </div>
 
   <div class="container-main mt-4">
+    <!-- ETAPA 1: SELEÇÃO DE NOTAS -->
     <div class="card shadow-sm" id="card-selecao">
       <div class="card-header bg-primary text-white card-header-main">
         <h3 class="mb-0">Central de Conciliação</h3>
@@ -50,26 +59,35 @@
         </div>
       </div>
       <div class="card-body">
-        <div id="etapa-selecao">
+        <div id="etapa-selecao-notas">
           <label class="form-label fw-bold pt-3">1. Selecione as Notas Fiscais a serem processadas</label>
           <div id="nf-cards-container" class="row">
-            </div>
+            <!-- Cards das NFs serão inseridos aqui via JS -->
+          </div>
           <div class="text-center mt-4">
-            <button id="btn-processar-selecao" class="btn btn-primary btn-lg" disabled>Processar Seleção</button>
+            <button id="btn-processar-selecao" class="btn btn-primary btn-lg" disabled>Conciliar Notas Selecionadas</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="accordion" id="accordion-container">
+    <!-- ETAPA 2: ÁREA DE CONCILIAÇÃO POR FORNECEDOR -->
+    <div id="area-conciliacao" class="d-none">
+       <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2><span class="text-primary">Área de Conciliação</span></h2>
+        <div>
+          <button id="btn-cancelar-conciliacao" class="btn btn-secondary btn-lg me-2">Cancelar e Voltar</button>
+          <button id="btn-salvar-tudo" class="btn btn-success btn-lg">Salvar Todas as Conciliações</button>
+        </div>
+      </div>
+      <div id="container-fornecedores">
+        <!-- Blocos de fornecedores serão inseridos aqui via JS -->
+      </div>
     </div>
 
-    <!-- BOTÃO FINALIZAR ADICIONADO AQUI -->
-    <div class="text-center my-4">
-        <button id="btn-finalizar-voltar" class="btn btn-secondary btn-lg">Finalizar e Voltar ao Início</button>
-    </div>
   </div>
 
+  <!-- TEMPLATE: CARD DA NOTA FISCAL (ETAPA 1) -->
   <template id="template-nf-card">
     <div class="col-xl-4 col-lg-6 mb-4">
       <div class="card h-100" data-chave-acesso="">
@@ -90,8 +108,8 @@
           </div>
           <hr class="my-2">
           <p class="mb-1 fw-bold" style="font-size: 0.9rem;">Itens da Nota Fiscal:</p>
-          <div class="table-responsive nf-card-items-table">
-            <table class="table table-sm table-striped">
+          <div class="table-responsive">
+            <table class="table table-sm table-striped nf-card-items-table">
               <thead>
                 <tr><th>Descrição</th><th class="text-end">Qtd</th><th class="text-end">Preço Unit.</th></tr>
               </thead>
@@ -103,108 +121,71 @@
     </div>
   </template>
   
-  <template id="template-accordion-item">
-    <div class="accordion-item">
-      <h2 class="accordion-header">
-        <button class="accordion-button" type="button" data-bs-toggle="collapse">
-          <span class="header-text"></span>
-          <span class="badge rounded-pill text-bg-light status-badge d-none"></span>
-        </button>
-      </h2>
-      <div class="accordion-collapse collapse">
-        <div class="accordion-body">
-          <div class="mb-3">
-              <label class="form-label fw-bold">2. Selecione a Cotação correspondente para esta NF</label>
-              <select class="form-select select-cotacao-item" disabled>
-                <option selected disabled>Carregando cotações...</option>
-              </select>
-          </div>
-          <hr>
-          <div class="row g-3 mb-4 p-3 bg-light border rounded totais-nf-container d-none">
-            <h5><strong class="text-primary">Totais da Nota Fiscal</strong></h5>
-            <div class="col-md-3"><strong>Produtos:</strong> <span class="total-produtos"></span></div>
-            <div class="col-md-3"><strong>Frete:</strong> <span class="total-frete"></span></div>
-            <div class="col-md-3"><strong>IPI:</strong> <span class="total-ipi"></span></div>
-            <div class="col-md-3"><strong>Outras Desp.:</strong> <span class="total-outras"></span></div>
-            <div class="col-md-3"><strong>Desconto:</strong> <span class="total-desconto text-danger"></span></div>
-            <div class="col-md-3"><strong>Impostos (ICMS/ST/PIS/COFINS):</strong> <span class="total-impostos"></span></div>
-            <hr class="my-2">
-            <div class="col-md-12 fs-5"><strong>VALOR TOTAL DA NF:</strong> <strong class="valor-total text-success"></strong></div>
-          </div>
-          <div class="comparison-container d-none">
-            <h5><strong class="text-primary">Itens da Nota Fiscal vs. Itens da Cotação</strong></h5>
-            <div class="table-responsive">
-              <table class="table table-bordered table-striped table-hover align-middle">
-                <thead class="table-dark text-center">
-                  <tr>
-                    <th rowspan="2" class="align-middle">Descrição na NF</th>
-                    <th rowspan="2" class="align-middle">Dados da NF</th>
-                    <th rowspan="2" class="align-middle" style="min-width: 300px;">Associar ao Item da Cotação</th>
-                    <th colspan="2">Comparativo com Cotação</th>
-                  </tr>
-                  <tr><th>Dados da Cotação</th><th>Divergências</th></tr>
-                </thead>
-                <tbody class="comparison-table-body"></tbody>
-              </table>
-            </div>
-            <div class="text-center mt-4 action-buttons">
-              <button class="btn btn-secondary btn-cancel">Cancelar</button>
-              <button class="btn btn-success btn-save">Salvar Conciliação desta Nota</button>
-            </div>
-          </div>
+  <!-- TEMPLATE: BLOCO DO FORNECEDOR (ETAPA 2) -->
+  <template id="template-fornecedor-block">
+    <div class="card shadow-sm mb-4 fornecedor-block">
+        <div class="card-header bg-light">
+            <h4 class="mb-0 nome-fornecedor">Nome do Fornecedor</h4>
         </div>
-      </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <h5>Notas Fiscais Selecionadas</h5>
+                    <ul class="list-group lista-nfs-fornecedor"></ul>
+                </div>
+                <div class="col-md-4">
+                    <h5>Cotação Correspondente</h5>
+                    <select class="form-select form-select-sm select-cotacao-fornecedor" disabled>
+                        <option selected disabled>Selecione a cotação...</option>
+                    </select>
+                </div>
+                <div class="col-md-4 totais-bloco align-self-center">
+                    <div class="p-2 border rounded">
+                      <div class="d-flex justify-content-between"><span>Total das Notas:</span> <strong class="total-notas-valor text-info">R$ 0,00</strong></div>
+                      <div class="d-flex justify-content-between"><span>Total Conciliado:</span> <strong class="total-conciliado-valor text-success">R$ 0,00</strong></div>
+                      <hr class="my-1">
+                      <div class="d-flex justify-content-between"><span>Diferença:</span> <strong class="diferenca-totais-valor text-danger">R$ 0,00</strong></div>
+                    </div>
+                </div>
+            </div>
+            <hr class="mt-0">
+            <div class="comparison-container d-none">
+              <div class="table-responsive">
+                <table class="table table-bordered table-striped table-hover align-middle">
+                  <thead class="table-dark text-center">
+                    <tr>
+                      <th rowspan="2" class="align-middle">Item da Cotação</th>
+                      <th rowspan="2" class="align-middle">Dados da Cotação</th>
+                      <th rowspan="2" class="align-middle" style="min-width: 300px;">Associar ao Item da NF</th>
+                      <th colspan="2">Comparativo com NF</th>
+                    </tr>
+                    <tr><th>Dados da NF</th><th>Divergências</th></tr>
+                  </thead>
+                  <tbody class="comparison-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+        </div>
     </div>
   </template>
 
-  <!-- MODAL DE RESUMO ADICIONADO AQUI -->
+  <!-- MODAL DE RESUMO FINAL -->
   <div class="modal fade" id="resumoModal" tabindex="-1" aria-labelledby="resumoModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="resumoModalLabel">Resumo da Conciliação</h5>
+          <h5 class="modal-title" id="resumoModalLabel">Resumo Final da Conciliação</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <div id="resumo-status-message" class="alert alert-info"></div>
-          <div class="accordion" id="accordionResumo">
-            
-            <div class="accordion-item">
-              <h2 class="accordion-header" id="headingResumoNF">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseResumoNF" aria-expanded="false" aria-controls="collapseResumoNF">
-                  Itens da Nota que não foram conciliados
-                </button>
-              </h2>
-              <div id="collapseResumoNF" class="accordion-collapse collapse" aria-labelledby="headingResumoNF">
-                <div class="accordion-body">
-                  <ul id="lista-itens-nao-conciliados-nf" class="list-group">
-                    <!-- Itens serão adicionados via JS -->
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <div class="accordion-item">
-              <h2 class="accordion-header" id="headingResumoCotacao">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseResumoCotacao" aria-expanded="false" aria-controls="collapseResumoCotacao">
-                  Itens da Cotação que não foram conciliados
-                </button>
-              </h2>
-              <div id="collapseResumoCotacao" class="accordion-collapse collapse" aria-labelledby="headingResumoCotacao">
-                <div class="accordion-body">
-                  <p>Marque os itens abaixo que foram cortados pelo fornecedor e não serão entregues.</p>
-                  <ul id="lista-itens-nao-conciliados-cotacao" class="list-group">
-                    <!-- Itens serão adicionados via JS -->
-                  </ul>
-                </div>
-              </div>
-            </div>
-
+          <p>Abaixo estão os itens que não foram associados. Verifique e marque os itens da cotação que foram <strong>cortados</strong> pelo fornecedor.</p>
+          <div id="resumo-container" class="row">
+              <!-- Conteúdo do resumo será gerado via JS -->
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-          <button type="button" class="btn btn-primary" id="btn-marcar-cortado">Confirmar Itens Cortados</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar e Manter Pendente</button>
+          <button type="button" class="btn btn-primary" id="btn-confirmar-cortados-e-salvar">Confirmar Itens Cortados e Salvar Tudo</button>
         </div>
       </div>
     </div>

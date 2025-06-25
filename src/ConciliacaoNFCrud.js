@@ -443,143 +443,122 @@ function ConciliacaoNFCrud_obterPrazoFornecedor(nomeFornecedor) {
 }
 
 /**
- * [FUNÇÃO ALTERADA]
- * Atualiza o status e outros dados dos itens na planilha de Cotações.
- * Agora também salva o número da nota fiscal para os itens conciliados.
- * @param {string|number} idCotacao - O ID da cotação.
- * @param {string} nomeFornecedor - O nome do fornecedor.
- * @param {string} numeroNF - O número da nota fiscal a ser salva.
- * @param {Array<object>} itensConciliados - Lista de itens que foram conciliados.
- * @returns {boolean}
- */
-function ConciliacaoNFCrud_atualizarStatusCotacao(idCotacao, nomeFornecedor, numeroNF, itensConciliados) {
-    try {
-        const planilha = SpreadsheetApp.getActiveSpreadsheet();
-        const aba = planilha.getSheetByName(ABA_COTACOES);
-        const range = aba.getDataRange();
-        const dados = range.getValues();
-        const cabecalhos = dados[0];
-
-        const colId = cabecalhos.indexOf("ID da Cotação");
-        const colForn = cabecalhos.indexOf("Fornecedor");
-        const colSubProd = cabecalhos.indexOf("SubProduto");
-        const colStatusSub = cabecalhos.indexOf("Status do SubProduto");
-        const colDivergencia = cabecalhos.indexOf("Divergencia da Nota");
-        const colQtdNota = cabecalhos.indexOf("Quantidade na Nota");
-        const colPrecoNota = cabecalhos.indexOf("Preço da Nota");
-        // ALTERAÇÃO: Adiciona a coluna para o número da nota
-        const colNumeroNota = cabecalhos.indexOf("Número da Nota");
-
-        if ([colStatusSub, colDivergencia, colQtdNota, colPrecoNota, colNumeroNota].includes(-1)) {
-            throw new Error("Uma ou mais colunas de destino ('Status do SubProduto', 'Divergencia da Nota', 'Quantidade na Nota', 'Preço da Nota', 'Número da Nota') não foram encontradas.");
-        }
-
-        const mapaConciliados = new Map(itensConciliados.map(item => [item.subProduto, item]));
-
-        for (let i = 1; i < dados.length; i++) {
-            if (dados[i][colId] == idCotacao && dados[i][colForn] == nomeFornecedor) {
-                const subProdutoLinha = dados[i][colSubProd];
-
-                if (mapaConciliados.has(subProdutoLinha)) {
-                    const itemConciliado = mapaConciliados.get(subProdutoLinha);
-                    
-                    dados[i][colStatusSub] = "Faturado";
-                    dados[i][colDivergencia] = itemConciliado.divergenciaNota;
-                    dados[i][colQtdNota] = itemConciliado.quantidadeNota;
-                    dados[i][colPrecoNota] = itemConciliado.precoNota;
-                    // ALTERAÇÃO: Salva o número da NF
-                    dados[i][colNumeroNota] = numeroNF;
-                }
-            }
-        }
-        
-        range.setValues(dados);
-        return true;
-    } catch(e) {
-        Logger.log(`Erro em ConciliacaoNFCrud_atualizarStatusCotacao: ${e.toString()}\n${e.stack}`);
-        return false;
-    }
-}
-
-/**
  * [NOVA FUNÇÃO]
- * Marca um ou mais subprodutos de uma cotação específica como 'Cortado'.
- * @param {string|number} idCotacao - O ID da cotação.
- * @param {string} nomeFornecedor - O nome do fornecedor.
- * @param {Array<string>} subProdutosCortados - Um array com os nomes dos subprodutos a serem marcados.
- * @returns {boolean}
+ * Salva todas as alterações de conciliação e itens cortados em lote.
+ * Esta função centraliza as escritas nas planilhas para otimizar a performance.
+ * @param {Array<object>} conciliacoes - Array de objetos, cada um representando uma conciliação.
+ * Formato: { idCotacao, nomeFornecedor, numeroNF, chavesAcessoNF, itensConciliados }
+ * @param {Array<object>} itensCortados - Array de objetos de itens a serem marcados como 'Cortado'.
+ * Formato: { idCotacao, nomeFornecedor, subProduto }
+ * @returns {boolean} - True se sucesso, false se erro.
  */
-function ConciliacaoNFCrud_marcarItensComoCortado(idCotacao, nomeFornecedor, subProdutosCortados) {
-    if (!subProdutosCortados || subProdutosCortados.length === 0) {
-        Logger.log("Nenhum item para marcar como cortado.");
-        return true; // Nenhum trabalho a fazer, então sucesso.
-    }
+function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados) {
+    Logger.log(`Iniciando salvamento em lote. Conciliações: ${conciliacoes.length}, Itens cortados: ${itensCortados.length}`);
     try {
-        const planilha = SpreadsheetApp.getActiveSpreadsheet();
-        const aba = planilha.getSheetByName(ABA_COTACOES);
-        const range = aba.getDataRange();
-        const dados = range.getValues();
-        const cabecalhos = dados[0];
+        const planilhaCotacoes = SpreadsheetApp.getActiveSpreadsheet();
+        const abaCotacoes = planilhaCotacoes.getSheetByName(ABA_COTACOES);
+        const rangeCotacoes = abaCotacoes.getDataRange();
+        const dadosCotacoes = rangeCotacoes.getValues();
+        const cabecalhosCotacoes = dadosCotacoes[0];
 
-        const colId = cabecalhos.indexOf("ID da Cotação");
-        const colForn = cabecalhos.indexOf("Fornecedor");
-        const colSubProd = cabecalhos.indexOf("SubProduto");
-        const colStatusSub = cabecalhos.indexOf("Status do SubProduto");
+        const colMapCotacoes = {
+            id: cabecalhosCotacoes.indexOf("ID da Cotação"),
+            fornecedor: cabecalhosCotacoes.indexOf("Fornecedor"),
+            subProduto: cabecalhosCotacoes.indexOf("SubProduto"),
+            statusSub: cabecalhosCotacoes.indexOf("Status do SubProduto"),
+            divergencia: cabecalhosCotacoes.indexOf("Divergencia da Nota"),
+            qtdNota: cabecalhosCotacoes.indexOf("Quantidade na Nota"),
+            precoNota: cabecalhosCotacoes.indexOf("Preço da Nota"),
+            numeroNota: cabecalhosCotacoes.indexOf("Número da Nota")
+        };
 
-        if (colStatusSub === -1) {
-            throw new Error("A coluna 'Status do SubProduto' não foi encontrada.");
+        if (Object.values(colMapCotacoes).includes(-1)) {
+            throw new Error("Não foi possível encontrar todas as colunas necessárias na aba de Cotações.");
         }
-        
-        const setCortados = new Set(subProdutosCortados);
 
-        for (let i = 1; i < dados.length; i++) {
-            if (dados[i][colId] == idCotacao && dados[i][colForn] == nomeFornecedor) {
-                const subProdutoLinha = dados[i][colSubProd];
-                if (setCortados.has(subProdutoLinha)) {
-                    dados[i][colStatusSub] = "Cortado";
+        // 1. Processar conciliações na planilha de Cotações
+        conciliacoes.forEach(conc => {
+            const mapaItens = new Map(conc.itensConciliados.map(item => [item.subProduto, item]));
+            for (let i = 1; i < dadosCotacoes.length; i++) {
+                if (dadosCotacoes[i][colMapCotacoes.id] == conc.idCotacao && dadosCotacoes[i][colMapCotacoes.fornecedor] == conc.nomeFornecedor) {
+                    const subProdutoLinha = dadosCotacoes[i][colMapCotacoes.subProduto];
+                    if (mapaItens.has(subProdutoLinha)) {
+                        const itemConciliado = mapaItens.get(subProdutoLinha);
+                        dadosCotacoes[i][colMapCotacoes.statusSub] = "Faturado";
+                        dadosCotacoes[i][colMapCotacoes.divergencia] = itemConciliado.divergenciaNota;
+                        dadosCotacoes[i][colMapCotacoes.qtdNota] = itemConciliado.quantidadeNota;
+                        dadosCotacoes[i][colMapCotacoes.precoNota] = itemConciliado.precoNota;
+                        dadosCotacoes[i][colMapCotacoes.numeroNota] = conc.numeroNF; // Usa o primeiro número de NF como referência
+                    }
+                }
+            }
+        });
+
+        // 2. Processar itens cortados na planilha de Cotações
+        const mapaCortados = new Map(); // "id-fornecedor" -> Set de subprodutos
+        itensCortados.forEach(item => {
+            const key = `${item.idCotacao}-${item.nomeFornecedor}`;
+            if (!mapaCortados.has(key)) {
+                mapaCortados.set(key, new Set());
+            }
+            mapaCortados.get(key).add(item.subProduto);
+        });
+
+        for (let i = 1; i < dadosCotacoes.length; i++) {
+            const key = `${dadosCotacoes[i][colMapCotacoes.id]}-${dadosCotacoes[i][colMapCotacoes.fornecedor]}`;
+            if (mapaCortados.has(key)) {
+                const subProdutosCortados = mapaCortados.get(key);
+                const subProdutoLinha = dadosCotacoes[i][colMapCotacoes.subProduto];
+                if (subProdutosCortados.has(subProdutoLinha)) {
+                    dadosCotacoes[i][colMapCotacoes.statusSub] = "Cortado";
                 }
             }
         }
-        
-        range.setValues(dados);
-        Logger.log(`${subProdutosCortados.length} iten(s) marcado(s) como 'Cortado' para a cotação ${idCotacao}.`);
-        return true;
-    } catch(e) {
-        Logger.log(`Erro em ConciliacaoNFCrud_marcarItensComoCortado: ${e.toString()}\n${e.stack}`);
-        return false;
-    }
-}
 
-function ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, idCotacao, status = "Conciliada") {
-    try {
-        const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
-        const aba = planilha.getSheetByName(ABA_NF_NOTAS_FISCAIS);
-        const range = aba.getDataRange();
-        const dados = range.getValues();
-        const cabecalhos = dados[0];
-        
-        const colChave = cabecalhos.indexOf("Chave de Acesso");
-        const colStatus = cabecalhos.indexOf("Status da Conciliação");
-        const colIdCot = cabecalhos.indexOf("ID da Cotação (Sistema)");
+        // Escreve as alterações na planilha de Cotações
+        rangeCotacoes.setValues(dadosCotacoes);
+        Logger.log("Planilha de Cotações atualizada.");
 
-        if (colChave === -1 || colStatus === -1 || colIdCot === -1) {
+        // 3. Atualizar status na planilha de Notas Fiscais
+        const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
+        const abaNF = planilhaNF.getSheetByName(ABA_NF_NOTAS_FISCAIS);
+        const rangeNF = abaNF.getDataRange();
+        const dadosNF = rangeNF.getValues();
+        const cabecalhosNF = dadosNF[0];
+        
+        const colMapNF = {
+            chave: cabecalhosNF.indexOf("Chave de Acesso"),
+            status: cabecalhosNF.indexOf("Status da Conciliação"),
+            idCot: cabecalhosNF.indexOf("ID da Cotação (Sistema)")
+        };
+
+        if (Object.values(colMapNF).includes(-1)) {
             throw new Error("Não foi possível encontrar as colunas necessárias na aba de Notas Fiscais.");
         }
+        
+        const mapaNFs = new Map(); // chaveAcesso -> { status, idCotacao }
+        conciliacoes.forEach(conc => {
+            conc.chavesAcessoNF.forEach(chave => {
+                mapaNFs.set(chave, { status: "Conciliada", idCotacao: conc.idCotacao });
+            });
+        });
 
-        const chavesSet = new Set(chavesAcessoNF);
-
-        for (let i = 1; i < dados.length; i++) {
-            if (chavesSet.has(dados[i][colChave])) {
-                dados[i][colStatus] = status;
-                if (idCotacao) {
-                  dados[i][colIdCot] = idCotacao;
-                }
+        for (let i = 1; i < dadosNF.length; i++) {
+            const chaveLinha = dadosNF[i][colMapNF.chave];
+            if (mapaNFs.has(chaveLinha)) {
+                const infoUpdate = mapaNFs.get(chaveLinha);
+                dadosNF[i][colMapNF.status] = infoUpdate.status;
+                dadosNF[i][colMapNF.idCot] = infoUpdate.idCotacao;
             }
         }
-        range.setValues(dados);
+        
+        // Escreve as alterações na planilha de NF
+        rangeNF.setValues(dadosNF);
+        Logger.log("Planilha de Notas Fiscais atualizada.");
+
         return true;
-    } catch(e) {
-        Logger.log(`Erro em ConciliacaoNFCrud_atualizarStatusNF: ${e.message}\n${e.stack}`);
+    } catch (e) {
+        Logger.log(`ERRO CRÍTICO em ConciliacaoNFCrud_salvarAlteracoesEmLote: ${e.toString()}\n${e.stack}`);
         return false;
     }
 }
