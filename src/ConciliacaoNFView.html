@@ -24,13 +24,13 @@
     #resumoModal .form-check-label { margin-left: 0.5rem; }
 
     /* == NOVOS ESTILOS PARA MELHORIAS == */
-    .fornecedor-block h5 { font-size: 1.0rem; font-weight: bold; color: #495057; } /* Letra menor para títulos */
-    .nome-fornecedor { font-size: 1.25rem; } /* Letra menor para nome do fornecedor */
-    .comparison-container .table-responsive { max-height: 65vh; } /* Altura maior para a tabela de itens */
-    .comparison-table-body td, .comparison-table-body .dados-condensados { font-size: 0.8rem; } /* Letra menor nos itens */
+    .fornecedor-block h5 { font-size: 1.0rem; font-weight: bold; color: #495057; }
+    .nome-fornecedor { font-size: 1.25rem; }
+    .comparison-container .table-responsive { max-height: 65vh; }
+    .comparison-table-body td, .comparison-table-body .dados-condensados { font-size: 0.8rem; }
     .dados-condensados div { line-height: 1.3; }
-    .lista-nfs-fornecedor .list-group-item { font-size: 0.85rem; padding: 0.4rem 0.8rem; } /* Letra menor na lista de NFs */
-    .totais-bloco { font-size: 1.0rem; } /* Tamanho da fonte para o bloco de totais */
+    .lista-nfs-fornecedor .list-group-item { font-size: 0.85rem; padding: 0.4rem 0.8rem; }
+    .totais-bloco { font-size: 1.0rem; }
     .totais-bloco strong { font-size: 1.1rem; }
   </style>
 </head>
@@ -41,6 +41,9 @@
     </div>
   </div>
 
+  <!-- Input de arquivo oculto para o upload -->
+  <input type="file" id="xml-upload-input" multiple accept=".xml,.zip" style="display: none;">
+
   <div class="container-main mt-4">
     <!-- ETAPA 1: SELEÇÃO DE NOTAS -->
     <div class="card shadow-sm" id="card-selecao">
@@ -48,7 +51,14 @@
         <h3 class="mb-0">Central de Conciliação</h3>
         <div class="d-flex align-items-center">
           <div class="col-auto" style="width: 350px;">
-            <input type="text" id="search-input" class="form-control" placeholder="Buscar por Fornecedor, Nº da NF ou Item...">
+            <input type="text" id="search-input" class="form-control" placeholder="Buscar por Fornecedor, Nº da NF...">
+          </div>
+          <!-- ===== ALTERAÇÃO: ADIÇÃO DO BOTÃO DE UPLOAD ===== -->
+          <div class="col-auto ps-2">
+            <button id="btn-upload-xml" class="btn btn-info text-white" type="button" title="Fazer upload de arquivos XML ou ZIP para a pasta de processamento.">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.146 4.854a.5.5 0 1 1-.708-.708l3-3z"/></svg>
+              <span class="d-none d-md-inline ms-1">Fazer Upload</span>
+            </button>
           </div>
           <div class="col-auto ps-2">
               <button id="btn-processar-xml" class="btn btn-warning" type="button" title="Busca e processa novos arquivos XML da pasta do Google Drive.">

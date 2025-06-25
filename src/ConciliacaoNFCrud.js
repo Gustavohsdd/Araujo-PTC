@@ -7,6 +7,7 @@
 // Namespace para o XML da NF-e, essencial para o XmlService funcionar corretamente.
 const NFE_NAMESPACE = XmlService.getNamespace('http://www.portalfiscal.inf.br/nfe');
 
+// Funções auxiliares internas
 function _ConciliacaoNFCrud_obterValor(elementoPai, tags) {
   let elementoAtual = elementoPai;
   for (const tag of tags) {
@@ -25,10 +26,8 @@ function _ConciliacaoNFCrud_obterValorComoNumero(elementoPai, tags) {
 
 function _ConciliacaoNFCrud_aplicarFormatacaoNumerica(aba, linhaInicial, numLinhas) {
     if (numLinhas === 0) return;
-
-    // Formatos para colunas numéricas para garantir a correta interpretação pelo Sheets
     const formatos = {
-        'Quantidade Comercial': '#,##0.0000', 'Valor Unitário Comercial': '#,##0.00',
+        'Quantidade Comercial': '#,##0.0000', 'Valor Unitário Comercial': '#,##0.0000000000',
         'Valor Total Bruto Item': '#,##0.00', 'Valor do Frete (Item)': '#,##0.00',
         'Valor do Seguro (Item)': '#,##0.00', 'Valor do Desconto (Item)': '#,##0.00',
         'Outras Despesas (Item)': '#,##0.00', 'Base de Cálculo (ICMS)': '#,##0.00',
@@ -45,9 +44,7 @@ function _ConciliacaoNFCrud_aplicarFormatacaoNumerica(aba, linhaInicial, numLinh
         'Total Valor PIS': '#,##0.00', 'Total Valor COFINS': '#,##0.00',
         'Total Outras Despesas': '#,##0.00', 'Valor Total da NF': '#,##0.00'
     };
-
     const cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
-
     for (const colunaNome in formatos) {
         const indiceColuna = cabecalhos.indexOf(colunaNome);
         if (indiceColuna !== -1) {
@@ -57,6 +54,7 @@ function _ConciliacaoNFCrud_aplicarFormatacaoNumerica(aba, linhaInicial, numLinh
     }
 }
 
+// Funções CRUD Principais
 function ConciliacaoNFCrud_garantirPastaProcessados() {
   try {
     const pastaPrincipal = DriveApp.getFolderById(ID_PASTA_XML);
@@ -78,15 +76,11 @@ function ConciliacaoNFCrud_obterChavesDeAcessoExistentes() {
     const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
     const aba = planilha.getSheetByName(ABA_NF_NOTAS_FISCAIS);
     const ultimaLinha = aba.getLastRow();
-
-    if (ultimaLinha < 2) {
-      return new Set();
-    }
+    if (ultimaLinha < 2) return new Set();
+    
     const range = aba.getRange(2, 1, ultimaLinha - 1, 1);
     const valores = range.getValues().flat().filter(String);
-    
     return new Set(valores);
-
   } catch (e) {
     Logger.log(`Erro ao obter chaves de acesso existentes: ${e.message}`);
     return new Set();
@@ -96,18 +90,12 @@ function ConciliacaoNFCrud_obterChavesDeAcessoExistentes() {
 function ConciliacaoNFCrud_parsearConteudoXml(conteudoXml) {
   const documento = XmlService.parse(conteudoXml);
   const root = documento.getRootElement();
-
   const nfeElement = root.getChild('NFe', NFE_NAMESPACE);
   const protNFe = root.getChild('protNFe', NFE_NAMESPACE);
+  if (!nfeElement || !protNFe) throw new Error('Estrutura do XML inválida: <NFe> ou <protNFe> não encontradas.');
   
-  if (!nfeElement || !protNFe) {
-      throw new Error('Estrutura do XML inválida. Tags <NFe> ou <protNFe> não encontradas na raiz do documento.');
-  }
   const infNFe = nfeElement.getChild('infNFe', NFE_NAMESPACE);
-
-  if (!infNFe) {
-    throw new Error('Estrutura do XML inválida. Tag <infNFe> não encontrada.');
-  }
+  if (!infNFe) throw new Error('Estrutura do XML inválida: <infNFe> não encontrada.');
 
   const ide = infNFe.getChild('ide', NFE_NAMESPACE);
   const emit = infNFe.getChild('emit', NFE_NAMESPACE);
@@ -116,12 +104,9 @@ function ConciliacaoNFCrud_parsearConteudoXml(conteudoXml) {
   const transp = infNFe.getChild('transp', NFE_NAMESPACE);
   const cobr = infNFe.getChild('cobr', NFE_NAMESPACE);
   const infAdic = infNFe.getChild('infAdic', NFE_NAMESPACE);
-  
   const chaveAcesso = _ConciliacaoNFCrud_obterValor(protNFe, ['infProt', 'chNFe']);
   
-  const dadosNotasFiscais = {
-    chaveAcesso: chaveAcesso, numeroNf: _ConciliacaoNFCrud_obterValor(ide, ['nNF']), serieNf: _ConciliacaoNFCrud_obterValor(ide, ['serie']), dataHoraEmissao: _ConciliacaoNFCrud_obterValor(ide, ['dhEmi']), naturezaOperacao: _ConciliacaoNFCrud_obterValor(ide, ['natOp']), cnpjEmitente: _ConciliacaoNFCrud_obterValor(emit, ['CNPJ']), nomeEmitente: _ConciliacaoNFCrud_obterValor(emit, ['xNome']), ieEmitente: _ConciliacaoNFCrud_obterValor(emit, ['IE']), logradouroEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'xLgr']), numEndEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'nro']), bairroEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'xBairro']), municipioEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'xMun']), ufEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'UF']), cepEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'CEP']), cnpjDestinatario: _ConciliacaoNFCrud_obterValor(dest, ['CNPJ']), nomeDestinatario: _ConciliacaoNFCrud_obterValor(dest, ['xNome']), infoAdicionais: _ConciliacaoNFCrud_obterValor(infAdic, ['infCpl'])
-  };
+  const dadosNotasFiscais = { chaveAcesso: chaveAcesso, numeroNf: _ConciliacaoNFCrud_obterValor(ide, ['nNF']), serieNf: _ConciliacaoNFCrud_obterValor(ide, ['serie']), dataHoraEmissao: _ConciliacaoNFCrud_obterValor(ide, ['dhEmi']), naturezaOperacao: _ConciliacaoNFCrud_obterValor(ide, ['natOp']), cnpjEmitente: _ConciliacaoNFCrud_obterValor(emit, ['CNPJ']), nomeEmitente: _ConciliacaoNFCrud_obterValor(emit, ['xNome']), ieEmitente: _ConciliacaoNFCrud_obterValor(emit, ['IE']), logradouroEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'xLgr']), numEndEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'nro']), bairroEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'xBairro']), municipioEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'xMun']), ufEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'UF']), cepEmitente: _ConciliacaoNFCrud_obterValor(emit, ['enderEmit', 'CEP']), cnpjDestinatario: _ConciliacaoNFCrud_obterValor(dest, ['CNPJ']), nomeDestinatario: _ConciliacaoNFCrud_obterValor(dest, ['xNome']), infoAdicionais: _ConciliacaoNFCrud_obterValor(infAdic, ['infCpl']) };
 
   const dadosItensNf = [];
   const dets = infNFe.getChildren('det', NFE_NAMESPACE);
@@ -145,51 +130,35 @@ function ConciliacaoNFCrud_parsearConteudoXml(conteudoXml) {
   if (cobr) {
     const dups = cobr.getChildren('dup', NFE_NAMESPACE);
     dups.forEach(dup => {
-      dadosFaturasNf.push({
-        chaveAcesso: chaveAcesso, numeroFatura: _ConciliacaoNFCrud_obterValor(cobr, ['fat', 'nFat']), numeroParcela: _ConciliacaoNFCrud_obterValor(dup, ['nDup']), dataVencimento: _ConciliacaoNFCrud_obterValor(dup, ['dVenc']), valorParcela: _ConciliacaoNFCrud_obterValorComoNumero(dup, ['vDup']),
-      });
+      dadosFaturasNf.push({ chaveAcesso: chaveAcesso, numeroFatura: _ConciliacaoNFCrud_obterValor(cobr, ['fat', 'nFat']), numeroParcela: _ConciliacaoNFCrud_obterValor(dup, ['nDup']), dataVencimento: _ConciliacaoNFCrud_obterValor(dup, ['dVenc']), valorParcela: _ConciliacaoNFCrud_obterValorComoNumero(dup, ['vDup']), });
     });
   }
 
-  const dadosTransporteNf = {
-    chaveAcesso: chaveAcesso, modalidadeFrete: _ConciliacaoNFCrud_obterValor(transp, ['modFrete']), cnpjTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'CNPJ']), nomeTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'xNome']), ieTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'IE']), enderecoTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'xEnder']), placaVeiculo: _ConciliacaoNFCrud_obterValor(transp, ['veicTransp', 'placa']), quantidadeVolumes: _ConciliacaoNFCrud_obterValorComoNumero(transp, ['vol', 'qVol']), especieVolumes: _ConciliacaoNFCrud_obterValor(transp, ['vol', 'esp']), pesoLiquidoTotal: _ConciliacaoNFCrud_obterValorComoNumero(transp, ['vol', 'pesoL']), pesoBrutoTotal: _ConciliacaoNFCrud_obterValorComoNumero(transp, ['vol', 'pesoB']),
-  };
+  const dadosTransporteNf = { chaveAcesso: chaveAcesso, modalidadeFrete: _ConciliacaoNFCrud_obterValor(transp, ['modFrete']), cnpjTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'CNPJ']), nomeTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'xNome']), ieTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'IE']), enderecoTransportadora: _ConciliacaoNFCrud_obterValor(transp, ['transporta', 'xEnder']), placaVeiculo: _ConciliacaoNFCrud_obterValor(transp, ['veicTransp', 'placa']), quantidadeVolumes: _ConciliacaoNFCrud_obterValorComoNumero(transp, ['vol', 'qVol']), especieVolumes: _ConciliacaoNFCrud_obterValor(transp, ['vol', 'esp']), pesoLiquidoTotal: _ConciliacaoNFCrud_obterValorComoNumero(transp, ['vol', 'pesoL']), pesoBrutoTotal: _ConciliacaoNFCrud_obterValorComoNumero(transp, ['vol', 'pesoB']), };
   
   const icmsTot = total ? total.getChild('ICMSTot', NFE_NAMESPACE) : null;
-  const dadosTributosTotais = {
-    chaveAcesso: chaveAcesso, totalBaseCalculoIcms: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vBC']), totalValorIcms: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vICMS']), totalValorIcmsSt: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vST']), totalValorProdutos: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vProd']), totalValorFrete: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vFrete']), totalValorSeguro: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vSeg']), totalValorDesconto: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vDesc']), totalValorIpi: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vIPI']), totalValorPis: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vPIS']), totalValorCofins: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vCOFINS']), totalOutrasDespesas: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vOutro']), valorTotalNf: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vNF']),
-  };
+  const dadosTributosTotais = { chaveAcesso: chaveAcesso, totalBaseCalculoIcms: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vBC']), totalValorIcms: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vICMS']), totalValorIcmsSt: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vST']), totalValorProdutos: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vProd']), totalValorFrete: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vFrete']), totalValorSeguro: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vSeg']), totalValorDesconto: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vDesc']), totalValorIpi: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vIPI']), totalValorPis: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vPIS']), totalValorCofins: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vCOFINS']), totalOutrasDespesas: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vOutro']), valorTotalNf: _ConciliacaoNFCrud_obterValorComoNumero(icmsTot, ['vNF']), };
 
-  return {
-    notasFiscais: dadosNotasFiscais, itensNf: dadosItensNf, faturasNf: dadosFaturasNf, transporteNf: [dadosTransporteNf], tributosTotaisNf: [dadosTributosTotais],
-  };
+  return { notasFiscais: dadosNotasFiscais, itensNf: dadosItensNf, faturasNf: dadosFaturasNf, transporteNf: [dadosTransporteNf], tributosTotaisNf: [dadosTributosTotais], };
 }
 
 function ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados) {
   const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
-
   const mapeamento = [
-    { aba: ABA_NF_NOTAS_FISCAIS, cabecalhos: CABECALHOS_NF_NOTAS_FISCAIS, dados: todosOsDados.notasFiscais },
-    { aba: ABA_NF_ITENS, cabecalhos: CABECALHOS_NF_ITENS, dados: todosOsDados.itensNf },
-    { aba: ABA_NF_FATURAS, cabecalhos: CABECALHOS_NF_FATURAS, dados: todosOsDados.faturasNf },
-    { aba: ABA_NF_TRANSPORTE, cabecalhos: CABECALHOS_NF_TRANSPORTE, dados: todosOsDados.transporteNf },
-    { aba: ABA_NF_TRIBUTOS_TOTAIS, cabecalhos: CABECALHOS_NF_TRIBUTOS_TOTAIS, dados: todosOsDados.tributosTotaisNf }
+    { aba: ABA_NF_NOTAS_FISCAIS, cabecalhos: CABECALHOS_NF_NOTAS_FISCAIS, dados: todosOsDados.notasFiscais }, { aba: ABA_NF_ITENS, cabecalhos: CABECALHOS_NF_ITENS, dados: todosOsDados.itensNf }, { aba: ABA_NF_FATURAS, cabecalhos: CABECALHOS_NF_FATURAS, dados: todosOsDados.faturasNf }, { aba: ABA_NF_TRANSPORTE, cabecalhos: CABECALHOS_NF_TRANSPORTE, dados: todosOsDados.transporteNf }, { aba: ABA_NF_TRIBUTOS_TOTAIS, cabecalhos: CABECALHOS_NF_TRIBUTOS_TOTAIS, dados: todosOsDados.tributosTotaisNf }
   ];
-
   const mapaChaves = {
-    'NotasFiscais': { 'Chave de Acesso': 'chaveAcesso', 'ID da Cotação (Sistema)': '', 'Status da Conciliação': '', 'Número NF': 'numeroNf', 'Série NF': 'serieNf', 'Data e Hora Emissão': 'dataHoraEmissao', 'Natureza da Operação': 'naturezaOperacao', 'CNPJ Emitente': 'cnpjEmitente', 'Nome Emitente': 'nomeEmitente', 'Inscrição Estadual Emitente': 'ieEmitente', 'Logradouro Emitente': 'logradouroEmitente', 'Número End. Emitente': 'numEndEmitente', 'Bairro Emitente': 'bairroEmitente', 'Município Emitente': 'municipioEmitente', 'UF Emitente': 'ufEmitente', 'CEP Emitente': 'cepEmitente', 'CNPJ Destinatário': 'cnpjDestinatario', 'Nome Destinatário': 'nomeDestinatario', 'Informações Adicionais': 'infoAdicionais', 'Número do Pedido (Extraído)': '' },
+    'NotasFiscais': { 'Chave de Acesso': 'chaveAcesso', 'ID da Cotação (Sistema)': '', 'Status da Conciliação': 'Pendente', 'Número NF': 'numeroNf', 'Série NF': 'serieNf', 'Data e Hora Emissão': 'dataHoraEmissao', 'Natureza da Operação': 'naturezaOperacao', 'CNPJ Emitente': 'cnpjEmitente', 'Nome Emitente': 'nomeEmitente', 'Inscrição Estadual Emitente': 'ieEmitente', 'Logradouro Emitente': 'logradouroEmitente', 'Número End. Emitente': 'numEndEmitente', 'Bairro Emitente': 'bairroEmitente', 'Município Emitente': 'municipioEmitente', 'UF Emitente': 'ufEmitente', 'CEP Emitente': 'cepEmitente', 'CNPJ Destinatário': 'cnpjDestinatario', 'Nome Destinatário': 'nomeDestinatario', 'Informações Adicionais': 'infoAdicionais', 'Número do Pedido (Extraído)': '' },
     'ItensNF': { 'Chave de Acesso': 'chaveAcesso', 'Número do Item': 'numeroItem', 'Código Produto (Forn)': 'codigoProdutoForn', 'GTIN/EAN (Cód. Barras)': 'gtin', 'Descrição Produto (NF)': 'descricaoProduto', 'NCM': 'ncm', 'CFOP': 'cfop', 'Unidade Comercial': 'unidadeComercial', 'Quantidade Comercial': 'quantidadeComercial', 'Valor Unitário Comercial': 'valorUnitarioComercial', 'Valor Total Bruto Item': 'valorTotalBrutoItem', 'Valor do Frete (Item)': 'valorFreteItem', 'Valor do Seguro (Item)': 'valorSeguroItem', 'Valor do Desconto (Item)': 'valorDescontoItem', 'Outras Despesas (Item)': 'valorOutrasDespesasItem', 'CST/CSOSN (ICMS)': 'cstCsosnIcms', 'Base de Cálculo (ICMS)': 'baseCalculoIcms', 'Alíquota (ICMS)': 'aliquotaIcms', 'Valor (ICMS)': 'valorIcms', 'Valor (ICMS ST)': 'valorIcmsSt', 'CST (IPI)': 'cstIpi', 'Base de Cálculo (IPI)': 'baseCalculoIpi', 'Alíquota (IPI)': 'aliquotaIpi', 'Valor (IPI)': 'valorIpi', 'CST (PIS)': 'cstPis', 'Valor (PIS)': 'valorPis', 'CST (COFINS)': 'cstCofins', 'Valor (COFINS)': 'valorCofins' },
     'FaturasNF': { 'Chave de Acesso': 'chaveAcesso', 'Número da Fatura': 'numeroFatura', 'Número da Parcela': 'numeroParcela', 'Data de Vencimento': 'dataVencimento', 'Valor da Parcela': 'valorParcela' },
     'TransporteNF': { 'Chave de Acesso': 'chaveAcesso', 'Modalidade Frete': 'modalidadeFrete', 'CNPJ Transportadora': 'cnpjTransportadora', 'Nome Transportadora': 'nomeTransportadora', 'IE Transportadora': 'ieTransportadora', 'Endereço Transportadora': 'enderecoTransportadora', 'Placa Veículo': 'placaVeiculo', 'Quantidade Volumes': 'quantidadeVolumes', 'Espécie Volumes': 'especieVolumes', 'Peso Líquido Total': 'pesoLiquidoTotal', 'Peso Bruto Total': 'pesoBrutoTotal' },
     'TributosTotaisNF': { 'Chave de Acesso': 'chaveAcesso', 'Total Base Cálculo ICMS': 'totalBaseCalculoIcms', 'Total Valor ICMS': 'totalValorIcms', 'Total Valor ICMS ST': 'totalValorIcmsSt', 'Total Valor Produtos': 'totalValorProdutos', 'Total Valor Frete': 'totalValorFrete', 'Total Valor Seguro': 'totalValorSeguro', 'Total Valor Desconto': 'totalValorDesconto', 'Total Valor IPI': 'totalValorIpi', 'Total Valor PIS': 'totalValorPis', 'Total Valor COFINS': 'totalValorCofins', 'Total Outras Despesas': 'totalOutrasDespesas', 'Valor Total da NF': 'valorTotalNf' }
   };
-
   for (const item of mapeamento) {
     if (item.dados && item.dados.length > 0) {
       const aba = planilha.getSheetByName(item.aba);
       const linhaInicial = aba.getLastRow() + 1;
       const numLinhasAdicionadas = item.dados.length;
-
       const linhasParaAdicionar = item.dados.map(objetoDado => {
         return item.cabecalhos.map(cabecalho => {
           const chave = mapaChaves[item.aba][cabecalho];
@@ -197,10 +166,7 @@ function ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados) {
           return objetoDado[chave] !== undefined && objetoDado[chave] !== null ? objetoDado[chave] : '';
         });
       });
-
-      aba.getRange(linhaInicial, 1, numLinhasAdicionadas, item.cabecalhos.length)
-         .setValues(linhasParaAdicionar);
-      
+      aba.getRange(linhaInicial, 1, numLinhasAdicionadas, item.cabecalhos.length).setValues(linhasParaAdicionar);
       _ConciliacaoNFCrud_aplicarFormatacaoNumerica(aba, linhaInicial, numLinhasAdicionadas);
     }
   }
@@ -218,7 +184,6 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
     const colData = cabecalhos.indexOf("Data Abertura");
     const colForn = cabecalhos.indexOf("Fornecedor");
     const colStatus = cabecalhos.indexOf("Status da Cotação");
-
     const dados = aba.getRange(2, 1, ultimaLinha - 1, aba.getLastColumn()).getValues();
     
     const fornecedoresData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_FORNECEDORES).getDataRange().getValues();
@@ -228,9 +193,7 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
     const mapaFornecedores = fornecedoresData.reduce((map, row) => {
         const nome = row[colFornNome];
         const cnpj = row[colFornCnpj];
-        if (nome) {
-            map[nome.toString().trim()] = cnpj ? cnpj.toString().trim() : '';
-        }
+        if (nome) map[nome.toString().trim()] = cnpj ? cnpj.toString().trim() : '';
         return map;
     }, {});
 
@@ -239,16 +202,12 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
       const status = linha[colStatus];
       const id = linha[colId];
       const fornecedor = linha[colForn];
-
       if (id && fornecedor && status === 'Aguardando Faturamento') {
         const compositeKey = `${id}-${fornecedor}`; 
-        
         if (!cotacoesUnicas[compositeKey]) { 
           const nomeFornecedorTrim = fornecedor.toString().trim();
           cotacoesUnicas[compositeKey] = {
-            compositeKey: compositeKey,
-            idCotacao: id,
-            fornecedor: fornecedor,
+            compositeKey: compositeKey, idCotacao: id, fornecedor: fornecedor,
             fornecedorCnpj: mapaFornecedores[nomeFornecedorTrim] || '',
             dataAbertura: new Date(linha[colData]).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
           };
@@ -257,28 +216,17 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
     });
     
     const resultado = Object.values(cotacoesUnicas);
-    
     resultado.sort((a, b) => {
-        if (b.idCotacao !== a.idCotacao) {
-            return b.idCotacao - a.idCotacao;
-        }
+        if (b.idCotacao !== a.idCotacao) return b.idCotacao - a.idCotacao;
         return a.fornecedor.localeCompare(b.fornecedor);
     });
-
     return resultado;
-
   } catch(e) {
     Logger.log(`Erro em ConciliacaoNFCrud_obterCotacoesAbertas: ${e.message}\n${e.stack}`);
     return null;
   }
 }
 
-/**
- * [FUNÇÃO ALTERADA]
- * Obtém as NFs que ainda não foram processadas.
- * O filtro agora verifica se o status é DIFERENTE de "Conciliada" E DIFERENTE de "Sem Pedido".
- * @returns {Array<object>|null}
- */
 function ConciliacaoNFCrud_obterNFsNaoConciliadas() {
   try {
     const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
@@ -293,19 +241,14 @@ function ConciliacaoNFCrud_obterNFsNaoConciliadas() {
     const colEmitente = cabecalhos.indexOf("Nome Emitente");
     const colCnpj = cabecalhos.indexOf("CNPJ Emitente");
     const colData = cabecalhos.indexOf("Data e Hora Emissão");
-
     const dados = aba.getRange(2, 1, ultimaLinha - 1, aba.getLastColumn()).getValues();
     const nfs = [];
     dados.forEach(linha => {
       const statusAtual = linha[colStatus];
-      // ALTERAÇÃO: A NF não deve ter sido conciliada nem marcada como "Sem Pedido"
       if (statusAtual !== 'Conciliada' && statusAtual !== 'Sem Pedido') {
         nfs.push({
-          chaveAcesso: linha[colChave],
-          numeroNF: linha[colNumNF],
-          nomeEmitente: linha[colEmitente],
-          cnpjEmitente: linha[colCnpj],
-          dataEmissao: new Date(linha[colData]).toLocaleDateString('pt-BR')
+          chaveAcesso: linha[colChave], numeroNF: linha[colNumNF], nomeEmitente: linha[colEmitente],
+          cnpjEmitente: linha[colCnpj], dataEmissao: new Date(linha[colData]).toLocaleDateString('pt-BR')
         });
       }
     });
@@ -319,40 +262,28 @@ function ConciliacaoNFCrud_obterNFsNaoConciliadas() {
 function ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor) {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
     const aba = planilha.getSheetByName(ABA_COTACOES);
-
     const cabecalhos = Utilities_obterCabecalhos(ABA_COTACOES);
-    if (!cabecalhos) {
-      throw new Error(`Não foi possível obter os cabeçalhos da aba: ${ABA_COTACOES}`);
-    }
+    if (!cabecalhos) throw new Error(`Não foi possível obter os cabeçalhos da aba: ${ABA_COTACOES}`);
 
     const colMap = {};
     const colunasNecessarias = ["ID da Cotação", "SubProduto", "Comprar", "Preço", "Fornecedor", "Data Abertura", "Fator", "Preço por Fator"];
     colunasNecessarias.forEach(nomeColuna => {
         const index = cabecalhos.indexOf(nomeColuna);
-        if (index === -1) {
-            throw new Error(`A coluna obrigatória "${nomeColuna}" não foi encontrada na aba Cotações.`);
-        }
+        if (index === -1) throw new Error(`A coluna obrigatória "${nomeColuna}" não foi encontrada na aba Cotações.`);
         colMap[nomeColuna] = index;
     });
     
     const dados = aba.getDataRange().getValues();
     const itens = [];
-
     for (let i = 1; i < dados.length; i++) {
         const linha = dados[i];
         const qtdComprar = parseFloat(linha[colMap["Comprar"]]);
-        
         if (linha[colMap["ID da Cotação"]] == idCotacao && linha[colMap["Fornecedor"]] == nomeFornecedor && !isNaN(qtdComprar) && qtdComprar > 0) {
             const dataAberturaObj = new Date(linha[colMap["Data Abertura"]]);
-            
             itens.push({
-                subProduto: linha[colMap["SubProduto"]],
-                qtdComprar: qtdComprar,
-                preco: parseFloat(linha[colMap["Preço"]]) || 0,
-                fator: parseFloat(linha[colMap["Fator"]]) || 1,
-                precoPorFator: parseFloat(linha[colMap["Preço por Fator"]]) || 0,
-                fornecedor: linha[colMap["Fornecedor"]],
-                dataAbertura: !isNaN(dataAberturaObj.getTime()) ? dataAberturaObj.toISOString() : null
+                subProduto: linha[colMap["SubProduto"]], qtdComprar: qtdComprar, preco: parseFloat(linha[colMap["Preço"]]) || 0,
+                fator: parseFloat(linha[colMap["Fator"]]) || 1, precoPorFator: parseFloat(linha[colMap["Preço por Fator"]]) || 0,
+                fornecedor: linha[colMap["Fornecedor"]], dataAbertura: !isNaN(dataAberturaObj.getTime()) ? dataAberturaObj.toISOString() : null
             });
         }
     }
@@ -375,11 +306,8 @@ function ConciliacaoNFCrud_obterItensDasNFs(chavesAcessoNF) {
         const chaveLinha = linha[colChave];
         if (chavesAcessoNF.includes(chaveLinha)) {
             itens.push({
-                chaveAcesso: chaveLinha,
-                numeroItem: linha[colNumItem], // Adicionado para identificação única
-                descricaoNF: linha[colDesc],
-                qtdNF: parseFloat(linha[colQtd]) || 0,
-                precoNF: parseFloat(linha[colPreco]) || 0
+                chaveAcesso: chaveLinha, numeroItem: linha[colNumItem], descricaoNF: linha[colDesc],
+                qtdNF: parseFloat(linha[colQtd]) || 0, precoNF: parseFloat(linha[colPreco]) || 0
             });
         }
     });
@@ -390,68 +318,75 @@ function ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesAcessoNF) {
     const planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
     const abaTrib = planilha.getSheetByName(ABA_NF_TRIBUTOS_TOTAIS);
     const dadosCompletos = abaTrib.getDataRange().getValues();
-    
     const cabecalhos = dadosCompletos.shift();
     const chavesSet = new Set(chavesAcessoNF);
     const resultados = [];
-
     const colMap = {};
-    cabecalhos.forEach((header, index) => {
-        colMap[header] = index;
-    });
+    cabecalhos.forEach((header, index) => { colMap[header] = index; });
 
     for (const linha of dadosCompletos) {
         const chaveAtual = linha[colMap["Chave de Acesso"]];
         if (chavesSet.has(chaveAtual)) {
-            const totaisNF = {
+            resultados.push({
               chaveAcesso: chaveAtual,
               totalBaseCalculoIcms: parseFloat(linha[colMap["Total Base Cálculo ICMS"]]) || 0,
-              totalValorIcms: parseFloat(linha[colMap["Total Valor ICMS"]]) || 0,
-              totalValorIcmsSt: parseFloat(linha[colMap["Total Valor ICMS ST"]]) || 0,
-              totalValorProdutos: parseFloat(linha[colMap["Total Valor Produtos"]]) || 0,
-              totalValorFrete: parseFloat(linha[colMap["Total Valor Frete"]]) || 0,
-              totalValorSeguro: parseFloat(linha[colMap["Total Valor Seguro"]]) || 0,
-              totalValorDesconto: parseFloat(linha[colMap["Total Valor Desconto"]]) || 0,
-              totalValorIpi: parseFloat(linha[colMap["Total Valor IPI"]]) || 0,
-              totalValorPis: parseFloat(linha[colMap["Total Valor PIS"]]) || 0,
-              totalValorCofins: parseFloat(linha[colMap["Total Valor COFINS"]]) || 0,
-              totalOutrasDespesas: parseFloat(linha[colMap["Total Outras Despesas"]]) || 0,
+              totalValorIcms: parseFloat(linha[colMap["Total Valor ICMS"]]) || 0, totalValorIcmsSt: parseFloat(linha[colMap["Total Valor ICMS ST"]]) || 0,
+              totalValorProdutos: parseFloat(linha[colMap["Total Valor Produtos"]]) || 0, totalValorFrete: parseFloat(linha[colMap["Total Valor Frete"]]) || 0,
+              totalValorSeguro: parseFloat(linha[colMap["Total Valor Seguro"]]) || 0, totalValorDesconto: parseFloat(linha[colMap["Total Valor Desconto"]]) || 0,
+              totalValorIpi: parseFloat(linha[colMap["Total Valor IPI"]]) || 0, totalValorPis: parseFloat(linha[colMap["Total Valor PIS"]]) || 0,
+              totalValorCofins: parseFloat(linha[colMap["Total Valor COFINS"]]) || 0, totalOutrasDespesas: parseFloat(linha[colMap["Total Outras Despesas"]]) || 0,
               valorTotalNf: parseFloat(linha[colMap["Valor Total da NF"]]) || 0,
-            };
-            resultados.push(totaisNF);
+            });
         }
     }
-
     return resultados;
 }
 
-
-function ConciliacaoNFCrud_obterPrazoFornecedor(nomeFornecedor) {
-    const planilha = SpreadsheetApp.getActiveSpreadsheet();
-    const aba = planilha.getSheetByName(ABA_FORNECEDORES);
-    const cabecalhos = Utilities_obterCabecalhos(ABA_FORNECEDORES);
-    const colNome = cabecalhos.indexOf("Fornecedor");
-    const colPrazo = cabecalhos.indexOf("Dias de Entrega");
-    
-    const dados = aba.getDataRange().getValues();
-    for (let i = 0; i < dados.length; i++) {
-        if (dados[i][colNome] === nomeFornecedor) {
-            return parseInt(dados[i][colPrazo]) || 0;
-        }
-    }
-    return 0;
-}
-
 /**
- * [NOVA FUNÇÃO]
- * Salva todas as alterações de conciliação e itens cortados em lote.
- * Esta função centraliza as escritas nas planilhas para otimizar a performance.
- * @param {Array<object>} conciliacoes - Array de objetos, cada um representando uma conciliação.
- * Formato: { idCotacao, nomeFornecedor, numeroNF, chavesAcessoNF, itensConciliados }
- * @param {Array<object>} itensCortados - Array de objetos de itens a serem marcados como 'Cortado'.
- * Formato: { idCotacao, nomeFornecedor, subProduto }
+ * [NOVA FUNÇÃO - CORREÇÃO]
+ * Adicionada para suportar a funcionalidade "Marcar como Sem Pedido".
+ * @param {Array<string>} chavesAcesso - As chaves de acesso das NFs a serem atualizadas.
+ * @param {string | null} idCotacao - O ID da cotação a ser inserido (pode ser null).
+ * @param {string} novoStatus - O novo status para a conciliação ("Conciliada", "Sem Pedido", etc.).
  * @returns {boolean} - True se sucesso, false se erro.
  */
+function ConciliacaoNFCrud_atualizarStatusNF(chavesAcesso, idCotacao, novoStatus) {
+    try {
+        const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
+        const abaNF = planilhaNF.getSheetByName(ABA_NF_NOTAS_FISCAIS);
+        const rangeNF = abaNF.getDataRange();
+        const dadosNF = rangeNF.getValues();
+        const cabecalhosNF = dadosNF[0];
+
+        const colMapNF = {
+            chave: cabecalhosNF.indexOf("Chave de Acesso"),
+            status: cabecalhosNF.indexOf("Status da Conciliação"),
+            idCot: cabecalhosNF.indexOf("ID da Cotação (Sistema)")
+        };
+
+        if (Object.values(colMapNF).includes(-1)) {
+            throw new Error("Não foi possível encontrar colunas essenciais (Chave, Status, ID Cotação) na aba de Notas Fiscais.");
+        }
+
+        const chavesSet = new Set(chavesAcesso);
+        for (let i = 1; i < dadosNF.length; i++) {
+            if (chavesSet.has(dadosNF[i][colMapNF.chave])) {
+                dadosNF[i][colMapNF.status] = novoStatus;
+                if (idCotacao !== null) {
+                   dadosNF[i][colMapNF.idCot] = idCotacao;
+                }
+            }
+        }
+
+        rangeNF.setValues(dadosNF);
+        Logger.log(`Status de ${chavesAcesso.length} NF(s) atualizado para '${novoStatus}'.`);
+        return true;
+    } catch (e) {
+        Logger.log(`ERRO CRÍTICO em ConciliacaoNFCrud_atualizarStatusNF: ${e.toString()}\n${e.stack}`);
+        return false;
+    }
+}
+
 function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados) {
     Logger.log(`Iniciando salvamento em lote. Conciliações: ${conciliacoes.length}, Itens cortados: ${itensCortados.length}`);
     try {
@@ -461,22 +396,9 @@ function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados) {
         const dadosCotacoes = rangeCotacoes.getValues();
         const cabecalhosCotacoes = dadosCotacoes[0];
 
-        const colMapCotacoes = {
-            id: cabecalhosCotacoes.indexOf("ID da Cotação"),
-            fornecedor: cabecalhosCotacoes.indexOf("Fornecedor"),
-            subProduto: cabecalhosCotacoes.indexOf("SubProduto"),
-            statusSub: cabecalhosCotacoes.indexOf("Status do SubProduto"),
-            divergencia: cabecalhosCotacoes.indexOf("Divergencia da Nota"),
-            qtdNota: cabecalhosCotacoes.indexOf("Quantidade na Nota"),
-            precoNota: cabecalhosCotacoes.indexOf("Preço da Nota"),
-            numeroNota: cabecalhosCotacoes.indexOf("Número da Nota")
-        };
+        const colMapCotacoes = { id: cabecalhosCotacoes.indexOf("ID da Cotação"), fornecedor: cabecalhosCotacoes.indexOf("Fornecedor"), subProduto: cabecalhosCotacoes.indexOf("SubProduto"), statusSub: cabecalhosCotacoes.indexOf("Status do SubProduto"), divergencia: cabecalhosCotacoes.indexOf("Divergencia da Nota"), qtdNota: cabecalhosCotacoes.indexOf("Quantidade na Nota"), precoNota: cabecalhosCotacoes.indexOf("Preço da Nota"), numeroNota: cabecalhosCotacoes.indexOf("Número da Nota") };
+        if (Object.values(colMapCotacoes).includes(-1)) throw new Error("Não foi possível encontrar todas as colunas necessárias na aba de Cotações.");
 
-        if (Object.values(colMapCotacoes).includes(-1)) {
-            throw new Error("Não foi possível encontrar todas as colunas necessárias na aba de Cotações.");
-        }
-
-        // 1. Processar conciliações na planilha de Cotações
         conciliacoes.forEach(conc => {
             const mapaItens = new Map(conc.itensConciliados.map(item => [item.subProduto, item]));
             for (let i = 1; i < dadosCotacoes.length; i++) {
@@ -488,74 +410,56 @@ function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados) {
                         dadosCotacoes[i][colMapCotacoes.divergencia] = itemConciliado.divergenciaNota;
                         dadosCotacoes[i][colMapCotacoes.qtdNota] = itemConciliado.quantidadeNota;
                         dadosCotacoes[i][colMapCotacoes.precoNota] = itemConciliado.precoNota;
-                        dadosCotacoes[i][colMapCotacoes.numeroNota] = conc.numeroNF; // Usa o primeiro número de NF como referência
+                        dadosCotacoes[i][colMapCotacoes.numeroNota] = conc.numeroNF;
                     }
                 }
             }
         });
 
-        // 2. Processar itens cortados na planilha de Cotações
-        const mapaCortados = new Map(); // "id-fornecedor" -> Set de subprodutos
+        const mapaCortados = new Map();
         itensCortados.forEach(item => {
             const key = `${item.idCotacao}-${item.nomeFornecedor}`;
-            if (!mapaCortados.has(key)) {
-                mapaCortados.set(key, new Set());
-            }
+            if (!mapaCortados.has(key)) mapaCortados.set(key, new Set());
             mapaCortados.get(key).add(item.subProduto);
         });
-
         for (let i = 1; i < dadosCotacoes.length; i++) {
             const key = `${dadosCotacoes[i][colMapCotacoes.id]}-${dadosCotacoes[i][colMapCotacoes.fornecedor]}`;
             if (mapaCortados.has(key)) {
-                const subProdutosCortados = mapaCortados.get(key);
-                const subProdutoLinha = dadosCotacoes[i][colMapCotacoes.subProduto];
-                if (subProdutosCortados.has(subProdutoLinha)) {
+                if (mapaCortados.get(key).has(dadosCotacoes[i][colMapCotacoes.subProduto])) {
                     dadosCotacoes[i][colMapCotacoes.statusSub] = "Cortado";
                 }
             }
         }
-
-        // Escreve as alterações na planilha de Cotações
         rangeCotacoes.setValues(dadosCotacoes);
         Logger.log("Planilha de Cotações atualizada.");
 
-        // 3. Atualizar status na planilha de Notas Fiscais
-        const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
-        const abaNF = planilhaNF.getSheetByName(ABA_NF_NOTAS_FISCAIS);
-        const rangeNF = abaNF.getDataRange();
-        const dadosNF = rangeNF.getValues();
-        const cabecalhosNF = dadosNF[0];
-        
-        const colMapNF = {
-            chave: cabecalhosNF.indexOf("Chave de Acesso"),
-            status: cabecalhosNF.indexOf("Status da Conciliação"),
-            idCot: cabecalhosNF.indexOf("ID da Cotação (Sistema)")
-        };
+        const chavesAcessoConciliadas = conciliacoes.flatMap(c => c.chavesAcessoNF);
+        const idCotacaoPorChave = conciliacoes.reduce((acc, c) => {
+          c.chavesAcessoNF.forEach(chave => acc[chave] = c.idCotacao);
+          return acc;
+        }, {});
+        if(chavesAcessoConciliadas.length > 0) {
+          const chavesUnicas = [...new Set(chavesAcessoConciliadas)];
+          ConciliacaoNFCrud_atualizarStatusNF(chavesUnicas, null, "Conciliada");
+          
+           const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
+           const abaNF = planilhaNF.getSheetByName(ABA_NF_NOTAS_FISCAIS);
+           const rangeNF = abaNF.getDataRange();
+           const dadosNF = rangeNF.getValues();
+           const cabecalhosNF = dadosNF[0];
+           const colChave = cabecalhosNF.indexOf("Chave de Acesso");
+           const colIdCot = cabecalhosNF.indexOf("ID da Cotação (Sistema)");
 
-        if (Object.values(colMapNF).includes(-1)) {
-            throw new Error("Não foi possível encontrar as colunas necessárias na aba de Notas Fiscais.");
+           for(let i=1; i<dadosNF.length; i++) {
+             const chave = dadosNF[i][colChave];
+             if(idCotacaoPorChave[chave]){
+               dadosNF[i][colIdCot] = idCotacaoPorChave[chave];
+             }
+           }
+           rangeNF.setValues(dadosNF);
+           Logger.log("IDs de Cotação atualizados nas Notas Fiscais.");
         }
         
-        const mapaNFs = new Map(); // chaveAcesso -> { status, idCotacao }
-        conciliacoes.forEach(conc => {
-            conc.chavesAcessoNF.forEach(chave => {
-                mapaNFs.set(chave, { status: "Conciliada", idCotacao: conc.idCotacao });
-            });
-        });
-
-        for (let i = 1; i < dadosNF.length; i++) {
-            const chaveLinha = dadosNF[i][colMapNF.chave];
-            if (mapaNFs.has(chaveLinha)) {
-                const infoUpdate = mapaNFs.get(chaveLinha);
-                dadosNF[i][colMapNF.status] = infoUpdate.status;
-                dadosNF[i][colMapNF.idCot] = infoUpdate.idCotacao;
-            }
-        }
-        
-        // Escreve as alterações na planilha de NF
-        rangeNF.setValues(dadosNF);
-        Logger.log("Planilha de Notas Fiscais atualizada.");
-
         return true;
     } catch (e) {
         Logger.log(`ERRO CRÍTICO em ConciliacaoNFCrud_salvarAlteracoesEmLote: ${e.toString()}\n${e.stack}`);
@@ -568,30 +472,22 @@ function ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoes) {
     const aba = planilha.getSheetByName(ABA_COTACOES);
     const dados = aba.getDataRange().getValues();
     const cabecalhos = dados.shift();
-
     const colMap = {};
     const colunasNecessarias = ["ID da Cotação", "Fornecedor", "SubProduto", "Comprar", "Preço", "Fator", "Preço por Fator"];
     colunasNecessarias.forEach(nome => { colMap[nome] = cabecalhos.indexOf(nome); });
-
     const setCotacoes = new Set(chavesCotacoes.map(c => `${c.idCotacao}-${c.fornecedor}`));
     const itens = [];
-
     for (const linha of dados) {
         const id = linha[colMap["ID da Cotação"]];
         const fornecedor = linha[colMap["Fornecedor"]];
         const compositeKey = `${id}-${fornecedor}`;
-        
         if (setCotacoes.has(compositeKey)) {
             const qtdComprar = parseFloat(linha[colMap["Comprar"]]);
             if (!isNaN(qtdComprar) && qtdComprar > 0) {
                  itens.push({
-                    idCotacao: id,
-                    fornecedor: fornecedor,
-                    subProduto: linha[colMap["SubProduto"]],
-                    qtdComprar: qtdComprar,
-                    preco: parseFloat(linha[colMap["Preço"]]) || 0,
-                    fator: parseFloat(linha[colMap["Fator"]]) || 1,
-                    precoPorFator: parseFloat(linha[colMap["Preço por Fator"]]) || 0
+                    idCotacao: id, fornecedor: fornecedor, subProduto: linha[colMap["SubProduto"]],
+                    qtdComprar: qtdComprar, preco: parseFloat(linha[colMap["Preço"]]) || 0,
+                    fator: parseFloat(linha[colMap["Fator"]]) || 1, precoPorFator: parseFloat(linha[colMap["Preço por Fator"]]) || 0
                 });
             }
         }
