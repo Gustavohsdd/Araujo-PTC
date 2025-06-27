@@ -114,6 +114,14 @@ const CABECALHOS_CADASTROS = [
   "Contato"
 ];
 
+// Aba Conciliacao
+const ABA_CONCILIACAO = "Conciliacao";
+const CABECALHOS_CONCILIACAO = [
+  "Item da Cotação",
+  "Descrição Produto (NF)",
+  "GTIN/EAN (Cód. Barras)"
+];
+
 // Constantes para o Portal do Fornecedor
 const STATUS_PORTAL = {
   LINK_GERADO: "Link Gerado", // Link criado, aguardando primeira resposta
@@ -123,4 +131,5 @@ const STATUS_PORTAL = {
   ERRO_PORTAL: "Erro no Portal", // Erro ao processar o link/dados
   EXPIRADO: "Expirado"        // (Opcional) Se links tiverem validade
 };
+
 Object.freeze(STATUS_PORTAL);

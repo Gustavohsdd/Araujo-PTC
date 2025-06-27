@@ -198,6 +198,7 @@ function ConciliacaoNFController_obterDadosParaPagina() {
     
     const cotacoes = ConciliacaoNFCrud_obterCotacoesAbertas();
     const notasFiscais = ConciliacaoNFCrud_obterNFsNaoConciliadas();
+    const mapeamentoConciliacao = ConciliacaoNFCrud_obterMapeamentoConciliacao(); // Busca os mapeamentos da aba "Conciliacao"
 
     if (cotacoes === null || notasFiscais === null) {
       throw new Error("Falha ao buscar dados das planilhas (Cotações ou Notas Fiscais).");
@@ -219,7 +220,8 @@ function ConciliacaoNFController_obterDadosParaPagina() {
         notasFiscais: notasFiscais,
         itensNF: todosOsItensNF,
         itensCotacao: todosOsItensCotacao,
-        dadosGeraisNF: todosOsDadosGeraisNF
+        dadosGeraisNF: todosOsDadosGeraisNF,
+        mapeamentoConciliacao: mapeamentoConciliacao // Envia os mapeamentos para a interface
       },
       message: null
     };
@@ -278,13 +280,15 @@ function ConciliacaoNFController_salvarConciliacaoEmLote(dadosLote) {
 
   try {
     Logger.log("Recebidos dados para salvamento em lote.");
-    const { conciliacoes, itensCortados } = dadosLote;
+    // Extrai os novos mapeamentos do payload recebido da interface
+    const { conciliacoes, itensCortados, novosMapeamentos } = dadosLote; 
 
-    if (!Array.isArray(conciliacoes) || !Array.isArray(itensCortados)) {
+    if (!Array.isArray(conciliacoes) || !Array.isArray(itensCortados) || !Array.isArray(novosMapeamentos)) {
       throw new Error("Formato de dados inválido para salvamento em lote.");
     }
 
-    const sucesso = ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados);
+    // Passa os novos mapeamentos para a função de CRUD que salva nas planilhas
+    const sucesso = ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, novosMapeamentos);
 
     if (!sucesso) {
       throw new Error("Ocorreu uma falha no backend ao tentar salvar os dados nas planilhas.");

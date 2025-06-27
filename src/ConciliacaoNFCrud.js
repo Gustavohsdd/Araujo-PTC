@@ -387,7 +387,102 @@ function ConciliacaoNFCrud_atualizarStatusNF(chavesAcesso, idCotacao, novoStatus
     }
 }
 
-function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados) {
+/**
+ * Lê a aba 'Conciliacao' e retorna um array com os mapeamentos existentes.
+ * @returns {Array<Object>} Um array de objetos, onde cada objeto é um mapeamento. Ex: [{itemCotacao: 'PROD A', descricaoNF: 'PRODUTO A FORNECEDOR'}]
+ */
+function ConciliacaoNFCrud_obterMapeamentoConciliacao() {
+  try {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const aba = planilha.getSheetByName(ABA_CONCILIACAO);
+    if (!aba) {
+      Logger.log(`Aba de mapeamento "${ABA_CONCILIACAO}" não encontrada. Retornando array vazio.`);
+      return [];
+    }
+    const ultimaLinha = aba.getLastRow();
+    if (ultimaLinha <= 1) {
+      return [];
+    }
+    
+    const dados = aba.getRange(2, 1, ultimaLinha - 1, 2).getValues(); // Lê apenas as duas primeiras colunas
+    const cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+
+    const colItemCotacao = cabecalhos.indexOf("Item da Cotação");
+    const colDescricaoNF = cabecalhos.indexOf("Descrição Produto (NF)");
+
+    if (colItemCotacao === -1 || colDescricaoNF === -1) {
+      Logger.log(`ERRO: Colunas "Item da Cotação" ou "Descrição Produto (NF)" não encontradas na aba "${ABA_CONCILIACAO}".`);
+      return [];
+    }
+
+    const mapeamento = dados.map(linha => ({
+      itemCotacao: linha[colItemCotacao],
+      descricaoNF: linha[colDescricaoNF]
+    })).filter(item => item.itemCotacao && item.descricaoNF); // Garante que não haja linhas vazias
+
+    return mapeamento;
+
+  } catch (e) {
+    Logger.log(`Erro em ConciliacaoNFCrud_obterMapeamentoConciliacao: ${e.message}`);
+    return []; // Retorna um array vazio em caso de erro para não quebrar a interface
+  }
+}
+
+
+/**
+ * Recebe novos mapeamentos e os adiciona na aba 'Conciliacao', evitando duplicatas.
+ * @param {Array<Object>} novosMapeamentos - Um array de objetos com as novas associações.
+ */
+function ConciliacaoNFCrud_atualizarMapeamentoConciliacao(novosMapeamentos) {
+  if (!novosMapeamentos || novosMapeamentos.length === 0) {
+    return;
+  }
+  
+  try {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const aba = planilha.getSheetByName(ABA_CONCILIACAO);
+    if (!aba) {
+      Logger.log(`Aba "${ABA_CONCILIACAO}" não encontrada. Impossível atualizar mapeamento.`);
+      return;
+    }
+    
+    const dadosAtuais = aba.getDataRange().getValues();
+    const cabecalhos = dadosAtuais.shift(); // Remove o cabeçalho
+    
+    const colItemCotacao = cabecalhos.indexOf("Item da Cotação");
+    const colDescricaoNF = cabecalhos.indexOf("Descrição Produto (NF)");
+    const colGtin = cabecalhos.indexOf("GTIN/EAN (Cód. Barras)");
+
+    // Cria um Set para consulta rápida de mapeamentos existentes (Item+Descricao)
+    const mapaExistente = new Set(dadosAtuais.map(linha => `${linha[colItemCotacao]}#${linha[colDescricaoNF]}`));
+
+    const linhasParaAdicionar = [];
+    
+    novosMapeamentos.forEach(item => {
+      const chaveUnica = `${item.itemCotacao}#${item.descricaoNF}`;
+      if (!mapaExistente.has(chaveUnica)) {
+        const novaLinha = cabecalhos.map(() => ''); // Cria uma linha vazia com o tamanho dos cabeçalhos
+        novaLinha[colItemCotacao] = item.itemCotacao;
+        novaLinha[colDescricaoNF] = item.descricaoNF;
+        novaLinha[colGtin] = item.gtin; // Adiciona o GTIN se disponível
+        
+        linhasParaAdicionar.push(novaLinha);
+        mapaExistente.add(chaveUnica); // Adiciona ao Set para evitar duplicatas na mesma execução
+      }
+    });
+
+    if (linhasParaAdicionar.length > 0) {
+      aba.getRange(aba.getLastRow() + 1, 1, linhasParaAdicionar.length, cabecalhos.length)
+         .setValues(linhasParaAdicionar);
+      Logger.log(`${linhasParaAdicionar.length} novo(s) mapeamento(s) adicionado(s) à aba '${ABA_CONCILIACAO}'.`);
+    }
+
+  } catch(e) {
+    Logger.log(`ERRO em ConciliacaoNFCrud_atualizarMapeamentoConciliacao: ${e.message}\n${e.stack}`);
+  }
+}
+
+function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, novosMapeamentos) {
     Logger.log(`Iniciando salvamento em lote. Conciliações: ${conciliacoes.length}, Itens cortados: ${itensCortados.length}`);
     try {
         const planilhaCotacoes = SpreadsheetApp.getActiveSpreadsheet();
@@ -460,6 +555,11 @@ function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados) {
            Logger.log("IDs de Cotação atualizados nas Notas Fiscais.");
         }
         
+        // ADIÇÃO: Chamar a função para atualizar o mapeamento da aba "Conciliacao"
+        if (novosMapeamentos && novosMapeamentos.length > 0) {
+          ConciliacaoNFCrud_atualizarMapeamentoConciliacao(novosMapeamentos);
+        }
+        
         return true;
     } catch (e) {
         Logger.log(`ERRO CRÍTICO em ConciliacaoNFCrud_salvarAlteracoesEmLote: ${e.toString()}\n${e.stack}`);
@@ -493,4 +593,99 @@ function ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoes) {
         }
     }
     return itens;
+}
+
+/**
+ * Lê a aba 'Conciliacao' e retorna um array com os mapeamentos existentes.
+ * @returns {Array<Object>} Um array de objetos, onde cada objeto é um mapeamento. Ex: [{itemCotacao: 'PROD A', descricaoNF: 'PRODUTO A FORNECEDOR'}]
+ */
+function ConciliacaoNFCrud_obterMapeamentoConciliacao() {
+  try {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const aba = planilha.getSheetByName(ABA_CONCILIACAO);
+    if (!aba) {
+      Logger.log(`Aba de mapeamento "${ABA_CONCILIACAO}" não encontrada. Retornando array vazio.`);
+      return [];
+    }
+    const ultimaLinha = aba.getLastRow();
+    if (ultimaLinha <= 1) {
+      return [];
+    }
+    
+    const dados = aba.getRange(2, 1, ultimaLinha - 1, 2).getValues(); // Lê apenas as duas primeiras colunas
+    const cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+
+    const colItemCotacao = cabecalhos.indexOf("Item da Cotação");
+    const colDescricaoNF = cabecalhos.indexOf("Descrição Produto (NF)");
+
+    if (colItemCotacao === -1 || colDescricaoNF === -1) {
+      Logger.log(`ERRO: Colunas "Item da Cotação" ou "Descrição Produto (NF)" não encontradas na aba "${ABA_CONCILIACAO}".`);
+      return [];
+    }
+
+    const mapeamento = dados.map(linha => ({
+      itemCotacao: linha[colItemCotacao],
+      descricaoNF: linha[colDescricaoNF]
+    })).filter(item => item.itemCotacao && item.descricaoNF); // Garante que não haja linhas vazias
+
+    return mapeamento;
+
+  } catch (e) {
+    Logger.log(`Erro em ConciliacaoNFCrud_obterMapeamentoConciliacao: ${e.message}`);
+    return []; // Retorna um array vazio em caso de erro para não quebrar a interface
+  }
+}
+
+
+/**
+ * Recebe novos mapeamentos e os adiciona na aba 'Conciliacao', evitando duplicatas.
+ * @param {Array<Object>} novosMapeamentos - Um array de objetos com as novas associações.
+ */
+function ConciliacaoNFCrud_atualizarMapeamentoConciliacao(novosMapeamentos) {
+  if (!novosMapeamentos || novosMapeamentos.length === 0) {
+    return;
+  }
+  
+  try {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const aba = planilha.getSheetByName(ABA_CONCILIACAO);
+    if (!aba) {
+      Logger.log(`Aba "${ABA_CONCILIACAO}" não encontrada. Impossível atualizar mapeamento.`);
+      return;
+    }
+    
+    const dadosAtuais = aba.getDataRange().getValues();
+    const cabecalhos = dadosAtuais.shift(); // Remove o cabeçalho
+    
+    const colItemCotacao = cabecalhos.indexOf("Item da Cotação");
+    const colDescricaoNF = cabecalhos.indexOf("Descrição Produto (NF)");
+    const colGtin = cabecalhos.indexOf("GTIN/EAN (Cód. Barras)");
+
+    // Cria um Set para consulta rápida de mapeamentos existentes (Item+Descricao)
+    const mapaExistente = new Set(dadosAtuais.map(linha => `${linha[colItemCotacao]}#${linha[colDescricaoNF]}`));
+
+    const linhasParaAdicionar = [];
+    
+    novosMapeamentos.forEach(item => {
+      const chaveUnica = `${item.itemCotacao}#${item.descricaoNF}`;
+      if (!mapaExistente.has(chaveUnica)) {
+        const novaLinha = cabecalhos.map(() => ''); // Cria uma linha vazia com o tamanho dos cabeçalhos
+        novaLinha[colItemCotacao] = item.itemCotacao;
+        novaLinha[colDescricaoNF] = item.descricaoNF;
+        novaLinha[colGtin] = item.gtin; // Adiciona o GTIN se disponível
+        
+        linhasParaAdicionar.push(novaLinha);
+        mapaExistente.add(chaveUnica); // Adiciona ao Set para evitar duplicatas na mesma execução
+      }
+    });
+
+    if (linhasParaAdicionar.length > 0) {
+      aba.getRange(aba.getLastRow() + 1, 1, linhasParaAdicionar.length, cabecalhos.length)
+         .setValues(linhasParaAdicionar);
+      Logger.log(`${linhasParaAdicionar.length} novo(s) mapeamento(s) adicionado(s) à aba '${ABA_CONCILIACAO}'.`);
+    }
+
+  } catch(e) {
+    Logger.log(`ERRO em ConciliacaoNFCrud_atualizarMapeamentoConciliacao: ${e.message}\n${e.stack}`);
+  }
 }
