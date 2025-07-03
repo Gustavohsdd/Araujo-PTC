@@ -5,17 +5,23 @@
  */
 
 /**
- * Função principal para processar todos os arquivos XML da pasta de entrada.
- * Esta função deve ser executada manualmente ou por um acionador de tempo (trigger).
+ * [FUNÇÃO ALTERADA]
+ * Recebe arquivos da interface, decodifica, processa em memória e salva na planilha.
+ * Suporta upload de múltiplos arquivos XML e ZIP. Os arquivos não são salvos no Drive.
+ * @param {Array<object>} arquivos - Array de objetos com {fileName, mimeType, content (base64)}
+ * @returns {object} Objeto com { success: boolean, message: string }.
  */
-function ConciliacaoNFController_processarXmlsDaPasta() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) {
-    Logger.log('Não foi possível obter o lock. Outro processo já está em execução.');
-    return;
+function ConciliacaoNFController_uploadArquivos(arquivos) {
+  if (!arquivos || arquivos.length === 0) {
+    return { success: false, message: "Nenhum arquivo recebido." };
   }
 
-  Logger.log('INICIANDO EXECUÇÃO OTIMIZADA...');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return { success: false, message: 'Não foi possível obter o lock. Outro processo já está em execução.' };
+  }
+
+  Logger.log('INICIANDO EXECUÇÃO DE UPLOAD E PROCESSAMENTO EM MEMÓRIA...');
 
   const todosOsDados = {
     notasFiscais: [],
@@ -24,170 +30,98 @@ function ConciliacaoNFController_processarXmlsDaPasta() {
     transporteNf: [],
     tributosTotaisNf: []
   };
-  
+
+  let arquivosProcessados = 0;
+  let arquivosDuplicados = 0;
+  let arquivosComErro = 0;
+  let arquivosIgnorados = [];
+
   try {
-    const pastaProcessados = ConciliacaoNFCrud_garantirPastaProcessados();
-    if (!pastaProcessados) {
-      Logger.log('FALHA: Não foi possível encontrar ou criar a pasta de destino "Processados". Abortando.');
-      return;
-    }
-
-    const pastaXml = DriveApp.getFolderById(ID_PASTA_XML);
-    const todosOsArquivos = pastaXml.getFiles();
-    
-    const arquivosXml = [];
-    while(todosOsArquivos.hasNext()) {
-      const arquivo = todosOsArquivos.next();
-      if (arquivo.getName().toLowerCase().endsWith('.xml')) {
-        arquivosXml.push(arquivo);
-      }
-    }
-
-    if (arquivosXml.length === 0) {
-      Logger.log('Nenhum arquivo .xml para processar.');
-      return;
-    }
-    
     const chavesExistentes = ConciliacaoNFCrud_obterChavesDeAcessoExistentes();
-    Logger.log(`Encontradas ${chavesExistentes.size} chaves existentes.`);
+    Logger.log(`Encontradas ${chavesExistentes.size} chaves existentes na planilha.`);
 
-    let arquivosProcessados = 0;
-    let arquivosSkipped = 0;
-    let arquivosExcluidos = 0;
-
-    for (const arquivo of arquivosXml) {
-      const nomeArquivo = arquivo.getName();
-      Logger.log(`--- Processando arquivo em memória: ${nomeArquivo} ---`);
-      
+    const processarBlobXml = (blob, nomeArquivoFonte) => {
       try {
-        const conteudoXml = arquivo.getBlob().getDataAsString('UTF-8');
+        if (!blob.getName().toLowerCase().endsWith('.xml')) {
+            Logger.log(`Arquivo "${blob.getName()}" dentro de um ZIP não é .xml e foi ignorado.`);
+            return;
+        }
+
+        const conteudoXml = blob.getDataAsString('UTF-8');
         const dadosNf = ConciliacaoNFCrud_parsearConteudoXml(conteudoXml);
 
         if (!dadosNf || !dadosNf.notasFiscais.chaveAcesso) {
-          Logger.log(`AVISO: Chave de acesso não encontrada no XML do arquivo ${nomeArquivo}. Pulando.`);
-          arquivosSkipped++;
-          arquivo.moveTo(pastaProcessados);
-          continue;
+          Logger.log(`AVISO: Chave de acesso não encontrada no XML do arquivo ${nomeArquivoFonte}. Pulando.`);
+          arquivosComErro++;
+          return;
         }
-        
-        const chaveAtual = dadosNf.notasFiscais.chaveAcesso;
 
-        // ===== ALTERAÇÃO PRINCIPAL: EXCLUIR ARQUIVO DUPLICADO =====
+        const chaveAtual = dadosNf.notasFiscais.chaveAcesso;
         if (chavesExistentes.has(chaveAtual)) {
-          Logger.log(`AVISO: A NF-e com chave ${chaveAtual} já existe. Excluindo arquivo duplicado: ${nomeArquivo}.`);
-          arquivo.setTrashed(true); // Move o arquivo para a lixeira
-          arquivosExcluidos++;
-          continue;
+          Logger.log(`AVISO: A NF-e com chave ${chaveAtual} (arquivo: ${nomeArquivoFonte}) já existe. Pulando.`);
+          arquivosDuplicados++;
+          return;
         }
-        
+
         todosOsDados.notasFiscais.push(dadosNf.notasFiscais);
         todosOsDados.itensNf.push(...dadosNf.itensNf);
         todosOsDados.faturasNf.push(...dadosNf.faturasNf);
         todosOsDados.transporteNf.push(...dadosNf.transporteNf);
         todosOsDados.tributosTotaisNf.push(...dadosNf.tributosTotaisNf);
 
-        chavesExistentes.add(chaveAtual);
-        Logger.log(`Dados do arquivo ${nomeArquivo} processados e acumulados em memória.`);
-        
-        arquivo.moveTo(pastaProcessados);
+        chavesExistentes.add(chaveAtual); // Adiciona à lista para evitar duplicidade no mesmo lote
         arquivosProcessados++;
+        Logger.log(`Dados do arquivo ${nomeArquivoFonte} (chave: ${chaveAtual}) processados e acumulados em memória.`);
 
       } catch (e) {
-        Logger.log(`ERRO CRÍTICO ao processar o arquivo ${nomeArquivo}. Erro: ${e.message}. Stack: ${e.stack}`);
-        arquivo.moveTo(pastaProcessados); // Move para processados mesmo com erro para não travar o processo
-        arquivosSkipped++;
+        Logger.log(`ERRO CRÍTICO ao processar o arquivo em memória ${nomeArquivoFonte}. Erro: ${e.message}. Stack: ${e.stack}`);
+        arquivosComErro++;
       }
-    }
-    
-    if (todosOsDados.notasFiscais.length > 0) {
-        Logger.log(`Iniciando salvamento em lote de ${todosOsDados.notasFiscais.length} nota(s) fiscal(is).`);
-        ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados);
-        Logger.log(`Salvamento em lote finalizado.`);
-    } else {
-        Logger.log("Nenhuma nova nota fiscal para adicionar à planilha.");
-    }
-    
-    Logger.log(`--- Processamento finalizado. Resumo: ${arquivosProcessados} processados, ${arquivosExcluidos} duplicados excluídos, ${arquivosSkipped} pulados/com erro. ---`);
-
-  } catch (error) {
-    Logger.log(`ERRO GERAL na função ConciliacaoNFController_processarXmlsDaPasta: ${error.toString()}. Stack: ${error.stack}`);
-  } finally {
-    lock.releaseLock();
-    Logger.log('FINALIZANDO EXECUÇÃO. Lock liberado.');
-  }
-}
-
-/**
- * [NOVA FUNÇÃO]
- * Recebe arquivos da interface, decodifica e salva na pasta de XMLs.
- * Suporta arquivos XML e ZIP. Arquivos RAR não são suportados.
- * @param {Array<object>} arquivos - Array de objetos com {fileName, mimeType, content (base64)}
- * @returns {object} Objeto com { success: boolean, message: string }.
- */
-function ConciliacaoNFController_uploadArquivos(arquivos) {
-  if (!arquivos || arquivos.length === 0) {
-    return { success: false, message: "Nenhum arquivo recebido." };
-  }
-  
-  try {
-    const pastaXml = DriveApp.getFolderById(ID_PASTA_XML);
-    let arquivosSalvos = 0;
-    let arquivosXmlExtraidos = 0;
-    let arquivosIgnorados = [];
+    };
 
     for (const arquivo of arquivos) {
       const { fileName, mimeType, content } = arquivo;
       const decodedContent = Utilities.base64Decode(content);
       const blob = Utilities.newBlob(decodedContent, mimeType, fileName);
-
       const nomeArquivoLower = fileName.toLowerCase();
 
-      // Handle ZIP files
       if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed' || nomeArquivoLower.endsWith('.zip')) {
         try {
           const arquivosDescompactados = Utilities.unzip(blob);
           for (const arquivoDescompactado of arquivosDescompactados) {
-            if (arquivoDescompactado.getName().toLowerCase().endsWith('.xml')) {
-              pastaXml.createFile(arquivoDescompactado);
-              arquivosXmlExtraidos++;
-            }
+            processarBlobXml(arquivoDescompactado, `${fileName}/${arquivoDescompactado.getName()}`);
           }
-           Logger.log(`Arquivo ZIP "${fileName}" processado.`);
-        } catch(e) {
-           Logger.log(`Erro ao descompactar o arquivo ZIP "${fileName}": ${e.message}`);
-           arquivosIgnorados.push(fileName);
+        } catch (e) {
+          Logger.log(`Erro ao descompactar o arquivo ZIP "${fileName}": ${e.message}`);
+          arquivosIgnorados.push(fileName);
         }
-      }
-      // Handle individual XML files
-      else if (mimeType === 'text/xml' || mimeType === 'application/xml' || nomeArquivoLower.endsWith('.xml')) {
-        pastaXml.createFile(blob);
-        arquivosSalvos++;
-        Logger.log(`Arquivo XML "${fileName}" salvo.`);
-      }
-      // Log unsupported types like RAR
-      else {
+      } else if (mimeType === 'text/xml' || mimeType === 'application/xml' || nomeArquivoLower.endsWith('.xml')) {
+        processarBlobXml(blob, fileName);
+      } else {
         Logger.log(`Arquivo ${fileName} com tipo ${mimeType} não é suportado e foi ignorado.`);
         arquivosIgnorados.push(fileName);
       }
     }
 
-    let message = '';
-    if (arquivosSalvos > 0) message += `${arquivosSalvos} arquivo(s) XML salvo(s) com sucesso.\n`;
-    if (arquivosXmlExtraidos > 0) message += `${arquivosXmlExtraidos} arquivo(s) XML extraído(s) de arquivos ZIP.\n`;
-    
-    if (message === '') {
-      message = 'Nenhum arquivo XML válido foi encontrado para upload. Lembre-se que arquivos .RAR não são suportados.';
-    } else {
-      if (arquivosIgnorados.length > 0) {
-        message += `\nOs seguintes arquivos foram ignorados (tipo não suportado): ${arquivosIgnorados.join(', ')}.`;
-      }
+    if (todosOsDados.notasFiscais.length > 0) {
+      Logger.log(`Iniciando salvamento em lote de ${todosOsDados.notasFiscais.length} nova(s) nota(s) fiscal(is).`);
+      ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados);
+      Logger.log(`Salvamento em lote finalizado.`);
+    }
+
+    let message = `Processamento concluído.\n\n- ${arquivosProcessados} nova(s) NF-e processada(s) com sucesso.\n- ${arquivosDuplicados} NF-e duplicada(s) ignorada(s).\n- ${arquivosComErro} arquivo(s) com erro de leitura/parsing.`;
+    if (arquivosIgnorados.length > 0) {
+      message += `\n\nArquivos ignorados (tipo não suportado ou erro de descompactação): ${arquivosIgnorados.join(', ')}.`;
     }
     
     return { success: true, message: message };
 
   } catch (e) {
-    Logger.log(`ERRO em ConciliacaoNFController_uploadArquivos: ${e.toString()}\n${e.stack}`);
-    return { success: false, message: `Erro no servidor durante o upload: ${e.message}` };
+    Logger.log(`ERRO GERAL em ConciliacaoNFController_uploadArquivos: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: `Erro fatal no servidor durante o processamento: ${e.message}` };
+  } finally {
+    lock.releaseLock();
+    Logger.log('FINALIZANDO EXECUÇÃO DE UPLOAD. Lock liberado.');
   }
 }
 
@@ -280,14 +214,31 @@ function ConciliacaoNFController_salvarConciliacaoEmLote(dadosLote) {
 
   try {
     Logger.log("Recebidos dados para salvamento em lote.");
-    // Extrai os novos mapeamentos do payload recebido da interface
-    const { conciliacoes, itensCortados, novosMapeamentos } = dadosLote; 
+    const { conciliacoes, itensCortados, novosMapeamentos, statusUpdates } = dadosLote; 
 
-    if (!Array.isArray(conciliacoes) || !Array.isArray(itensCortados) || !Array.isArray(novosMapeamentos)) {
+    if (!Array.isArray(conciliacoes) || !Array.isArray(itensCortados) || !Array.isArray(novosMapeamentos) || !Array.isArray(statusUpdates)) {
       throw new Error("Formato de dados inválido para salvamento em lote.");
     }
 
-    // Passa os novos mapeamentos para a função de CRUD que salva nas planilhas
+    // [NOVO] Processa as atualizações de status (Sem Pedido, Bonificação, etc.)
+    if (statusUpdates && statusUpdates.length > 0) {
+      Logger.log(`Processando ${statusUpdates.length} atualização(ões) de status.`);
+      // Agrupa as chaves de acesso por novo status para otimizar chamadas
+      const updatesByStatus = statusUpdates.reduce((acc, update) => {
+        if (!acc[update.novoStatus]) {
+          acc[update.novoStatus] = [];
+        }
+        acc[update.novoStatus].push(update.chaveAcesso);
+        return acc;
+      }, {});
+
+      for (const status in updatesByStatus) {
+        ConciliacaoNFCrud_atualizarStatusNF(updatesByStatus[status], null, status);
+        Logger.log(`Status de ${updatesByStatus[status].length} NF(s) atualizado para '${status}'.`);
+      }
+    }
+
+    // Processa o resto do lote (conciliações, itens cortados, mapeamentos)
     const sucesso = ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, novosMapeamentos);
 
     if (!sucesso) {
@@ -295,36 +246,12 @@ function ConciliacaoNFController_salvarConciliacaoEmLote(dadosLote) {
     }
 
     Logger.log("Salvamento em lote concluído com sucesso.");
-    return { success: true, message: "Todas as conciliações e itens cortados foram salvos com sucesso!" };
+    return { success: true, message: "Todas as alterações foram salvas com sucesso!" };
 
   } catch (e) {
     Logger.log(`ERRO em ConciliacaoNFController_salvarConciliacaoEmLote: ${e.toString()}\n${e.stack}`);
     return { success: false, message: e.message };
   } finally {
     lock.releaseLock();
-  }
-}
-
-function ConciliacaoNFController_marcarNFsSemPedido(chavesAcessoNF) {
-  try {
-    if (!chavesAcessoNF || !Array.isArray(chavesAcessoNF) || chavesAcessoNF.length === 0) {
-      throw new Error("Nenhuma chave de acesso foi fornecida.");
-    }
-    
-    Logger.log(`Marcando ${chavesAcessoNF.length} NF(s) como 'Sem Pedido'.`);
-
-    // A função ConciliacaoNFCrud_atualizarStatusNF foi adicionada ao CRUD para esta chamada funcionar
-    const sucesso = ConciliacaoNFCrud_atualizarStatusNF(chavesAcessoNF, null, "Sem Pedido");
-    
-    if (!sucesso) {
-      throw new Error("Falha ao atualizar o status das notas fiscais na planilha.");
-    }
-
-    Logger.log("Notas fiscais marcadas como 'Sem Pedido' com sucesso.");
-    return { success: true, message: `${chavesAcessoNF.length} nota(s) fiscal(is) marcada(s) como 'Sem Pedido' com sucesso!` };
-
-  } catch (e) {
-    Logger.log(`ERRO em ConciliacaoNFController_marcarNFsSemPedido: ${e.toString()}\n${e.stack}`);
-    return { success: false, message: e.message };
   }
 }

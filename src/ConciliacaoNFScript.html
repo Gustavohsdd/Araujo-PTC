@@ -1,37 +1,27 @@
 <script>
-// Variáveis globais para armazenar os dados carregados
+// Variáveis globais para armazenar os dados carregados do servidor
 let todasAsCotacoes = [];
 let todasAsNFs = [];
 let todosOsItensNF = [];
 let todosOsItensCotacao = [];
 let todosOsDadosGeraisNF = [];
 let mapaConciliacao = [];
-let resumoModalInstance = null;
+
+// [LÓGICA DE LOTE RESTAURADA] - Array para guardar as conciliações pendentes
+let stagedPayloads = [];
+
+// Variáveis de estado da UI
 let ajusteModalInstance = null;
 let detalhesDiferencaModalInstance = null;
-let activeRowForAdjustment = null;
+let activeItemForAdjustment = null; // Para o modal de ajuste manual
+let selectedCotacaoItem = null; // Item da cotação selecionado para fazer a ligação
 
-// Funções utilitárias
-function normalizarCNPJ(cnpj) {
-    return cnpj ? String(cnpj).replace(/[^\d]/g, '') : '';
-}
+// ===== FUNÇÕES DE INICIALIZAÇÃO E SETUP =====
 
-function formatarMoeda(valor) {
-    if (typeof valor !== 'number' || isNaN(valor)) {
-        return "R$ 0,00";
-    }
-    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function toggleLoader(show) {
-    document.getElementById('loader').classList.toggle('d-none', !show);
-}
-
-// Função principal que roda ao carregar a página
 document.addEventListener('DOMContentLoaded', function() {
-    resumoModalInstance = new bootstrap.Modal(document.getElementById('resumoModal'));
     ajusteModalInstance = new bootstrap.Modal(document.getElementById('ajusteManualModal'));
     detalhesDiferencaModalInstance = new bootstrap.Modal(document.getElementById('detalhesDiferencaModal'));
+
     toggleLoader(true);
     google.script.run
         .withSuccessHandler(onDadosIniciaisSuccess)
@@ -41,45 +31,58 @@ document.addEventListener('DOMContentLoaded', function() {
     addEventListeners();
 });
 
-// Adiciona todos os event listeners da página
+// [FUNÇÃO ATUALIZADA] - Adiciona o listener para o botão de salvar em lote e para o novo toggle
 function addEventListeners() {
-    // Etapa 1: Seleção
-    $('#btn-processar-xml').on('click', onBtnProcessarXmlClick);
+    // Header
     $('#btn-upload-xml').on('click', () => $('#xml-upload-input').click());
     $('#xml-upload-input').on('change', onFileUpload);
-    $('#search-input').on('input', onSearchInputChange);
-    $('#card-selecao').on('change', '.nf-select-checkbox', onNfCardSelectionChange);
-    $('#btn-processar-selecao').on('click', onBtnProcessarSelecaoClick);
+    $('#btn-salvar-lote').on('click', onBtnSalvarLoteClick); 
 
-    // Etapa 2: Conciliação
-    $('#btn-cancelar-conciliacao').on('click', resetToInitialState);
-    $('#area-conciliacao').on('change', '.select-cotacao-fornecedor', onSelectCotacaoFornecedorChange);
-    $('#area-conciliacao').on('change', '.select-item-match', onMatchItemChange);
-    $('#btn-salvar-tudo').on('click', onBtnSalvarTudoClick);
+    // Painel Esquerdo (Lista de Trabalho)
+    $('#search-input').on('input', onSearchInputChange);
+    $('#nf-list-container').on('click', '.nf-list-item:not(.staged)', onNfListItemClick);
+    $('#nf-list-container').on('click', '.item-expander', onExpandItemClick);
+    $('#nf-list-container').on('click', '.action-marcar-status', onActionMarcarStatusClick);
+
+    // Painel Direito (Área de Trabalho)
+    $('#panel-direito').on('change', '.select-cotacao-fornecedor', onSelectCotacaoChange);
+    $('#panel-direito').on('click', '#cotacao-items-list .list-group-item:not(.matched)', onCotacaoItemClick);
+    $('#panel-direito').on('click', '#nf-items-list .list-group-item:not(.matched)', onNfItemClick);
+    $('#panel-direito').on('click', '.btn-ajuste-manual', onBtnAjusteManualClick);
+    $('#panel-direito').on('click', '#btn-concluir-conciliacao', onBtnConcluirConciliacaoClick);
+    $('#panel-direito').on('click', '.btn-detalhes-diferenca', onBtnDetalhesDiferencaClick);
     
+    // =====================================================================================
+    // CORREÇÃO 1: Listener para o botão de reajuste foi adicionado aqui.
+    // =====================================================================================
+    $('#panel-direito').on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
+
+
     // Modais
-    $('#btn-confirmar-cortados-e-salvar').on('click', onBtnConfirmarCortadosESalvarClick);
-    $('#area-conciliacao').on('click', '.btn-ajuste-manual', onBtnAjusteManualClick);
-    $('#ajuste-fator').on('input', calcularVisualizacaoAjuste);
     $('#btn-salvar-ajuste-manual').on('click', onBtnSalvarAjusteManualClick);
-    $('#area-conciliacao').on('click', '.btn-detalhes-diferenca', onBtnDetalhesDiferencaClick);
+    $('#ajuste-fator').on('input', calcularVisualizacaoAjuste);
 }
 
-// Reseta a aplicação para seu estado inicial sem recarregar a página.
-function resetToInitialState() {
-    console.log("Resetando a visualização para o estado inicial.");
+// [FUNÇÃO ATUALIZADA] - Garante que o estado de lote seja limpo ao resetar
+function resetApplication() {
+    console.log("Resetando aplicação e recarregando dados...");
     toggleLoader(true);
-    $('#area-conciliacao').addClass('d-none');
-    $('#container-fornecedores').empty();
-    $('#card-selecao').removeClass('d-none');
-    $('#btn-processar-selecao').prop('disabled', true);
+    
+    stagedPayloads = []; // Limpa a fila de salvamento
+    atualizarBotaoSalvarLote(); // Esconde e reseta o botão de lote
+
+    $('#workspace-content').addClass('d-none').empty();
+    $('#workspace-welcome').removeClass('d-none');
+
     google.script.run
         .withSuccessHandler(onDadosIniciaisSuccess)
         .withFailureHandler(onFailure)
         .ConciliacaoNFController_obterDadosParaPagina();
 }
 
-// == Funções de Callback do Servidor ==
+
+// ===== FUNÇÕES DE CALLBACK DO SERVIDOR E PROCESSAMENTO DE DADOS =====
+
 function onDadosIniciaisSuccess(response) {
     toggleLoader(false);
     if (!response.success) {
@@ -92,31 +95,27 @@ function onDadosIniciaisSuccess(response) {
     todasAsCotacoes = response.dados.cotacoes;
     todosOsItensCotacao = response.dados.itensCotacao;
     mapaConciliacao = response.dados.mapeamentoConciliacao || [];
-    renderizarCardsNFs();
+    
+    renderizarListaDeTrabalho();
 }
 
 function onFailure(error) {
     console.error('Erro na chamada ao servidor:', error);
-    alert('Ocorreu um erro: ' + error.message);
+    alert('Ocorreu um erro no servidor: ' + error.message);
     toggleLoader(false);
 }
 
-// ===== Funções de Upload de Arquivo =====
+// ===== UPLOAD E PROCESSAMENTO DE XMLs =====
 function onFileUpload(event) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     toggleLoader(true);
-    const filePromises = Array.from(files).map(file => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const data = e.target.result.split(',');
-                resolve({ fileName: file.name, mimeType: file.type, content: data[1] });
-            };
-            reader.onerror = (err) => reject(err);
-            reader.readAsDataURL(file);
-        });
-    });
+    const filePromises = Array.from(files).map(file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve({ fileName: file.name, mimeType: file.type, content: e.target.result.split(',')[1] });
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+    }));
     Promise.all(filePromises)
         .then(fileObjects => {
             google.script.run
@@ -124,337 +123,493 @@ function onFileUpload(event) {
                 .withFailureHandler(onFailure)
                 .ConciliacaoNFController_uploadArquivos(fileObjects);
         })
-        .catch(err => { onFailure({ message: 'Erro ao ler arquivos no navegador: ' + err.message }); });
+        .catch(err => {
+            onFailure({ message: 'Erro ao ler arquivos no navegador: ' + err.message });
+        });
     $(event.target).val('');
 }
 
 function onUploadSuccess(response) {
     alert(response.message);
     if (response.success) {
-      onBtnProcessarXmlClick();
+        resetApplication();
     } else {
-      toggleLoader(false);
+        toggleLoader(false);
     }
 }
 
-// == Funções da Etapa 1: Seleção de NFs ==
-function renderizarCardsNFs() {
-    const cardsContainer = $('#nf-cards-container');
-    cardsContainer.empty();
+// ===== PAINEL ESQUERDO =====
+function renderizarListaDeTrabalho() {
+    const container = $('#nf-list-container').empty();
     if (todasAsNFs.length === 0) {
-        cardsContainer.html('<div class="col-12"><p class="text-center text-muted mt-3">Nenhuma nota fiscal pendente de conciliação foi encontrada.</p></div>');
+        container.html('<p class="p-3 text-muted text-center">Nenhuma nota fiscal pendente de conciliação.</p>');
         return;
     }
-    todasAsNFs.forEach(nf => {
-        const template = document.getElementById('template-nf-card').content.cloneNode(true);
-        const cardContainer = $(template.querySelector('div'));
-        const card = cardContainer.find('.card');
-        card.data('nf-info', nf).data('chave-acesso', nf.chaveAcesso);
-        card.find('.nf-title').text(`NF ${nf.numeroNF} - ${nf.nomeEmitente}`);
-        card.find('.nf-data').text(nf.dataEmissao);
-        const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
-        card.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
-        const itemsBody = card.find('.nf-items-body');
-        const itensDaNF = todosOsItensNF.filter(i => i.chaveAcesso === nf.chaveAcesso);
-        itensDaNF.forEach(item => {
-            itemsBody.append(`<tr><td>${item.descricaoNF}</td><td class="text-end">${item.qtdNF.toFixed(2)}</td><td class="text-end">${formatarMoeda(item.precoNF)}</td></tr>`);
-        });
-        cardsContainer.append(cardContainer);
-    });
-}
-
-function onBtnProcessarXmlClick() {
-    const btn = $('#btn-processar-xml');
-    const originalContent = btn.html();
-    btn.prop('disabled', true).html(`<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span><span>Processando...</span>`);
-    google.script.run
-        .withSuccessHandler(() => {
-            btn.prop('disabled', false).html(originalContent);
-            resetToInitialState();
-        })
-        .withFailureHandler(error => {
-            btn.prop('disabled', false).html(originalContent);
-            onFailure(error);
-        })
-        .ConciliacaoNFController_processarXmlsDaPasta();
-}
-
-function onSearchInputChange() {
-    const searchTerm = $(this).val().toLowerCase().trim();
-    $('#nf-cards-container > div').each(function() {
-        const cardContainer = $(this);
-        const card = cardContainer.find('.card');
-        const nfInfo = card.data('nf-info');
-        let cardText = `${nfInfo.numeroNF} ${nfInfo.nomeEmitente}`.toLowerCase();
-        cardContainer.toggle(cardText.includes(searchTerm));
-    });
-}
-
-function onNfCardSelectionChange() {
-    $('#btn-processar-selecao').prop('disabled', $('#nf-cards-container .nf-select-checkbox:checked').length === 0);
-}
-
-function onBtnProcessarSelecaoClick() {
-    const nfsParaConciliar = [];
-    const chavesNfsSemPedido = [];
-    $('#nf-cards-container .nf-select-checkbox:checked').each(function() {
-        const card = $(this).closest('.card');
-        const nfInfo = card.data('nf-info');
-        if (card.find('.nf-sem-pedido-checkbox').is(':checked')) {
-            chavesNfsSemPedido.push(nfInfo.chaveAcesso);
-        } else {
-            nfsParaConciliar.push(nfInfo);
-        }
-    });
-    toggleLoader(true);
-    if (chavesNfsSemPedido.length > 0) {
-        google.script.run
-            .withSuccessHandler(response => {
-                if (!response.success) alert('Erro ao marcar NFs como "Sem Pedido": ' + response.message);
-                iniciarAreaDeConciliacao(nfsParaConciliar);
-            })
-            .withFailureHandler(onFailure)
-            .ConciliacaoNFController_marcarNFsSemPedido(chavesNfsSemPedido);
-    } else {
-        iniciarAreaDeConciliacao(nfsParaConciliar);
-    }
-}
-
-
-// == Funções da Etapa 2: Área de Conciliação ==
-function iniciarAreaDeConciliacao(nfsParaConciliar) {
-    if (nfsParaConciliar.length === 0) {
-        resetToInitialState();
-        return;
-    }
-    const nfsPorFornecedor = nfsParaConciliar.reduce((acc, nf) => {
-        const cnpj = normalizarCNPJ(nf.cnpjEmitente);
-        if (!acc[cnpj]) acc[cnpj] = { nomeFornecedor: nf.nomeEmitente, cnpj: cnpj, nfs: [] };
-        acc[cnpj].nfs.push(nf);
+    const nfsPorFornecedor = todasAsNFs.reduce((acc, nf) => {
+        const fornecedor = nf.nomeEmitente;
+        if (!acc[fornecedor]) acc[fornecedor] = [];
+        acc[fornecedor].push(nf);
         return acc;
     }, {});
-    const containerFornecedores = $('#container-fornecedores').empty();
-    Object.values(nfsPorFornecedor).forEach(grupo => {
-        const template = document.getElementById('template-fornecedor-block').content.cloneNode(true);
-        const block = $(template.querySelector('.fornecedor-block'));
-        block.data('grupo-fornecedor', grupo);
-        block.find('.nome-fornecedor').text(grupo.nomeFornecedor);
-        const listaNFs = block.find('.lista-nfs-fornecedor');
-        const totalNotasGrupo = grupo.nfs.reduce((sum, nf) => {
+    Object.keys(nfsPorFornecedor).sort().forEach(fornecedor => {
+        container.append(`<div class="fornecedor-group-header">${fornecedor}</div>`);
+        nfsPorFornecedor[fornecedor].forEach(nf => {
+            const template = $('#template-nf-list-item').prop('content').cloneNode(true);
+            const nfItem = $(template.querySelector('.nf-list-item'));
+            nfItem.data('nf-info', nf);
+            nfItem.find('.nf-title').text(`NF ${nf.numeroNF}`);
+            nfItem.find('.nf-data').text(nf.dataEmissao);
             const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
-            const valorNF = totaisNF ? totaisNF.valorTotalNf : 0;
-            listaNFs.append(`<li class="list-group-item">NF ${nf.numeroNF} (${formatarMoeda(valorNF)})</li>`);
-            return sum + valorNF;
-        }, 0);
-        block.data('total-notas', totalNotasGrupo);
-        const selectCotacao = block.find('.select-cotacao-fornecedor');
-        const cotacoesDoFornecedor = todasAsCotacoes.filter(c => normalizarCNPJ(c.fornecedorCnpj) === grupo.cnpj);
-        if (cotacoesDoFornecedor.length > 0) {
-            cotacoesDoFornecedor.forEach(c => selectCotacao.append(new Option(`ID ${c.idCotacao} - ${c.fornecedor} (${c.dataAbertura})`, c.compositeKey)));
-            selectCotacao.prop('disabled', false);
-        } else {
-            selectCotacao.append(new Option('Nenhuma cotação aberta encontrada', '', true, true));
-        }
-        containerFornecedores.append(block);
-        atualizarTotaisFornecedor(block);
+            nfItem.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
+            
+            const productsContainer = nfItem.find('.nf-item-products');
+            const productList = $('<ul>');
+            const itensDaNF = todosOsItensNF.filter(i => i.chaveAcesso === nf.chaveAcesso);
+            itensDaNF.forEach(item => {
+                productList.append(`<li>${item.descricaoNF} (Qtd: ${item.qtdNF.toFixed(2)})</li>`);
+            });
+            productsContainer.append(productList);
+            container.append(nfItem);
+        });
     });
-    $('.select-cotacao-fornecedor').select2({ theme: "bootstrap-5", dropdownParent: $('#area-conciliacao'), width: '100%' });
-    $('#card-selecao').addClass('d-none');
-    $('#area-conciliacao').removeClass('d-none');
-    toggleLoader(false);
 }
-
-function atualizarTotaisFornecedor(block) {
-    const totalNotas = block.data('total-notas') || 0;
-    let totalEsperadoCotacao = 0;
-    let totalConciliado = 0;
-    block.find('.comparison-table-body tr').each(function() {
-        const row = $(this);
-        const itemCotacao = row.data('item-cot-info');
-        const select = row.find('.select-item-match');
-        if (select.val() && itemCotacao) {
-            totalEsperadoCotacao += itemCotacao.qtdComprar * itemCotacao.preco;
-            const itemNFOriginal = select.find('option:selected').data('item-nf-info');
-            if (itemNFOriginal) {
-                totalConciliado += itemNFOriginal.qtdNF * itemNFOriginal.precoNF;
+function onSearchInputChange() {
+    const searchTerm = $(this).val().toLowerCase().trim();
+    $('#nf-list-container .fornecedor-group-header').show();
+    $('#nf-list-container .nf-list-item').each(function() {
+        const item = $(this);
+        const nfInfo = item.data('nf-info');
+        const fornecedor = nfInfo.nomeEmitente.toLowerCase();
+        const numeroNF = nfInfo.numeroNF.toString();
+        const isVisible = fornecedor.includes(searchTerm) || numeroNF.includes(searchTerm);
+        item.toggle(isVisible);
+    });
+    $('#nf-list-container .fornecedor-group-header').each(function() {
+        const header = $(this);
+        let hasVisibleItems = false;
+        header.nextUntil('.fornecedor-group-header').each(function() {
+            if ($(this).is(':visible')) {
+                hasVisibleItems = true;
+                return false;
             }
-        }
+        });
+        header.toggle(hasVisibleItems);
     });
-
-    const diferenca = totalNotas - totalEsperadoCotacao;
-    block.find('.total-notas-valor').text(formatarMoeda(totalNotas));
-    block.find('.total-cotacao-valor').text(formatarMoeda(totalEsperadoCotacao));
-    block.find('.total-conciliado-valor').text(formatarMoeda(totalConciliado));
-    const diferencaEl = block.find('.diferenca-totais-valor').text(formatarMoeda(diferenca));
-    
-    const hasDifference = Math.abs(diferenca) >= 0.01;
-    diferencaEl.toggleClass('text-danger', hasDifference).toggleClass('text-success', !hasDifference);
-    block.find('.btn-detalhes-diferenca').toggleClass('d-none', !hasDifference);
+}
+function onExpandItemClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const icon = $(this).find('i');
+    const productsDiv = $(this).closest('.nf-list-item').find('.nf-item-products');
+    productsDiv.toggleClass('d-none');
+    icon.toggleClass('bi-caret-right-fill bi-caret-down-fill');
 }
 
-function onSelectCotacaoFornecedorChange(event) {
-    const select = $(event.target);
-    const block = select.closest('.fornecedor-block');
-    const comparisonContainer = block.find('.comparison-container');
-    const compositeKey = select.val();
-    if (!compositeKey) {
-        comparisonContainer.addClass('d-none');
+function onActionMarcarStatusClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const link = $(this);
+    const novoStatus = link.data('status');
+    const nfItemEl = link.closest('.nf-list-item');
+    const nfInfo = nfItemEl.data('nf-info');
+
+    if (!confirm(`Tem certeza que deseja marcar esta NF como '${novoStatus}'?`)) {
         return;
     }
-    const grupo = block.data('grupo-fornecedor');
+
+    stagedPayloads.push({
+        statusUpdates: [{
+            chaveAcesso: nfInfo.chaveAcesso,
+            novoStatus: novoStatus
+        }]
+    });
+    
+    nfItemEl.addClass('staged').removeClass('active');
+    nfItemEl.find('.status-icon').removeClass('d-none');
+    nfItemEl.find('.staged-status-badge').text(novoStatus).removeClass('d-none');
+    nfItemEl.find('.actions-dropdown').remove(); 
+
+    if ($('#workspace-content').data('active-nf')?.chaveAcesso === nfInfo.chaveAcesso) {
+        $('#workspace-content').addClass('d-none').empty();
+        $('#workspace-welcome').removeClass('d-none');
+    }
+
+    atualizarBotaoSalvarLote();
+}
+
+// ===== PAINEL DIREITO =====
+function onNfListItemClick(event) {
+    if ($(event.target).is('.action-sem-pedido')) return;
+
+    const nfItem = $(this);
+    if (nfItem.hasClass('staged')) return; 
+    $('.nf-list-item.active').removeClass('active');
+    nfItem.addClass('active');
+    const nfInfo = nfItem.data('nf-info');
+    const workspaceContent = $('#workspace-content');
+    workspaceContent.data('active-nf', nfInfo);
+    $('#workspace-welcome').addClass('d-none');
+    const template = $('#template-workspace').prop('content').cloneNode(true);
+    workspaceContent.empty().append(template).removeClass('d-none');
+    const selectCotacao = workspaceContent.find('.select-cotacao-fornecedor');
+    const cnpjFornecedor = normalizarCNPJ(nfInfo.cnpjEmitente);
+    const cotacoesDoFornecedor = todasAsCotacoes.filter(c => normalizarCNPJ(c.fornecedorCnpj) === cnpjFornecedor);
+    if (cotacoesDoFornecedor.length > 0) {
+        cotacoesDoFornecedor.forEach(c => selectCotacao.append(new Option(`ID ${c.idCotacao} - ${c.fornecedor} (${c.dataAbertura})`, c.compositeKey)));
+        selectCotacao.prop('disabled', false);
+    } else {
+        selectCotacao.append(new Option('Nenhuma cotação aberta encontrada', '', true, true));
+    }
+    selectCotacao.select2({ theme: "bootstrap-5", dropdownParent: workspaceContent, width: '100%' });
+    atualizarTotais();
+}
+function onSelectCotacaoChange() {
+    const compositeKey = $(this).val();
+    if (!compositeKey) return;
     const parts = compositeKey.split('-');
     const idCotacao = parts.shift();
     const nomeFornecedor = parts.join('-');
-    const chavesAcessoNesteGrupo = grupo.nfs.map(nf => nf.chaveAcesso);
-    const itensNFNesteGrupo = todosOsItensNF.filter(item => chavesAcessoNesteGrupo.includes(item.chaveAcesso));
+    const nfInfo = $('#workspace-content').data('active-nf');
+    const itensNFNesteGrupo = todosOsItensNF.filter(item => item.chaveAcesso === nfInfo.chaveAcesso);
     const itensCotacaoSelecionada = todosOsItensCotacao.filter(item => item.idCotacao == idCotacao && item.fornecedor == nomeFornecedor);
-    construirTabelaComparacao(block, itensCotacaoSelecionada, itensNFNesteGrupo);
-    comparisonContainer.removeClass('d-none');
-    atualizarTotaisFornecedor(block);
+    construirListasDeComparacao(itensCotacaoSelecionada, itensNFNesteGrupo);
+    $('.comparison-container').removeClass('d-none');
+    $('#btn-concluir-conciliacao').prop('disabled', false);
+    tentarConciliacaoAutomatica();
+    atualizarTotais();
 }
+function construirListasDeComparacao(itensCotacao, itensNF) {
+    const cotacaoList = $('#cotacao-items-list .list-group').empty();
+    const nfList = $('#nf-items-list .list-group').empty();
+    
+    itensCotacao.forEach(item => {
+        const itemHtml = `<a href="#" class="list-group-item list-group-item-action"><div class="item-description">${item.subProduto}</div><div class="item-details">Qtd Pedida: <strong>${item.qtdComprar.toFixed(2)}</strong> | Preço: <strong>${formatarMoeda(item.preco)}</strong></div></a>`;
+        const itemEl = $(itemHtml).data('item-info', item);
+        cotacaoList.append(itemEl);
+    });
 
-function construirTabelaComparacao(block, itensCotacao, itensNF) {
-    const tbody = block.find('.comparison-table-body').empty();
-    itensCotacao.forEach((itemCot, index) => {
-        const rowHTML = `<tr data-item-cot-index="${index}"><td>${itemCot.subProduto}</td><td class="dados-condensados text-end"><div><small>Qtd Pedida:</small> <span>${itemCot.qtdComprar.toFixed(2)}</span></div><div><small>Preço Unit.:</small> <span>${formatarMoeda(itemCot.preco)}</span></div><div><small>Preço Fator:</small> <span>${formatarMoeda(itemCot.precoPorFator)}</span></div></td><td class="d-flex align-items-center"><select class="form-select form-select-sm select-item-match flex-grow-1"></select><button class="btn btn-sm btn-outline-secondary ms-2 btn-ajuste-manual d-none" title="Ajustar manualmente quantidade/preço para comparação (Fardo/Caixa)"><i class="bi bi-box-seam"></i></button></td><td class="dados-condensados text-end"><div><small>NF:</small> <span class="nf-numero"></span></div><div><small>Qtd:</small> <span class="nf-qtd"></span></div><div><small>Preço:</small> <span class="nf-preco"></span></div></td><td class="dados-condensados text-center"><div><small>Div. Preço:</small> <span class="divergencia-preco fw-bold"></span></div><div><small>Div. Qtd:</small> <span class="divergencia-qtd fw-bold"></span></div></td></tr>`;
-        const row = $(rowHTML).data('item-cot-info', itemCot);
-        const selectMatch = row.find('.select-item-match');
-        selectMatch.append(new Option('Não conciliar', '', true, true));
-        let itemNFEncontradoIndex = null;
-        const mapeamento = mapaConciliacao.find(m => m.itemCotacao === itemCot.subProduto);
-        itensNF.forEach((itemNF, nfIndex) => {
-            const nfOrigem = todasAsNFs.find(nf => nf.chaveAcesso === itemNF.chaveAcesso);
-            const optionText = `NF ${nfOrigem.numeroNF} - ${itemNF.descricaoNF} (Qtd: ${itemNF.qtdNF.toFixed(2)})`;
-            const option = new Option(optionText, nfIndex);
-            $(option).data('item-nf-info', itemNF);
-            selectMatch.append(option);
-            if (mapeamento && itemNF.descricaoNF === mapeamento.descricaoNF) {
-                itemNFEncontradoIndex = nfIndex;
-            }
-        });
-        tbody.append(row);
-        if (itemNFEncontradoIndex !== null) {
-            selectMatch.val(itemNFEncontradoIndex).trigger('change');
+    // =====================================================================================
+    // CORREÇÃO 2: O botão de ajuste antigo foi removido desta linha.
+    // =====================================================================================
+    itensNF.forEach(item => {
+        const itemHtml = `<a href="#" class="list-group-item list-group-item-action"><div class="d-flex justify-content-between align-items-center"><div class="item-description">${item.descricaoNF}</div></div><div class="item-details">Qtd Recebida: <strong class="original-qtd">${item.qtdNF.toFixed(2)}</strong> | Preço: <strong class="original-preco">${formatarMoeda(item.precoNF)}</strong></div><div class="ajuste-info small text-muted fst-italic"></div></a>`;
+        const itemEl = $(itemHtml).data('item-info', item);
+        nfList.append(itemEl);
+    });
+}
+function tentarConciliacaoAutomatica() {
+    $('#cotacao-items-list .list-group-item').each(function() {
+        const cotItemEl = $(this);
+        const cotItem = cotItemEl.data('item-info');
+        const mapeamento = mapaConciliacao.find(m => m.itemCotacao === cotItem.subProduto);
+        if (mapeamento) {
+            $('#nf-items-list .list-group-item:not(.matched)').each(function() {
+                const nfItemEl = $(this);
+                const nfItem = nfItemEl.data('item-info');
+                if (nfItem.descricaoNF === mapeamento.descricaoNF) {
+                    conciliarItens(cotItemEl, nfItemEl);
+                    return false;
+                }
+            });
         }
     });
-    tbody.find('.select-item-match').select2({ theme: "bootstrap-5", allowClear: true, dropdownParent: block, width: '100%' });
 }
 
-// [FUNÇÃO CORRIGIDA]
-function onMatchItemChange(event) {
-    const select = $(event.target);
-    const row = select.closest('tr');
-    const block = select.closest('.fornecedor-block');
-    row.find('.nf-numero, .nf-qtd, .nf-preco, .divergencia-preco, .divergencia-qtd').empty().removeClass('text-success text-danger text-warning ajustado');
-    const btnAjuste = row.find('.btn-ajuste-manual');
-    if (!select.val()) {
-        btnAjuste.addClass('d-none');
-        row.removeData('ajuste-manual');
-        atualizarDisponibilidadeItensNF(block);
-        atualizarTotaisFornecedor(block);
+// ===== LÓGICA DE CONCILIAÇÃO E ATUALIZAÇÃO DE TOTAIS =====
+function onCotacaoItemClick(e) {
+    e.preventDefault();
+    const itemEl = $(this);
+    if (selectedCotacaoItem && selectedCotacaoItem[0] === itemEl[0]) {
+        itemEl.removeClass('selected-for-match');
+        selectedCotacaoItem = null;
+    } else {
+        $('#cotacao-items-list .list-group-item').removeClass('selected-for-match');
+        itemEl.addClass('selected-for-match');
+        selectedCotacaoItem = itemEl;
+    }
+}
+function onNfItemClick(e) {
+    e.preventDefault();
+    if (!selectedCotacaoItem) {
+        alert("Por favor, selecione primeiro um item da Cotação para fazer a ligação.");
         return;
     }
-    btnAjuste.removeClass('d-none');
-    const itemCotacao = row.data('item-cot-info');
-    const itemNF_Original = select.find('option:selected').data('item-nf-info');
-    const nfOrigem = todasAsNFs.find(nf => nf.chaveAcesso === itemNF_Original.chaveAcesso);
-    const ajusteManual = row.data('ajuste-manual');
+    const nfItemEl = $(this);
+    conciliarItens(selectedCotacaoItem, nfItemEl);
+    selectedCotacaoItem.removeClass('selected-for-match');
+    selectedCotacaoItem = null;
+}
+function conciliarItens(cotacaoItemEl, nfItemEl) {
+    cotacaoItemEl.addClass('matched');
+    nfItemEl.addClass('matched');
+
+    const itemCot = cotacaoItemEl.data('item-info');
+    const itemNF_Original = nfItemEl.data('item-info');
+    const ajusteManual = nfItemEl.data('ajuste-manual');
+    const itemNF_ParaComparar = ajusteManual ? { ...itemNF_Original, ...ajusteManual } : itemNF_Original;
     
-    // PONTO CRÍTICO DA CORREÇÃO: Garante que o objeto de comparação é o ajustado, se existir.
-    const itemNF_ParaComparar = ajusteManual ? ajusteManual : itemNF_Original;
-
-    row.find('.nf-numero').text(nfOrigem.numeroNF);
-    row.find('.nf-qtd').text(itemNF_Original.qtdNF.toFixed(2));
-    row.find('.nf-preco').text(formatarMoeda(itemNF_Original.precoNF));
+    const matchedCard = $('<div class="matched-item-card mb-2"></div>');
     
-    // Comparação de Preço (usando o preço unitário da cotação)
-    const precoUnitarioCotacao = itemCotacao.preco;
-    const precoUnitarioNF = itemNF_ParaComparar.precoNF; // Usa o preço ajustado/original
-    const diffPreco = precoUnitarioNF - precoUnitarioCotacao;
-    const elDivPreco = row.find('.divergencia-preco');
+    matchedCard.data('conciliacao-info', {
+        itemCot: itemCot,
+        itemNF: itemNF_ParaComparar,
+        itemNF_Original: itemNF_Original,
+        fator: ajusteManual ? ajusteManual.fator : 1
+    });
 
-    if (Math.abs(diffPreco) < 0.01) {
-        elDivPreco.html('<i class="bi bi-check-circle-fill text-success"></i> OK').addClass('text-success');
-    } else {
-        const icon = diffPreco > 0 ? '<i class="bi bi-arrow-up-circle-fill text-danger"></i>' : '<i class="bi bi-arrow-down-circle-fill text-warning"></i>';
-        elDivPreco.html(`${icon} ${formatarMoeda(diffPreco)}`).addClass(diffPreco > 0 ? 'text-danger' : 'text-warning');
-    }
+    _atualizarVisualMatchedCard(matchedCard);
 
-    // Comparação de Quantidade (usando a quantidade da cotação)
-    const qtdCotacao = itemCotacao.qtdComprar;
-    const qtdNF = itemNF_ParaComparar.qtdNF; // Usa a quantidade ajustada/original
-    const diffQtd = qtdNF - qtdCotacao;
-    const elDivQtd = row.find('.divergencia-qtd');
-    
-    if (Math.abs(diffQtd) < 0.001) {
-        elDivQtd.html('<i class="bi bi-check-circle-fill text-success"></i> OK').addClass('text-success');
-    } else {
-        const iconQtd = diffQtd > 0 ? '<i class="bi bi-plus-circle-fill text-warning"></i>' : '<i class="bi bi-dash-circle-fill text-danger"></i>';
-        elDivQtd.html(`${iconQtd} ${diffQtd.toFixed(2)}`).addClass(diffQtd > 0 ? 'text-warning' : 'text-danger');
-    }
-
-    if (ajusteManual) {
-        elDivPreco.addClass('ajustado');
-        elDivQtd.addClass('ajustado');
-    }
-
-    atualizarDisponibilidadeItensNF(block);
-    atualizarTotaisFornecedor(block);
+    $('#matched-items-container').append(matchedCard);
+    atualizarTotais();
 }
 
-function atualizarDisponibilidadeItensNF(block) {
-    const itensSelecionados = new Set();
-    block.find('.select-item-match').each(function() {
-        const selectedValue = $(this).val();
-        if (selectedValue) {
-            itensSelecionados.add(selectedValue);
+function _atualizarVisualMatchedCard(cardElement) {
+    const info = cardElement.data('conciliacao-info');
+    if (!info) return;
+
+    const diffPreco = info.itemNF.precoNF - info.itemCot.preco;
+    const diffQtd = info.itemNF.qtdNF - info.itemCot.qtdComprar;
+
+    let divergenciaPrecoHtml = `<span class="badge text-bg-success">OK</span>`;
+    if (Math.abs(diffPreco) >= 0.01) {
+        const cor = diffPreco > 0 ? 'danger' : 'warning';
+        const sinal = diffPreco > 0 ? '+' : '';
+        divergenciaPrecoHtml = `<span class="badge text-bg-${cor}">${sinal}${formatarMoeda(diffPreco)}</span>`;
+    }
+
+    let divergenciaQtdHtml = `<span class="badge text-bg-success">OK</span>`;
+    if (Math.abs(diffQtd) >= 0.001) {
+        const cor = diffQtd > 0 ? 'warning' : 'danger';
+        divergenciaQtdHtml = `<span class="badge text-bg-${cor}">${diffQtd > 0 ? '+' : ''}${diffQtd.toFixed(2)}</span>`;
+    }
+    
+    const fatorIcon = info.fator !== 1 ? `<i class="bi bi-box-seam text-primary" title="Fator de conversão: ${info.fator}"></i>` : '';
+
+    const cardContent = `
+        <div class="flex-grow-1">
+            <strong>${info.itemCot.subProduto}</strong><br>
+            <small class="text-muted">${info.itemNF_Original.descricaoNF}</small>
+        </div>
+        <div class="text-end me-3">Preço: ${divergenciaPrecoHtml}</div>
+        <div class="text-end me-3">Qtd: ${divergenciaQtdHtml}</div>
+        <div class="d-flex align-items-center">${fatorIcon}</div>
+        <button class="btn btn-sm btn-outline-secondary btn-reajustar-item ms-2 py-0 px-1" title="Corrigir Fator de Conversão">
+            <i class="bi bi-tools"></i>
+        </button>
+    `;
+    
+    cardElement.html(cardContent);
+}
+function atualizarTotais() {
+    const workspace = $('#workspace-content');
+    const nfInfo = workspace.data('active-nf');
+    if (!nfInfo) return;
+    const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
+    const totalNotas = totaisNF ? totaisNF.valorTotalNf : 0;
+    let totalEsperadoCotacao = 0;
+    let totalConciliadoNF = 0;
+    $('#matched-items-container .matched-item-card').each(function() {
+        const info = $(this).data('conciliacao-info');
+        if(info) {
+          totalEsperadoCotacao += info.itemCot.qtdComprar * info.itemCot.preco;
+          totalConciliadoNF += info.itemNF.qtdNF * info.itemNF.precoNF;
         }
     });
-
-    block.find('.select-item-match').each(function() {
-        const currentSelect = $(this);
-        const currentValue = currentSelect.val();
-        currentSelect.find('option').each(function() {
-            const option = $(this);
-            const optionValue = option.val();
-            if (optionValue && optionValue !== currentValue && itensSelecionados.has(optionValue)) {
-                option.prop('disabled', true);
-            } else {
-                option.prop('disabled', false);
-            }
-        });
-        currentSelect.trigger('change.select2');
-    });
+    const diferenca = totalNotas - totalEsperadoCotacao;
+    workspace.find('.total-notas-valor').text(formatarMoeda(totalNotas));
+    workspace.find('.total-cotacao-valor').text(formatarMoeda(totalEsperadoCotacao));
+    workspace.find('.total-conciliado-valor').text(formatarMoeda(totalConciliadoNF));
+    const diferencaEl = workspace.find('.diferenca-totais-valor').text(formatarMoeda(diferenca));
+    const hasDifference = Math.abs(diferenca) >= 0.01;
+    diferencaEl.toggleClass('text-danger', hasDifference).toggleClass('text-success', !hasDifference);
+    workspace.find('.btn-detalhes-diferenca').toggleClass('d-none', !hasDifference);
 }
 
-// ===== Funções de Ajuste e Detalhes =====
-function onBtnAjusteManualClick(event) {
-    activeRowForAdjustment = $(event.target).closest('tr');
-    const itemCotacao = activeRowForAdjustment.data('item-cot-info');
-    const itemNF = activeRowForAdjustment.find('option:selected').data('item-nf-info');
-    $('#ajuste-cot-descricao').text(itemCotacao.subProduto);
-    $('#ajuste-cot-qtd').text(itemCotacao.qtdComprar.toFixed(2));
-    $('#ajuste-cot-preco').text(formatarMoeda(itemCotacao.preco));
-    $('#ajuste-nf-descricao').text(itemNF.descricaoNF);
-    $('#ajuste-nf-qtd').text(itemNF.qtdNF.toFixed(2));
-    $('#ajuste-nf-preco').text(formatarMoeda(itemNF.precoNF));
-    const ajusteExistente = activeRowForAdjustment.data('ajuste-manual');
+// ===== SALVAMENTO EM LOTE =====
+
+function onBtnConcluirConciliacaoClick() {
+    const workspace = $('#workspace-content');
+    const nfInfo = workspace.data('active-nf');
+    const compositeKey = workspace.find('.select-cotacao-fornecedor').val();
+    if (!compositeKey) {
+        alert("Por favor, selecione uma cotação para concluir a conciliação.");
+        return;
+    }
+    const parts = compositeKey.split('-');
+    const idCotacao = parts.shift();
+    const nomeFornecedor = parts.join('-');
+
+    const conciliacaoAtual = {
+        idCotacao: idCotacao,
+        nomeFornecedor: nomeFornecedor,
+        numeroNF: nfInfo.numeroNF,
+        chavesAcessoNF: [nfInfo.chaveAcesso],
+        itensConciliados: []
+    };
+    const novosMapeamentos = [];
+    $('#matched-items-container .matched-item-card').each(function() {
+        const info = $(this).data('conciliacao-info');
+        // Calcula a divergência de preço no momento de salvar
+        const divergenciaPrecoFinal = info.itemNF.precoNF - info.itemCot.preco;
+        conciliacaoAtual.itensConciliados.push({
+            subProduto: info.itemCot.subProduto,
+            divergenciaNota: formatarMoeda(divergenciaPrecoFinal),
+            quantidadeNota: info.itemNF.qtdNF,
+            precoNota: info.itemNF.precoNF
+        });
+        novosMapeamentos.push({
+            itemCotacao: info.itemCot.subProduto,
+            descricaoNF: info.itemNF_Original.descricaoNF,
+            gtin: info.itemNF_Original.gtin || ''
+        });
+    });
+
+    const itensCortados = [];
+    $('#cotacao-items-list .list-group-item:not(.matched)').each(function() {
+        const itemCot = $(this).data('item-info');
+        itensCortados.push({
+            idCotacao: idCotacao,
+            nomeFornecedor: nomeFornecedor,
+            subProduto: itemCot.subProduto
+        });
+    });
+    
+    stagedPayloads.push({
+        conciliacoes: [conciliacaoAtual],
+        itensCortados: itensCortados,
+        novosMapeamentos: novosMapeamentos
+    });
+
+    const nfItemEl = $(`.nf-list-item`).filter(function() { return $(this).data('nf-info').chaveAcesso === nfInfo.chaveAcesso; });
+    nfItemEl.addClass('staged').removeClass('active');
+    nfItemEl.find('.status-icon').removeClass('d-none');
+    nfItemEl.find('.actions-dropdown').remove(); 
+
+    workspace.addClass('d-none').empty();
+    $('#workspace-welcome').removeClass('d-none');
+
+    atualizarBotaoSalvarLote();
+}
+
+function onBtnSalvarLoteClick() {
+    if (stagedPayloads.length === 0) {
+        alert("Nenhuma alteração pendente para salvar.");
+        return;
+    }
+    toggleLoader(true);
+
+    const payloadFinal = stagedPayloads.reduce((acc, current) => {
+        acc.conciliacoes.push(...(current.conciliacoes || []));
+        acc.itensCortados.push(...(current.itensCortados || []));
+        acc.novosMapeamentos.push(...(current.novosMapeamentos || []));
+        acc.statusUpdates.push(...(current.statusUpdates || []));
+        return acc;
+    }, { conciliacoes: [], itensCortados: [], novosMapeamentos: [], statusUpdates: [] });
+    
+    google.script.run
+        .withSuccessHandler(response => {
+            if (response.success) {
+                alert(response.message);
+                resetApplication();
+            } else {
+                onFailure(response);
+            }
+        })
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_salvarConciliacaoEmLote(payloadFinal);
+}
+
+function atualizarBotaoSalvarLote() {
+    const btn = $('#btn-salvar-lote');
+    const textSpan = $('#save-batch-text');
+    const count = stagedPayloads.length;
+
+    if (count > 0) {
+        textSpan.text(`Salvar ${count} Alteração(ões)`);
+        btn.removeClass('d-none');
+    } else {
+        textSpan.text('Salvar Alterações');
+        btn.addClass('d-none');
+    }
+}
+
+
+// ===== FUNÇÕES DE MODAIS E AJUSTES =====
+function onBtnAjusteManualClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    activeItemForAdjustment = $(this).closest('.list-group-item');
+    
+    const itemNF_Original = activeItemForAdjustment.data('item-info');
+    const itemCot = selectedCotacaoItem ? selectedCotacaoItem.data('item-info') : { subProduto: 'Nenhum item da cotação selecionado', qtdComprar: 0, preco: 0 };
+    
+    $('#ajuste-cot-descricao').text(itemCot.subProduto);
+    $('#ajuste-cot-qtd').text(itemCot.qtdComprar.toFixed(2));
+    $('#ajuste-cot-preco').text(formatarMoeda(itemCot.preco));
+    
+    $('#ajuste-nf-descricao').text(itemNF_Original.descricaoNF);
+    $('#ajuste-nf-qtd').text(itemNF_Original.qtdNF.toFixed(2));
+    $('#ajuste-nf-preco').text(formatarMoeda(itemNF_Original.precoNF));
+    
+    const ajusteExistente = activeItemForAdjustment.data('ajuste-manual');
     $('#ajuste-fator').val(ajusteExistente ? ajusteExistente.fator : 1);
+    
     calcularVisualizacaoAjuste();
     ajusteModalInstance.show();
 }
 
+function onBtnReajustarItemClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    activeItemForAdjustment = $(this).closest('.matched-item-card');
+    
+    const info = activeItemForAdjustment.data('conciliacao-info');
+    
+    $('#ajuste-cot-descricao').text(info.itemCot.subProduto);
+    $('#ajuste-cot-qtd').text(info.itemCot.qtdComprar.toFixed(2));
+    $('#ajuste-cot-preco').text(formatarMoeda(info.itemCot.preco));
+
+    $('#ajuste-nf-descricao').text(info.itemNF_Original.descricaoNF);
+    $('#ajuste-nf-qtd').text(info.itemNF_Original.qtdNF.toFixed(2));
+    $('#ajuste-nf-preco').text(formatarMoeda(info.itemNF_Original.precoNF));
+    
+    $('#ajuste-fator').val(info.fator);
+
+    calcularVisualizacaoAjuste();
+    ajusteModalInstance.show();
+}
+
+// =====================================================================================
+// CORREÇÃO 3: Esta função foi corrigida para funcionar com ambos os tipos de ajuste.
+// =====================================================================================
 function calcularVisualizacaoAjuste() {
-    const itemNF = activeRowForAdjustment.find('option:selected').data('item-nf-info');
+    let itemNF_Original;
+    // Verifica se o ajuste é em um item já conciliado ou em um item da lista
+    if (activeItemForAdjustment.hasClass('matched-item-card')) {
+        const info = activeItemForAdjustment.data('conciliacao-info');
+        if (!info) return; // Segurança
+        itemNF_Original = info.itemNF_Original;
+    } else {
+        itemNF_Original = activeItemForAdjustment.data('item-info');
+    }
+    
+    if (!itemNF_Original) {
+      // Limpa os campos se não houver dados
+      $('#ajuste-nova-qtd, #ajuste-novo-preco').text('Erro: Item não encontrado');
+      return;
+    }
+
     const fator = parseFloat($('#ajuste-fator').val()) || 1;
     if (fator <= 0) {
-        $('#ajuste-nova-qtd').text('Fator inválido');
-        $('#ajuste-novo-preco').text('Fator inválido');
+        $('#ajuste-nova-qtd, #ajuste-novo-preco').text('Fator inválido');
         return;
     }
-    const novaQtd = itemNF.qtdNF * fator;
-    const novoPreco = itemNF.precoNF / fator;
-    $('#ajuste-nova-qtd').text(novaQtd.toFixed(2));
+    const novaQtd = itemNF_Original.qtdNF * fator;
+    const novoPreco = itemNF_Original.precoNF / fator;
+    $('#ajuste-nova-qtd').text(novaQtd.toFixed(4));
     $('#ajuste-novo-preco').text(formatarMoeda(novoPreco));
 }
 
@@ -464,156 +619,60 @@ function onBtnSalvarAjusteManualClick() {
         alert("Por favor, insira um fator válido (número maior que zero).");
         return;
     }
-    const itemNF_Original = activeRowForAdjustment.find('option:selected').data('item-nf-info');
-    const dadosAjustados = {
-        fator: fator,
-        qtdNFOriginal: itemNF_Original.qtdNF,
-        precoNFOriginal: itemNF_Original.precoNF,
-        qtdNF: itemNF_Original.qtdNF * fator,
-        precoNF: itemNF_Original.precoNF / fator
-    };
-    activeRowForAdjustment.data('ajuste-manual', dadosAjustados);
-    ajusteModalInstance.hide();
-    activeRowForAdjustment.find('.select-item-match').trigger('change');
-}
+    
+    if (activeItemForAdjustment.hasClass('matched-item-card')) {
+        const info = activeItemForAdjustment.data('conciliacao-info');
+        const itemNF_Original = info.itemNF_Original;
+        
+        const novaQtd = itemNF_Original.qtdNF * fator;
+        const novoPreco = itemNF_Original.precoNF / fator;
 
+        info.itemNF.qtdNF = novaQtd;
+        info.itemNF.precoNF = novoPreco;
+        info.fator = fator;
+        activeItemForAdjustment.data('conciliacao-info', info);
+        
+        _atualizarVisualMatchedCard(activeItemForAdjustment);
+        atualizarTotais();
+
+    } else {
+        const itemNF_Original = activeItemForAdjustment.data('item-info');
+        const dadosAjustados = {
+            fator: fator,
+            qtdNF: itemNF_Original.qtdNF * fator,
+            precoNF: itemNF_Original.precoNF / fator
+        };
+        activeItemForAdjustment.data('ajuste-manual', dadosAjustados);
+        activeItemForAdjustment.find('.ajuste-info').html(`Ajustado c/ fator ${fator}: Qtd: ${dadosAjustados.qtdNF.toFixed(2)}, Preço: ${formatarMoeda(dadosAjustados.precoNF)}`);
+    }
+    
+    ajusteModalInstance.hide();
+}
 function onBtnDetalhesDiferencaClick(event) {
-    const block = $(event.target).closest('.fornecedor-block');
-    const grupo = block.data('grupo-fornecedor');
-    const chavesAcesso = grupo.nfs.map(nf => nf.chaveAcesso);
+    const nfInfo = $('#workspace-content').data('active-nf');
     const listaDetalhes = $('#lista-detalhes-nf').empty();
-    const totaisAgregados = { totalValorProdutos: 0, totalValorFrete: 0, totalValorSeguro: 0, totalValorDesconto: 0, totalValorIpi: 0, totalValorPis: 0, totalValorCofins: 0, totalOutrasDespesas: 0, totalValorIcmsSt: 0, valorTotalNf: 0 };
-    const dadosGeraisDasNFs = todosOsDadosGeraisNF.filter(nf => chavesAcesso.includes(nf.chaveAcesso));
-    dadosGeraisDasNFs.forEach(nf => {
-        for (const key in totaisAgregados) {
-            totaisAgregados[key] += (nf[key] || 0);
-        }
-    });
-    const totalCalculadoItens = totaisAgregados.totalValorProdutos - totaisAgregados.totalValorDesconto;
-    const totalOutrosCustos = totaisAgregados.valorTotalNf - totalCalculadoItens;
-    listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>Valor Total dos Produtos</strong><span>${formatarMoeda(totaisAgregados.totalValorProdutos)}</span></li>`);
-    if(totaisAgregados.totalValorDesconto > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center text-danger"><strong>(-) Total Desconto</strong><span>${formatarMoeda(totaisAgregados.totalValorDesconto)}</span></li>`);
+    const nf = todosOsDadosGeraisNF.find(d => d.chaveAcesso === nfInfo.chaveAcesso);
+    if (!nf) { return; }
+    const totalCalculadoItens = nf.totalValorProdutos - nf.totalValorDesconto;
+    listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>Valor Total dos Produtos</strong><span>${formatarMoeda(nf.totalValorProdutos)}</span></li>`);
+    if(nf.totalValorDesconto > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center text-danger"><strong>(-) Total Desconto</strong><span>${formatarMoeda(nf.totalValorDesconto)}</span></li>`);
     listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center active"><strong>Subtotal dos Itens</strong><span><strong>${formatarMoeda(totalCalculadoItens)}</strong></span></li>`);
-    if(totaisAgregados.totalValorFrete > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Total Frete</strong><span>${formatarMoeda(totaisAgregados.totalValorFrete)}</span></li>`);
-    if(totaisAgregados.totalValorSeguro > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Total Seguro</strong><span>${formatarMoeda(totaisAgregados.totalValorSeguro)}</span></li>`);
-    if(totaisAgregados.totalValorIpi > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Total IPI</strong><span>${formatarMoeda(totaisAgregados.totalValorIpi)}</span></li>`);
-    if(totaisAgregados.totalValorIcmsSt > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Total ICMS-ST</strong><span>${formatarMoeda(totaisAgregados.totalValorIcmsSt)}</span></li>`);
-    if(totaisAgregados.totalOutrasDespesas > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Outras Despesas</strong><span>${formatarMoeda(totaisAgregados.totalOutrasDespesas)}</span></li>`);
-    listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center active"><strong>Total Outros Custos</strong><span><strong>${formatarMoeda(totalOutrosCustos)}</strong></span></li>`);
-    listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-success"><h4>Valor Total da(s) NF(s)</h4><h4>${formatarMoeda(totaisAgregados.valorTotalNf)}</h4></li>`);
+    if(nf.totalValorFrete > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Total Frete</strong><span>${formatarMoeda(nf.totalValorFrete)}</span></li>`);
+    if(nf.totalValorIcmsSt > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Total ICMS-ST</strong><span>${formatarMoeda(nf.totalValorIcmsSt)}</span></li>`);
+    if(nf.totalOutrasDespesas > 0) listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><strong>(+) Outras Despesas</strong><span>${formatarMoeda(nf.totalOutrasDespesas)}</span></li>`);
+    listaDetalhes.append(`<li class="list-group-item d-flex justify-content-between align-items-center list-group-item-success"><h4>Valor Total da NF</h4><h4>${formatarMoeda(nf.valorTotalNf)}</h4></li>`);
     detalhesDiferencaModalInstance.show();
 }
 
-// == Funções de Salvamento e Modal Final ==
-function onBtnSalvarTudoClick() {
-    const dadosParaResumo = { conciliacoes: [], itensNaoConciliadosCotacao: [] };
-    const todosItensNFAssociados = new Set();
-    const todosItensCotacaoAssociados = new Set();
-    const novosMapeamentos = [];
-    $('.fornecedor-block').each(function() {
-        const block = $(this);
-        const grupo = block.data('grupo-fornecedor');
-        const compositeKeyCotacao = block.find('.select-cotacao-fornecedor').val();
-        if (!compositeKeyCotacao) return;
-        const parts = compositeKeyCotacao.split('-');
-        const idCotacao = parts.shift();
-        const nomeFornecedor = parts.join('-');
-        const conciliacaoAtual = { idCotacao, nomeFornecedor, numeroNF: grupo.nfs.map(n => n.numeroNF).join(', '), chavesAcessoNF: grupo.nfs.map(n => n.chaveAcesso), itensConciliados: [] };
-        block.find('.comparison-table-body tr').each(function() {
-            const row = $(this), select = row.find('.select-item-match');
-            if (select.val()) {
-                const itemCot = row.data('item-cot-info');
-                const itemNF_Original = select.find('option:selected').data('item-nf-info');
-                const ajusteManual = row.data('ajuste-manual');
-                const itemNF_ParaComparar = ajusteManual ? ajusteManual : itemNF_Original;
-                const divergencia = itemNF_ParaComparar.precoNF - itemCot.preco;
-                conciliacaoAtual.itensConciliados.push({ subProduto: itemCot.subProduto, divergenciaNota: formatarMoeda(divergencia), quantidadeNota: itemNF_Original.qtdNF, precoNota: itemNF_Original.precoNF });
-                todosItensNFAssociados.add(`${itemNF_Original.chaveAcesso}-${itemNF_Original.numeroItem}`);
-                todosItensCotacaoAssociados.add(`${itemCot.idCotacao}-${itemCot.fornecedor}-${itemCot.subProduto}`);
-                novosMapeamentos.push({ itemCotacao: itemCot.subProduto, descricaoNF: itemNF_Original.descricaoNF, gtin: itemNF_Original.gtin || '' });
-            }
-        });
-        if (conciliacaoAtual.itensConciliados.length > 0) dadosParaResumo.conciliacoes.push(conciliacaoAtual);
-        const itensCotacaoDoGrupo = todosOsItensCotacao.filter(item => item.idCotacao == idCotacao && item.fornecedor == nomeFornecedor);
-        itensCotacaoDoGrupo.forEach(item => {
-            if (!todosItensCotacaoAssociados.has(`${item.idCotacao}-${item.fornecedor}-${item.subProduto}`)) {
-                dadosParaResumo.itensNaoConciliadosCotacao.push(item);
-            }
-        });
-    });
-    const chavesNFsSelecionadas = new Set($('.fornecedor-block').map((i, el) => $(el).data('grupo-fornecedor').nfs.map(nf => nf.chaveAcesso)).get().flat());
-    const itensNFNaoConciliados = todosOsItensNF.filter(item => chavesNFsSelecionadas.has(item.chaveAcesso) && !todosItensNFAssociados.has(`${item.chaveAcesso}-${item.numeroItem}`));
-    $('#resumoModal').data('dados-lote', { ...dadosParaResumo, itensNaoConciliadosNF: itensNFNaoConciliados, novosMapeamentos: novosMapeamentos });
-    prepararEExibirModalResumo({ ...dadosParaResumo, itensNaoConciliadosNF: itensNFNaoConciliados });
+// ===== FUNÇÕES UTILITÁRIAS =====
+function toggleLoader(show) {
+    document.getElementById('loader').classList.toggle('d-none', !show);
 }
-
-function prepararEExibirModalResumo(dadosResumo) {
-    const container = $('#resumo-container').empty();
-    const resumoPorFornecedor = {};
-    dadosResumo.itensNaoConciliadosCotacao.forEach(item => {
-        const key = item.fornecedor;
-        if (!resumoPorFornecedor[key]) resumoPorFornecedor[key] = { cotacao: [], nf: [] };
-        resumoPorFornecedor[key].cotacao.push(item);
-    });
-    dadosResumo.itensNaoConciliadosNF.forEach(item => {
-        const nf = todasAsNFs.find(n => n.chaveAcesso === item.chaveAcesso);
-        const key = nf.nomeEmitente;
-        if (!resumoPorFornecedor[key]) resumoPorFornecedor[key] = { cotacao: [], nf: [] };
-        resumoPorFornecedor[key].nf.push(item);
-    });
-    if (Object.keys(resumoPorFornecedor).length === 0 || (dadosResumo.itensNaoConciliadosCotacao.length === 0 && dadosResumo.itensNaoConciliadosNF.length === 0)) {
-      container.html('<p class="text-center">Todos os itens foram associados. Nenhuma pendência encontrada.</p>');
-    } else {
-      Object.keys(resumoPorFornecedor).sort().forEach((nomeFornecedor, index) => {
-          const dados = resumoPorFornecedor[nomeFornecedor];
-          if (dados.cotacao.length === 0 && dados.nf.length === 0) return;
-          let html = `<div class="col-md-6 mb-3"><div class="card h-100"><div class="card-header"><strong>Fornecedor: ${nomeFornecedor}</strong></div><div class="card-body">`;
-          if (dados.cotacao.length > 0) {
-              html += `<h6>Itens da Cotação não recebidos (Marque os cortados):</h6><ul class="list-group mb-3">`;
-              dados.cotacao.forEach((item, i) => {
-                  html += `<li class="list-group-item"><input class="form-check-input me-1 item-cortado-check" type="checkbox" value="${item.subProduto}" id="cot-${index}-${i}" data-id-cotacao="${item.idCotacao}" data-fornecedor="${item.fornecedor}" data-subproduto="${item.subProduto}"><label class="form-check-label" for="cot-${index}-${i}">${item.subProduto} (Pedido: ${item.qtdComprar.toFixed(2)})</label></li>`;
-              });
-              html += `</ul>`;
-          }
-          if (dados.nf.length > 0) {
-              html += `<h6>Itens da NF não associados (Excedente):</h6><ul class="list-group">`;
-              dados.nf.forEach(item => {
-                  const nf = todasAsNFs.find(n => n.chaveAcesso === item.chaveAcesso);
-                  html += `<li class="list-group-item text-muted">NF ${nf.numeroNF}: ${item.descricaoNF} (Qtd: ${item.qtdNF.toFixed(2)})</li>`;
-              });
-              html += `</ul>`;
-          }
-          html += `</div></div></div>`;
-          container.append(html);
-      });
-    }
-    resumoModalInstance.show();
+function normalizarCNPJ(cnpj) {
+    return cnpj ? String(cnpj).replace(/[^\d]/g, '') : '';
 }
-
-function onBtnConfirmarCortadosESalvarClick() {
-    toggleLoader(true);
-    resumoModalInstance.hide();
-    const dadosLote = $('#resumoModal').data('dados-lote');
-    const itensCortados = [];
-    $('.item-cortado-check:checked').each(function() {
-        const check = $(this);
-        itensCortados.push({ idCotacao: check.data('id-cotacao'), nomeFornecedor: check.data('fornecedor'), subProduto: check.data('subproduto') });
-    });
-    const payloadFinal = {
-        conciliacoes: dadosLote.conciliacoes,
-        itensCortados: itensCortados,
-        novosMapeamentos: dadosLote.novosMapeamentos || []
-    };
-    google.script.run
-        .withSuccessHandler(response => {
-            if (response.success) {
-                alert(response.message);
-                resetToInitialState();
-            } else {
-                onFailure(response);
-            }
-        })
-        .withFailureHandler(onFailure)
-        .ConciliacaoNFController_salvarConciliacaoEmLote(payloadFinal);
+function formatarMoeda(valor) {
+    if (typeof valor !== 'number' || isNaN(valor)) return "R$ 0,00";
+    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 </script>

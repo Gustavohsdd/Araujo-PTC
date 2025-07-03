@@ -7,37 +7,107 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
-    body { background-color: #f8f9fa; }
-    .container-main { max-width: 1800px; }
-    .card { margin-top: 20px; }
-    .loading-spinner { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.8); z-index: 1070; display: flex; justify-content: center; align-items: center; }
-    .table-responsive { max-height: 150px; overflow-y: auto; }
-    .nf-card-items-table { font-size: 0.8rem; }
-    .card-header .form-check { margin-bottom: 0; }
-    .card-header-main { display: flex; justify-content: space-between; align-items: center; }
-    .nf-title { font-size: 0.9rem; font-weight: bold; }
-    .card .card-header { padding: 0.5rem 1rem; }
-    .nf-card-items-table th, .nf-card-items-table td { padding: 0.3rem 0.4rem; }
-    .card-body { padding: 0.75rem; }
-    .card-header .form-check-label { line-height: 1.2; }
-    .card-header .form-switch .form-check-label { font-size: 0.8rem; }
-    #resumoModal .list-group-item { font-size: 0.9rem; }
-    #resumoModal .form-check-label { margin-left: 0.5rem; }
-
-    /* == NOVOS ESTILOS PARA MELHORIAS == */
-    .fornecedor-block h5 { font-size: 1.0rem; font-weight: bold; color: #495057; }
-    .nome-fornecedor { font-size: 1.25rem; }
-    .comparison-container .table-responsive { 
-        max-height: 65vh; 
-        overflow-y: auto; /* <-- CORREÇÃO APLICADA AQUI */
+    html, body {
+      height: 100vh;
+      overflow: hidden;
+      font-size: 0.9rem;
     }
-    .comparison-table-body td, .comparison-table-body .dados-condensados { font-size: 0.8rem; }
-    .dados-condensados div { line-height: 1.3; }
-    .lista-nfs-fornecedor .list-group-item { font-size: 0.85rem; padding: 0.4rem 0.8rem; }
-    .totais-bloco { font-size: 1.0rem; }
-    .totais-bloco strong { font-size: 1.1rem; }
-    .divergencia-preco.ajustado::after, .divergencia-qtd.ajustado::after { content: ' (Ajustado)'; font-style: italic; font-weight: normal; color: #6c757d; }
-    .btn-detalhes-diferenca { vertical-align: middle; padding: 0.1rem 0.4rem; line-height: 1; }
+    body { background-color: #f8f9fa; }
+    .main-container {
+      display: flex;
+      height: calc(100vh - 70px); /* Full height minus header */
+    }
+    .loading-spinner { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.8); z-index: 1070; display: flex; justify-content: center; align-items: center; }
+
+    /* Painel Esquerdo */
+    #panel-esquerdo {
+      width: 450px;
+      min-width: 450px;
+      background-color: #fff;
+      border-right: 1px solid #dee2e6;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-header {
+      padding: 0.75rem;
+      border-bottom: 1px solid #dee2e6;
+      flex-shrink: 0;
+    }
+    #nf-list-container {
+      overflow-y: auto;
+      flex-grow: 1;
+    }
+    .fornecedor-group-header {
+      font-weight: bold;
+      padding: 0.5rem 0.75rem;
+      background-color: #e9ecef;
+      border-bottom: 1px solid #dee2e6;
+      font-size: 0.95rem;
+    }
+    .nf-list-item {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background-color 0.2s ease-in-out;
+    }
+    .nf-list-item:hover { background-color: #f8f9fa; }
+    .nf-list-item.active { background-color: #e0eaff; border-right: 3px solid #0d6efd; }
+    .nf-list-item.staged { background-color: #d1e7dd; cursor: not-allowed; }
+    .nf-list-item .status-icon { color: #198754; }
+    .nf-list-item .nf-title { font-weight: 500; }
+    .nf-list-item .nf-details { font-size: 0.8rem; color: #6c757d; }
+    .nf-item-products {
+      background-color: #fafafa;
+      padding: 0.5rem 0.75rem 0.5rem 1.5rem;
+      font-size: 0.8rem;
+    }
+    .nf-item-products ul { margin-bottom: 0; padding-left: 1.2rem; }
+    .actions-btn { all: unset; cursor: pointer; }
+    .actions-btn:hover { color: #0d6efd; }
+
+    /* Painel Direito */
+    #panel-direito {
+      flex-grow: 1;
+      padding: 1.5rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    #workspace-welcome {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      text-align: center;
+      color: #6c757d;
+    }
+    .workspace-header { margin-bottom: 1.5rem; }
+    .comparison-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      flex-grow: 1;
+    }
+    .comparison-column .list-group-item {
+      padding: 0.6rem 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+    }
+    .comparison-column .list-group-item:hover { background-color: #f0f0f0; }
+    .comparison-column .list-group-item.selected-for-match { background-color: #ffc107 !important; }
+    .comparison-column .list-group-item.matched { background-color: #d1e7dd; cursor: not-allowed; opacity: 0.7; }
+    .item-description { font-weight: 500; }
+    .item-details { font-size: 0.8rem; color: #495057; }
+    .matched-items-section { margin-top: 1.5rem; }
+    .matched-item-card {
+      display: flex;
+      align-items: center;
+      padding: 0.75rem;
+      background-color: #e9ecef;
+      border-radius: 0.25rem;
+    }
+    .matched-item-card .bi-link-45deg { font-size: 1.5rem; color: #0d6efd; }
+    .divergence-tag { font-size: 0.75rem; font-weight: bold; padding: 0.2rem 0.4rem; border-radius: 1rem; }
   </style>
 </head>
 <body>
@@ -49,171 +119,132 @@
 
   <input type="file" id="xml-upload-input" multiple accept=".xml,.zip" style="display: none;">
 
-  <div class="container-main mt-4">
-    <div class="card shadow-sm" id="card-selecao">
-      <div class="card-header bg-primary text-white card-header-main">
-        <h3 class="mb-0">Central de Conciliação</h3>
-        <div class="d-flex align-items-center">
-          <div class="col-auto" style="width: 350px;">
-            <input type="text" id="search-input" class="form-control" placeholder="Buscar por Fornecedor, Nº da NF...">
-          </div>
-          <div class="col-auto ps-2">
-            <button id="btn-upload-xml" class="btn btn-info text-white" type="button" title="Fazer upload de arquivos XML ou ZIP para a pasta de processamento.">
-              <i class="bi bi-upload"></i>
-              <span class="d-none d-md-inline ms-1">Fazer Upload</span>
-            </button>
-          </div>
-          <div class="col-auto ps-2">
-              <button id="btn-processar-xml" class="btn btn-warning" type="button" title="Busca e processa novos arquivos XML da pasta do Google Drive.">
-                <i class="bi bi-arrow-clockwise"></i>
-                <span class="d-none d-md-inline ms-1">Processar XMLs</span>
-              </button>
-          </div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div id="etapa-selecao-notas">
-          <label class="form-label fw-bold pt-3">1. Selecione as Notas Fiscais a serem processadas</label>
-          <div id="nf-cards-container" class="row">
-            </div>
-          <div class="text-center mt-4">
-            <button id="btn-processar-selecao" class="btn btn-primary btn-lg" disabled>Conciliar Notas Selecionadas</button>
-          </div>
-        </div>
+  <header class="navbar bg-primary text-white shadow-sm">
+    <div class="container-fluid">
+      <h3 class="mb-0">Central de Conciliação</h3>
+      <div class="d-flex align-items-center">
+        <button id="btn-upload-xml" class="btn btn-info text-white" type="button" title="Fazer upload de arquivos XML ou ZIP">
+          <i class="bi bi-upload"></i> <span class="d-none d-md-inline ms-1">Fazer Upload</span>
+        </button>
+        <button id="btn-salvar-lote" class="btn btn-success ms-3 d-none" type="button" title="Salvar todas as alterações pendentes de uma vez.">
+            <i class="bi bi-cloud-upload-fill"></i> <span id="save-batch-text">Salvar Alterações</span>
+        </button>
       </div>
     </div>
+  </header>
 
-    <div id="area-conciliacao" class="d-none">
-       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2><span class="text-primary">Área de Conciliação</span></h2>
+  <div class="main-container">
+    <aside id="panel-esquerdo">
+      <div class="panel-header">
+        <input type="text" id="search-input" class="form-control" placeholder="Buscar por Fornecedor, Nº da NF...">
+      </div>
+      <div id="nf-list-container">
+        </div>
+    </aside>
+
+    <main id="panel-direito">
+      <div id="workspace-welcome">
         <div>
-          <button id="btn-cancelar-conciliacao" class="btn btn-secondary btn-lg me-2">Cancelar e Voltar</button>
-          <button id="btn-salvar-tudo" class="btn btn-success btn-lg">Salvar Todas as Conciliações</button>
+          <i class="bi bi-file-earmark-check-fill" style="font-size: 4rem;"></i>
+          <h4 class="mt-3">Bem-vindo(a) à Área de Conciliação</h4>
+          <p>Selecione uma Nota Fiscal na lista à esquerda para começar.</p>
         </div>
       </div>
-      <div id="container-fornecedores">
+      <div id="workspace-content" class="d-none h-100 d-flex flex-column">
         </div>
-    </div>
+    </main>
   </div>
 
-  <template id="template-nf-card">
-    <div class="col-xl-4 col-lg-6 mb-4">
-      <div class="card h-100" data-chave-acesso="">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <div class="form-check">
-            <input class="form-check-input nf-select-checkbox" type="checkbox">
-            <label class="form-check-label nf-title">NF 00000 - Fornecedor</label>
-          </div>
-          <div class="form-check form-switch">
-            <input class="form-check-input nf-sem-pedido-checkbox" type="checkbox" role="switch">
-            <label class="form-check-label">Sem Pedido</label>
-          </div>
+
+  <template id="template-nf-list-item">
+    <div class="nf-list-item">
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+          <a href="#" class="item-expander me-2"><i class="bi bi-caret-right-fill"></i></a>
+          <span class="status-icon me-1 d-none" title="Pronto para salvar"><i class="bi bi-check-circle-fill"></i></span>
+          <span class="nf-title">NF 00000 - Fornecedor</span>
+          <span class="badge text-bg-secondary ms-2 staged-status-badge d-none"></span>
         </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-5"><strong>Data Emissão:</strong> <span class="nf-data"></span></div>
-            <div class="col-md-7"><strong>Valor Total:</strong> <span class="nf-total fw-bold text-success"></span></div>
-          </div>
-          <hr class="my-2">
-          <p class="mb-1 fw-bold" style="font-size: 0.9rem;">Itens da Nota Fiscal:</p>
-          <div class="table-responsive">
-            <table class="table table-sm table-striped nf-card-items-table">
-              <thead>
-                <tr><th>Descrição</th><th class="text-end">Qtd</th><th class="text-end">Preço Unit.</th></tr>
-              </thead>
-              <tbody class="nf-items-body"></tbody>
-            </table>
-          </div>
+        <div class="dropdown actions-dropdown">
+          <button class="actions-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Marcar status da NF">
+            <i class="bi bi-tag-fill"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item action-marcar-status" href="#" data-status="Sem Pedido">Marcar como 'Sem Pedido'</a></li>
+            <li><a class="dropdown-item action-marcar-status" href="#" data-status="Bonificação ou Troca">Marcar como 'Bonificação ou Troca'</a></li>
+          </ul>
         </div>
       </div>
+      <div class="nf-details ms-4">
+        <span class="nf-data">01/01/2025</span> | <strong class="nf-total text-success">R$ 0,00</strong>
+      </div>
+      <div class="nf-item-products d-none mt-2">
+        </div>
     </div>
   </template>
-  
-  <template id="template-fornecedor-block">
-    <div class="card shadow-sm mb-4 fornecedor-block">
-        <div class="card-header bg-light">
-            <h4 class="mb-0 nome-fornecedor">Nome do Fornecedor</h4>
-        </div>
-        <div class="card-body">
-            <div class="row mb-3">
-                <div class="col-md-4">
-                    <h5>Notas Fiscais Selecionadas</h5>
-                    <ul class="list-group lista-nfs-fornecedor"></ul>
-                </div>
-                <div class="col-md-4">
-                    <h5>Cotação Correspondente</h5>
-                    <select class="form-select form-select-sm select-cotacao-fornecedor" disabled>
-                        <option selected disabled>Selecione a cotação...</option>
-                    </select>
-                </div>
-                <div class="col-md-4 totais-bloco align-self-center">
-                    <div class="p-2 border rounded">
-                      <div class="d-flex justify-content-between"><span>Total das Notas:</span> <strong class="total-notas-valor text-info">R$ 0,00</strong></div>
-                      <div class="d-flex justify-content-between"><span>Total Esperado (Cotação):</span> <strong class="total-cotacao-valor text-primary">R$ 0,00</strong></div>
-                      <div class="d-flex justify-content-between"><span>Total Recebido (Conciliado):</span> <strong class="total-conciliado-valor text-success">R$ 0,00</strong></div>
-                      <hr class="my-1">
-                      <div class="d-flex justify-content-between">
-                        <span>Diferença:</span> 
-                        <div>
-                          <strong class="diferenca-totais-valor text-danger me-1">R$ 0,00</strong>
-                          <button class="btn btn-outline-info btn-sm btn-detalhes-diferenca d-none" title="Ver detalhes dos totais da NF">
-                            <i class="bi bi-info-circle"></i>
-                          </button>
-                        </div>
-                      </div>
+
+  <template id="template-workspace">
+    <div class="workspace-header">
+        <div class="row align-items-center">
+            <div class="col-md-5">
+                <h4>Cotação Correspondente</h4>
+                <select class="form-select select-cotacao-fornecedor" disabled>
+                    <option selected disabled>Selecione a cotação...</option>
+                </select>
+            </div>
+            <div class="col-md-7">
+                <div class="p-2 border rounded">
+                  <div class="d-flex justify-content-between"><span>Total da Nota:</span> <strong class="total-notas-valor text-info">R$ 0,00</strong></div>
+                  <div class="d-flex justify-content-between"><span>Total Esperado (Cotação):</span> <strong class="total-cotacao-valor text-primary">R$ 0,00</strong></div>
+                  <div class="d-flex justify-content-between"><span>Total Conciliado (NF):</span> <strong class="total-conciliado-valor text-success">R$ 0,00</strong></div>
+                  <hr class="my-1">
+                  <div class="d-flex justify-content-between">
+                    <span>Diferença (Outros Custos):</span> 
+                    <div>
+                      <strong class="diferenca-totais-valor text-danger me-1">R$ 0,00</strong>
+                      <button class="btn btn-outline-info btn-sm py-0 px-1 btn-detalhes-diferenca d-none" title="Ver detalhes dos totais da NF">
+                        <i class="bi bi-info-circle"></i>
+                      </button>
                     </div>
+                  </div>
                 </div>
             </div>
-            <hr class="mt-0">
-            <div class="comparison-container d-none">
-              <div class="table-responsive">
-                <table class="table table-bordered table-striped table-hover align-middle">
-                  <thead class="table-dark text-center">
-                    <tr>
-                      <th rowspan="2" class="align-middle">Item da Cotação</th>
-                      <th rowspan="2" class="align-middle">Dados da Cotação</th>
-                      <th rowspan="2" class="align-middle" style="min-width: 350px;">Associar ao Item da NF</th>
-                      <th colspan="2">Comparativo com NF</th>
-                    </tr>
-                    <tr><th>Dados da NF</th><th>Divergências</th></tr>
-                  </thead>
-                  <tbody class="comparison-table-body"></tbody>
-                </table>
-              </div>
-            </div>
         </div>
+    </div>
+    <div class="comparison-container d-none">
+        <div class="comparison-column" id="cotacao-items-list">
+            <h5><i class="bi bi-clipboard2-data-fill text-primary"></i> Itens da Cotação (Não recebidos)</h5>
+            <p class="text-muted small">Clique em um item abaixo e depois no item correspondente da NF para conciliá-los.</p>
+            <div class="list-group"></div>
+        </div>
+        <div class="comparison-column" id="nf-items-list">
+            <h5><i class="bi bi-receipt-cutoff text-info"></i> Itens da NF (Excedente)</h5>
+            <p class="text-muted small">Itens abaixo não foram pedidos na cotação selecionada.</p>
+            <div class="list-group"></div>
+        </div>
+    </div>
+    <div class="matched-items-section mt-3">
+        <h5><i class="bi bi-check2-circle text-success"></i> Itens Conciliados</h5>
+        <div id="matched-items-container">
+            </div>
+    </div>
+    <div class="workspace-footer text-end mt-auto pt-3">
+      <button id="btn-concluir-conciliacao" class="btn btn-primary btn-lg" disabled>
+        <i class="bi bi-check-lg"></i> Concluir e Preparar para Salvar
+      </button>
     </div>
   </template>
 
-  <div class="modal fade" id="resumoModal" tabindex="-1" aria-labelledby="resumoModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="resumoModalLabel">Resumo Final da Conciliação</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <p>Abaixo estão os itens que não foram associados. Verifique e marque os itens da cotação que foram <strong>cortados</strong> pelo fornecedor.</p>
-          <div id="resumo-container" class="row">
-              </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar e Manter Pendente</button>
-          <button type="button" class="btn btn-primary" id="btn-confirmar-cortados-e-salvar">Confirmar Itens Cortados e Salvar Tudo</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <div class="modal fade" id="ajusteManualModal" tabindex="-1" aria-labelledby="ajusteManualModalLabel" aria-hidden="true">
+  <div class="modal fade" id="ajusteManualModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="ajusteManualModalLabel">Ajuste Manual de Item (Fardo/Caixa)</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title">Ajuste Manual de Item (Fardo/Caixa)</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p class="mb-4">Use esta ferramenta quando a nota fiscal envia o preço de uma caixa/fardo, e não o preço unitário. Informe quantas unidades vêm na embalagem para ajustar os valores para a comparação.</p>
+          <p class="mb-4">Use esta ferramenta quando a nota fiscal envia o preço de uma caixa/fardo. Informe quantas unidades vêm na embalagem para ajustar os valores para a comparação.</p>
           <h6>Item da Cotação</h6>
           <div class="row bg-light p-2 rounded mb-3">
             <div class="col-md-8" id="ajuste-cot-descricao"></div>
@@ -252,17 +283,16 @@
     </div>
   </div>
 
-  <div class="modal fade" id="detalhesDiferencaModal" tabindex="-1" aria-labelledby="detalhesDiferencaModalLabel" aria-hidden="true">
+  <div class="modal fade" id="detalhesDiferencaModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="detalhesDiferencaModalLabel">Detalhamento dos Totais da Nota Fiscal</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title">Detalhamento dos Totais da Nota Fiscal</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p>A diferença entre o "Total das Notas" e o "Total Esperado (Cotação)" geralmente se deve a cobranças adicionais, como frete, impostos e outras despesas. Veja o detalhamento abaixo:</p>
-          <ul id="lista-detalhes-nf" class="list-group">
-            </ul>
+          <p>A diferença entre o "Total da Nota" e o "Total Esperado (Cotação)" geralmente se deve a cobranças adicionais. Veja o detalhamento abaixo:</p>
+          <ul id="lista-detalhes-nf" class="list-group"></ul>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
