@@ -1,5 +1,6 @@
 <script>
 // Variáveis globais de estado
+let rateiosEmLote = [];
 let todasAsNotas = [];
 let dadosAtuaisNF = null; 
 
@@ -19,11 +20,73 @@ function inicializarPagina() {
 }
 
 function addEventListeners() {
-    $('#lista-de-notas').on('click', '.list-group-item', onNotaItemClick);
+    $('#lista-de-notas').on('click', '.nota-list-item:not(.staged)', onNotaItemClick);
     $('#itens-manuais-container').on('click', '.btn-add-setor', onAdicionarSetorManualClick);
     $('#itens-manuais-container').on('click', '.btn-remove-setor', onRemoverSetorManualClick);
     $('#itens-manuais-container').on('input', '.input-porcentagem, .input-setor', onPorcentagemChange);
-    $('#btn-salvar-rateio').on('click', onBtnSalvarRateioClick);
+    $('#btn-preparar-rateio').on('click', onBtnPrepararRateioClick);
+    $('#btn-salvar-lote').on('click', onBtnSalvarLoteClick);
+    $('#btn-preparar-automaticos').on('click', onBtnPrepararAutomaticosClick);
+}
+
+// ===== LÓGICA DE LOTE =====
+
+function atualizarBotaoSalvarLote() {
+    const btn = $('#btn-salvar-lote');
+    const count = rateiosEmLote.length;
+    if (count > 0) {
+        $('#save-batch-text').text(`Salvar ${count} Rateio(s)`);
+        btn.removeClass('d-none');
+    } else {
+        btn.addClass('d-none');
+    }
+}
+
+function resetarAplicacao() {
+    toggleLoader(true);
+    rateiosEmLote = [];
+    atualizarBotaoSalvarLote();
+    $('#workspace-rateio').addClass('d-none');
+    $('#workspace-welcome').removeClass('d-none');
+    inicializarPagina();
+}
+
+function onBtnPrepararAutomaticosClick() {
+    const chavesAutomaticas = todasAsNotas
+        .filter(n => n.isAutomatico && !$(`.nota-list-item[data-chave="${n.chaveAcesso}"]`).hasClass('staged'))
+        .map(n => n.chaveAcesso);
+
+    if (chavesAutomaticas.length === 0) {
+        alert("Nenhuma nota 100% automática para preparar.");
+        return;
+    }
+    
+    toggleLoader(true);
+    google.script.run
+        .withSuccessHandler(response => {
+            toggleLoader(false);
+            if (response && response.success) {
+                const payloads = response.payloads;
+                payloads.forEach(payload => {
+                    rateiosEmLote.push(payload);
+                    marcarNotaComoPronta(payload.chaveAcesso);
+                });
+                alert(`${payloads.length} rateio(s) automáticos preparados para salvar.`);
+                atualizarBotaoSalvarLote();
+            } else {
+                onFailure(response);
+            }
+        })
+        .withFailureHandler(onFailure)
+        .RateioController_prepararLoteAutomatico(chavesAutomaticas);
+}
+
+function marcarNotaComoPronta(chaveAcesso) {
+     $(`.nota-list-item[data-chave="${chaveAcesso}"]`)
+      .addClass('staged')
+      .removeClass('active')
+      .find('.status-icon')
+      .removeClass('d-none');
 }
 
 // ===== CALLBACKS DO SERVIDOR E PROCESSAMENTO DE DADOS =====
@@ -36,6 +99,9 @@ function onDadosIniciaisSuccess(response) {
     }
     todasAsNotas = response.notas;
     renderizarListaDeNotas(todasAsNotas);
+
+    const temAutomaticas = todasAsNotas.some(n => n.isAutomatico);
+    $('#btn-preparar-automaticos').prop('disabled', !temAutomaticas);
 }
 
 function onFailure(error) {
@@ -54,15 +120,21 @@ function renderizarListaDeNotas(notas) {
         return;
     }
 
-    const listaHtml = notas.map(nota => `
-        <a href="#" class="list-group-item list-group-item-action" data-chave="${nota.chaveAcesso}">
+    const listaHtml = notas.map(nota => {
+        const classAutomatica = nota.isAutomatico ? 'automatico' : '';
+        const titleAutomatico = nota.isAutomatico ? 'title="Rateio 100% automático disponível"' : '';
+        return `
+        <a href="#" class="list-group-item list-group-item-action nota-list-item ${classAutomatica}" data-chave="${nota.chaveAcesso}" ${titleAutomatico}>
             <div class="d-flex w-100 justify-content-between">
-                <h6 class="mb-1">NF ${nota.numeroNF}</h6>
+                <h6 class="mb-1">
+                    <span class="status-icon me-1 d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                    NF ${nota.numeroNF}
+                </h6>
                 <small>${nota.dataEmissao}</small>
             </div>
             <p class="mb-1 small text-muted">${nota.nomeEmitente}</p>
         </a>
-    `).join('');
+    `}).join('');
     
     container.html(`<div class="list-group list-group-flush">${listaHtml}</div>`);
 }
@@ -98,10 +170,18 @@ function onNotaItemClick(event) {
         .RateioController_analisarNFParaRateio(chaveAcesso);
 }
 
+
 function renderizarDetalhesRateio(dados) {
     $('#nf-selecionada-titulo').text(`Detalhes do Rateio - NF ${dados.numeroNF} (${dados.nomeEmitente})`);
     
-    // REQUISITO 1: Exibe o item da cotação associado
+    if(dados.rateioCompleto) {
+        $('#badge-rateio-automatico').removeClass('d-none');
+        $('#secao-rateio-manual').addClass('d-none');
+    } else {
+        $('#badge-rateio-automatico').addClass('d-none');
+        $('#secao-rateio-manual').removeClass('d-none');
+    }
+
     const containerAuto = $('#itens-rateados-container').empty();
     if (dados.itensRateados.length > 0) {
         const autoHtml = dados.itensRateados.map(item => `
@@ -135,33 +215,16 @@ function renderizarDetalhesRateio(dados) {
         `).join('');
         containerManual.html(manualHtml);
     } else {
-        containerManual.html('<p class="text-muted small">Todos os itens foram rateados com sucesso.</p>');
+        containerManual.html('');
     }
 
-    // A pré-visualização das faturas agora é feita na função de recalcular
     $('#faturas-container').empty(); 
-
     recalcularRateioTotal();
 }
 
 function onAdicionarSetorManualClick(event) {
     const linhasContainer = $(event.target).closest('.manual-rate-item').find('.rateio-manual-linhas');
-    const novaLinha = `
-        <div class="row gx-2 mb-1 align-items-center manual-rate-row">
-            <div class="col-6">
-                <input type="text" class="form-control form-control-sm input-setor" placeholder="Nome do Setor">
-            </div>
-            <div class="col-4">
-                <div class="input-group input-group-sm">
-                    <input type="number" class="form-control input-porcentagem" placeholder="%" min="0" max="100" step="0.01">
-                    <span class="input-group-text">%</span>
-                </div>
-            </div>
-            <div class="col-2 text-end">
-                <button class="btn btn-sm btn-outline-danger btn-remove-setor py-0 px-1" type="button"><i class="bi bi-trash"></i></button>
-            </div>
-        </div>
-    `;
+    const novaLinha = `<div class="row gx-2 mb-1 align-items-center manual-rate-row"><div class="col-6"><input type="text" class="form-control form-control-sm input-setor" placeholder="Nome do Setor"></div><div class="col-4"><div class="input-group input-group-sm"><input type="number" class="form-control input-porcentagem" placeholder="%" min="0" max="100" step="0.01"><span class="input-group-text">%</span></div></div><div class="col-2 text-end"><button class="btn btn-sm btn-outline-danger btn-remove-setor py-0 px-1" type="button"><i class="bi bi-trash"></i></button></div></div>`;
     linhasContainer.append(novaLinha);
 }
 
@@ -176,7 +239,6 @@ function onPorcentagemChange(event) {
     itemCard.find('.input-porcentagem').each(function() {
         totalPercent += parseFloat($(this).val()) || 0;
     });
-
     const totalEl = itemCard.find('.total-percent-item');
     totalEl.text(`Total: ${totalPercent.toFixed(2)}%`);
     totalEl.removeClass('text-danger-emphasis text-success-emphasis');
@@ -185,17 +247,24 @@ function onPorcentagemChange(event) {
     } else {
         totalEl.addClass('text-success-emphasis');
     }
-    
     recalcularRateioTotal();
 }
 
 function recalcularRateioTotal() {
     if (!dadosAtuaisNF) return;
     
+    const mapaSetorParaItens = {};
+    const adicionarItemAoMapa = (setor, itemCotacao) => {
+        if (!itemCotacao) return;
+        if (!mapaSetorParaItens[setor]) mapaSetorParaItens[setor] = new Set();
+        mapaSetorParaItens[setor].add(itemCotacao);
+    };
+
     const totais = {};
     dadosAtuaisNF.itensRateados.forEach(item => {
         item.rateios.forEach(rateio => {
             totais[rateio.setor] = (totais[rateio.setor] || 0) + rateio.valor;
+            adicionarItemAoMapa(rateio.setor, item.itemCotacao);
         });
     });
 
@@ -212,15 +281,19 @@ function recalcularRateioTotal() {
             if (setor && porcentagem > 0) {
                 const valorRateado = itemData.custoTotal * (porcentagem / 100);
                 totais[setor] = (totais[setor] || 0) + valorRateado;
+                adicionarItemAoMapa(setor, itemData.itemCotacao);
             }
         });
     });
 
     const resumoContainer = $('#resumo-setor-container').empty();
     let totalCalculado = 0;
+    Object.keys(totais).sort().forEach(setor => {
+        totalCalculado += totais[setor];
+    });
+
     const resumoHtml = Object.keys(totais).sort().map(setor => {
         const valor = totais[setor];
-        totalCalculado += valor;
         return `<li class="list-group-item">${setor} <span class="float-end">${formatarMoeda(valor)}</span></li>`;
     }).join('');
     resumoContainer.html(`<ul class="list-group">${resumoHtml}</ul>`);
@@ -228,46 +301,50 @@ function recalcularRateioTotal() {
     $('#total-rateado').text(formatarMoeda(totalCalculado));
     $('#total-nf').text(formatarMoeda(dadosAtuaisNF.valorTotalNF));
 
-    // REQUISITO 3: Pré-visualização do rateio dos boletos
     const faturasContainer = $('#faturas-container').empty();
+    const numFaturasOriginais = dadosAtuaisNF.faturas.length > 0 ? dadosAtuaisNF.faturas.length : 1;
+    const numSetores = Object.keys(totais).length;
+    const totalNovosTitulos = numFaturasOriginais * numSetores;
+
+    if (totalNovosTitulos > 0) {
+      faturasContainer.append(`<h6>Serão criados ${totalNovosTitulos} novos títulos:</h6>`);
+    }
+
     if(dadosAtuaisNF.faturas.length > 0 && totalCalculado > 0) {
         const porcentagensPorSetor = {};
         for(const setor in totais) {
             porcentagensPorSetor[setor] = totais[setor] / totalCalculado;
         }
-
+        
+        let novoNumeroParcela = 1;
         const faturasHtml = dadosAtuaisNF.faturas.map(f => {
-            const detalhesRateio = Object.keys(porcentagensPorSetor).map(setor => 
-                `<div><small>${setor}: <strong>${formatarMoeda(f.valorParcela * porcentagensPorSetor[setor])}</strong></small></div>`
-            ).join('');
-
-            return `<li class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <span>Parcela ${f.numeroParcela} | Venc: ${new Date(f.dataVencimento).toLocaleDateString('pt-BR')}</span>
-                            <strong>${formatarMoeda(f.valorParcela)}</strong>
-                        </div>
-                        <div class="text-muted small ps-3">${detalhesRateio}</div>
-                    </li>`;
+            return Object.keys(porcentagensPorSetor).sort().map(setor => {
+                const resumoItens = mapaSetorParaItens[setor] ? Array.from(mapaSetorParaItens[setor]).join(', ') : 'Rateio Manual';
+                const numeroParcelaFormatado = `${novoNumeroParcela++}/${totalNovosTitulos}(${numFaturasOriginais})`;
+                return `<li class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <span>${setor} - Parcela ${numeroParcelaFormatado}</span>
+                                <strong>${formatarMoeda(f.valorParcela * porcentagensPorSetor[setor])}</strong>
+                            </div>
+                            <div class="text-muted small ps-3">
+                                Ref. Parcela ${f.numeroParcela} (${formatarMoeda(f.valorParcela)}) | Venc: ${new Date(f.dataVencimento).toLocaleDateString('pt-BR')}
+                            </div>
+                             <div class="text-muted small ps-3">Itens: ${resumoItens}</div>
+                        </li>`;
+            }).join('');
         }).join('');
-        faturasContainer.html(`<ul class="list-group">${faturasHtml}</ul>`);
+        faturasContainer.append(`<ul class="list-group list-group-flush">${faturasHtml}</ul>`);
     } else {
-       faturasContainer.html('<p class="text-muted small">Pagamento à vista ou dados de fatura não encontrados.</p>');
+       faturasContainer.append('<p class="text-muted small">Pagamento à vista ou dados de fatura não encontrados.</p>');
     }
 }
 
-
-function onBtnSalvarRateioClick() {
-    if (!dadosAtuaisNF) {
-        alert("Nenhuma NF selecionada para salvar.");
-        return;
-    }
-
+function onBtnPrepararRateioClick() {
+    if (!dadosAtuaisNF) return;
     let erroValidacao = false;
     $('.manual-rate-item').each(function() {
         let totalPercent = 0;
-        $(this).find('.input-porcentagem').each(function() {
-            totalPercent += parseFloat($(this).val()) || 0;
-        });
+        $(this).find('.input-porcentagem').each(function() { totalPercent += parseFloat($(this).val()) || 0; });
         if (Math.abs(totalPercent - 100) > 0.01) {
             const descItem = $(this).find('strong').text();
             alert(`Erro de validação: A soma das porcentagens para o item "${descItem}" não é 100%.`);
@@ -277,73 +354,59 @@ function onBtnSalvarRateioClick() {
     });
     if (erroValidacao) return;
 
-    // Coleta dos totais finais (igual a recalcularRateioTotal)
     const totaisFinais = {};
-    dadosAtuaisNF.itensRateados.forEach(item => item.rateios.forEach(r => { totaisFinais[r.setor] = (totaisFinais[r.setor] || 0) + r.valor; }));
-    
-    // REQUISITO 2: Coleta das novas regras manuais para salvar
     const novasRegras = [];
+    const mapaSetorParaItens = {};
+    const adicionarItemAoMapa = (setor, itemCotacao) => { if (!itemCotacao) return; if (!mapaSetorParaItens[setor]) mapaSetorParaItens[setor] = new Set(); mapaSetorParaItens[setor].add(itemCotacao); };
+    dadosAtuaisNF.itensRateados.forEach(item => item.rateios.forEach(r => { totaisFinais[r.setor] = (totaisFinais[r.setor] || 0) + r.valor; adicionarItemAoMapa(r.setor, item.itemCotacao); }));
     $('.manual-rate-item').each(function() {
-        const itemCard = $(this);
-        const itemCotacao = itemCard.data('item-cotacao');
-        // Só salva a regra se houver um "Item da Cotação" associado
-        if (itemCotacao) {
-            itemCard.find('.manual-rate-row').each(function() {
-                const setor = $(this).find('.input-setor').val().trim();
-                const porcentagem = parseFloat($(this).find('.input-porcentagem').val()) || 0;
-                if(setor && porcentagem > 0){
-                    novasRegras.push({ itemCotacao: itemCotacao, setor: setor, porcentagem: porcentagem });
-                    const numeroItem = itemCard.data('item-numero');
-                    const itemData = dadosAtuaisNF.itensSemRegra.find(i => i.numeroItem == numeroItem);
-                    const valorRateado = itemData.custoTotal * (porcentagem / 100);
-                    totaisFinais[setor] = (totaisFinais[setor] || 0) + valorRateado;
-                }
-            });
-        }
+        const itemCard = $(this); const itemCotacao = itemCard.data('item-cotacao'); const numeroItem = itemCard.data('item-numero');
+        const itemData = dadosAtuaisNF.itensSemRegra.find(i => i.numeroItem == numeroItem);
+        itemCard.find('.manual-rate-row').each(function() {
+            const setor = $(this).find('.input-setor').val().trim();
+            const porcentagem = parseFloat($(this).find('.input-porcentagem').val()) || 0;
+            if (setor && porcentagem > 0) {
+                if (itemCotacao) { novasRegras.push({ itemCotacao: itemCotacao, setor: setor, porcentagem: porcentagem }); }
+                const valorRateado = itemData.custoTotal * (porcentagem / 100);
+                totaisFinais[setor] = (totaisFinais[setor] || 0) + valorRateado;
+                adicionarItemAoMapa(setor, itemData.itemCotacao);
+            }
+        });
     });
-
+    for(const setor in mapaSetorParaItens){ mapaSetorParaItens[setor] = Array.from(mapaSetorParaItens[setor]); }
     const payload = {
-        chaveAcesso: dadosAtuaisNF.chaveAcesso, 
-        faturas: dadosAtuaisNF.faturas,
-        totaisPorSetor: totaisFinais, 
-        novasRegras: novasRegras, // Enviando as novas regras
-        numeroNF: dadosAtuaisNF.numeroNF,
-        nomeEmitente: dadosAtuaisNF.nomeEmitente
+        chaveAcesso: dadosAtuaisNF.chaveAcesso, faturas: dadosAtuaisNF.faturas, totaisPorSetor: totaisFinais, 
+        novasRegras: novasRegras, mapaSetorParaItens: mapaSetorParaItens,
+        numeroNF: dadosAtuaisNF.numeroNF, nomeEmitente: dadosAtuaisNF.nomeEmitente
     };
-    
+    rateiosEmLote.push(payload);
+    marcarNotaComoPronta(payload.chaveAcesso);
+    $('#workspace-rateio').addClass('d-none');
+    $('#workspace-welcome').removeClass('d-none');
+    atualizarBotaoSalvarLote();
+}
+
+function onBtnSalvarLoteClick() {
+    if (rateiosEmLote.length === 0) { alert("Nenhum rateio preparado para salvar."); return; }
     toggleLoader(true);
     google.script.run
         .withSuccessHandler(response => {
             toggleLoader(false);
             if (response && response.success) {
                 alert(response.message);
-                $('#workspace-rateio').addClass('d-none');
-                $('#workspace-welcome').removeClass('d-none');
-                inicializarPagina();
+                resetarAplicacao();
             } else {
-                onFailure(response || { message: 'A resposta do servidor ao salvar foi vazia ou inválida.' });
+                onFailure(response || { message: 'A resposta do servidor ao salvar o lote foi vazia ou inválida.' });
             }
         })
         .withFailureHandler(onFailure)
-        .RateioController_salvarRateioFinal(payload);
+        .RateioController_salvarRateioEmLote(rateiosEmLote);
 }
 
 
 function toggleLoader(show, containerSelector = 'body') {
     const loader = $('#loader');
-    if (show) {
-        if (containerSelector !== 'body') {
-            $(containerSelector).css('opacity', '0.5');
-        } else {
-            loader.removeClass('d-none');
-        }
-    } else {
-        if (containerSelector !== 'body') {
-            $(containerSelector).css('opacity', '1');
-        } else {
-            loader.addClass('d-none');
-        }
-    }
+    if (show) { if (containerSelector !== 'body') { $(containerSelector).css('opacity', '0.5'); } else { loader.removeClass('d-none'); } } else { if (containerSelector !== 'body') { $(containerSelector).css('opacity', '1'); } else { loader.addClass('d-none'); } }
 }
 
 function formatarMoeda(valor) {

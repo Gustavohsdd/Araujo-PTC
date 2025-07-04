@@ -3,6 +3,12 @@
  * @description Funções CRUD para o módulo de Rateio Financeiro.
  */
 
+/**
+ * Função "à prova de balas" para converter valores da planilha em números.
+ * Lida com "R$", separador de milhar "." e decimal ",".
+ * @param {*} valor O valor da célula.
+ * @returns {number} O valor convertido para número.
+ */
 function _RateioCrud_parsearValorNumerico(valor) {
   if (typeof valor === 'number') return valor;
   if (valor === null || valor === undefined || String(valor).trim() === '') return 0;
@@ -16,6 +22,10 @@ function _RateioCrud_parsearValorNumerico(valor) {
   return isNaN(numero) ? 0 : numero;
 }
 
+/**
+ * Busca na planilha de Notas Fiscais todas as NFs que já foram conciliadas
+ * mas que ainda não possuem um "Status do Rateio".
+ */
 function RateioCrud_obterNotasParaRatear() {
   try {
     const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
@@ -50,6 +60,9 @@ function RateioCrud_obterNotasParaRatear() {
   }
 }
 
+/**
+ * Obtém os itens de uma NF específica pela chave de acesso.
+ */
 function RateioCrud_obterItensDaNF(chaveAcesso) {
   const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
   const aba = planilhaNF.getSheetByName(ABA_NF_ITENS);
@@ -71,6 +84,9 @@ function RateioCrud_obterItensDaNF(chaveAcesso) {
     }));
 }
 
+/**
+ * Obtém os dados de totais de tributos de uma NF específica.
+ */
 function RateioCrud_obterTotaisDaNF(chaveAcesso) {
   const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
   const aba = planilhaNF.getSheetByName(ABA_NF_TRIBUTOS_TOTAIS);
@@ -101,6 +117,9 @@ function RateioCrud_obterTotaisDaNF(chaveAcesso) {
   };
 }
 
+/**
+ * Obtém as faturas (boletos) de uma NF específica.
+ */
 function RateioCrud_obterFaturasDaNF(chaveAcesso) {
   const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
   const aba = planilhaNF.getSheetByName(ABA_NF_FATURAS);
@@ -127,6 +146,9 @@ function RateioCrud_obterFaturasDaNF(chaveAcesso) {
   });
 }
 
+/**
+ * Obtém todas as regras de rateio da planilha Financeiro.
+ */
 function RateioCrud_obterRegrasRateio() {
   const planilhaFin = SpreadsheetApp.openById(ID_PLANILHA_FINANCEIRO);
   const aba = planilhaFin.getSheetByName(ABA_FINANCEIRO_REGRAS_RATEIO);
@@ -151,6 +173,9 @@ function RateioCrud_obterRegrasRateio() {
 }
 
 
+/**
+ * Salva as linhas de rateio na aba 'ContasAPagar'.
+ */
 function RateioCrud_salvarContasAPagar(linhasParaAdicionar) {
   if (!linhasParaAdicionar || linhasParaAdicionar.length === 0) return;
 
@@ -167,6 +192,9 @@ function RateioCrud_salvarContasAPagar(linhasParaAdicionar) {
      .setValues(dadosFormatados);
 }
 
+/**
+ * Atualiza o status do rateio de uma NF para "Concluído".
+ */
 function RateioCrud_atualizarStatusRateio(chaveAcesso, novoStatus) {
   const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
   const aba = planilhaNF.getSheetByName(ABA_NF_NOTAS_FISCAIS);
@@ -185,7 +213,7 @@ function RateioCrud_atualizarStatusRateio(chaveAcesso, novoStatus) {
 }
 
 /**
- * REQUISITO 2: Salva novas regras de rateio na planilha, evitando duplicatas.
+ * Salva novas regras de rateio na planilha, evitando duplicatas.
  */
 function RateioCrud_salvarNovasRegrasDeRateio(novasRegras) {
   if (!novasRegras || novasRegras.length === 0) return;
