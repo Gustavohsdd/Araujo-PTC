@@ -45,7 +45,8 @@ const CABECALHOS_NF_NOTAS_FISCAIS = [
   "CNPJ Destinatário",
   "Nome Destinatário",
   "Informações Adicionais",
-  "Número do Pedido (Extraído)"
+  "Número do Pedido (Extraído)",
+  "Status do Rateio"
 ];
 
 /**

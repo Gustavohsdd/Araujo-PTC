@@ -2,7 +2,7 @@
 
 // Constantes globais de App.gs
 const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual",
-  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf"];
+  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf", "rateionf"];
 
 const App_VIEW_FILENAME_MAP = {
   "fornecedores": "FornecedoresView",
@@ -12,10 +12,9 @@ const App_VIEW_FILENAME_MAP = {
   "cotacaoIndividual": "CotacaoIndividualView",
   "contagemdeestoque": "ContagemDeEstoqueView",
   "EnviarManualmenteView": "EnviarManualmenteView",
-  // --- MODIFICAÇÃO INÍCIO ---
   "marcarprodutos": "MarcacaoProdutosView",
-  "conciliacaonf": "ConciliacaoNFView"
-  // --- MODIFICAÇÃO FIM ---
+  "conciliacaonf": "ConciliacaoNFView",
+  "rateionf": "RateioNFView"
 }
 
   const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL'); 
@@ -127,7 +126,15 @@ function doGet(e) {
         .addMetaTag('viewport', 'width=device-width, initial-scale=1')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
     // --- MODIFICAÇÃO FIM ---
-        
+    
+    case 'rateionf':
+      Logger.log("App.gs: Carregando RateioNFView.");
+      const templateRateio = HtmlService.createTemplateFromFile('RateioNFView');
+      return templateRateio.evaluate()
+        .setTitle("Rateio Financeiro de NF-e")
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+
     default:
       // Comportamento padrão: carregar a página principal
       Logger.log("App.gs: Carregando PaginaPrincipal (comportamento padrão).");
