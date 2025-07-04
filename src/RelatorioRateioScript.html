@@ -61,7 +61,9 @@ function onDadosRelatorioSuccess(response) {
     const cardClone = cardTemplate.content.cloneNode(true);
     const cardElement = cardClone.querySelector('.report-card');
 
+    // Popula os novos campos do cabeçalho do card
     cardElement.querySelector('.nf-numero').textContent = nota.numeroNF;
+    cardElement.querySelector('.nf-fornecedor').textContent = nota.nomeFornecedor; // NOVO
     cardElement.querySelector('.nf-data-emissao').textContent = nota.dataEmissao;
     cardElement.querySelector('.nf-valor-total').textContent = formatarMoeda(nota.valorTotalNf);
 
@@ -69,19 +71,22 @@ function onDadosRelatorioSuccess(response) {
     if (nota.contasAPagar && nota.contasAPagar.length > 0) {
       nota.contasAPagar.forEach(conta => {
         const tr = document.createElement('tr');
+        // Adiciona a nova coluna <td> para o 'Valor da Parcela'
         tr.innerHTML = `
           <td>${conta.numeroFatura}</td>
           <td>${conta.numeroParcela}</td>
           <td>${conta.setor}</td>
           <td>${conta.resumoItens}</td>
           <td>${conta.dataVencimento}</td>
-          <td class="text-end">${formatarMoeda(conta.valorPorSetor)}</td>
+          <td class="text-end">${formatarMoeda(conta.valorParcela)}</td>
+          <td class="text-end fw-bold">${formatarMoeda(conta.valorPorSetor)}</td>
         `;
         tbody.appendChild(tr);
       });
     } else {
+      // Ajusta o colspan para a nova quantidade de colunas
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="6" class="text-center text-muted">Nenhum registro de rateio encontrado para esta nota.</td>';
+      tr.innerHTML = '<td colspan="7" class="text-center text-muted">Nenhum registro de rateio encontrado para esta nota.</td>';
       tbody.appendChild(tr);
     }
     

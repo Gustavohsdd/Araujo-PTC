@@ -267,7 +267,8 @@ function RateioCrud_obterDadosParaRelatorio(termosDeBusca) {
     const colMapNF = {
       chaveAcesso: cabecalhosNF.indexOf("Chave de Acesso"),
       numeroNF: cabecalhosNF.indexOf("Número NF"),
-      dataEmissao: cabecalhosNF.indexOf("Data e Hora Emissão")
+      dataEmissao: cabecalhosNF.indexOf("Data e Hora Emissão"),
+      nomeEmitente: cabecalhosNF.indexOf("Nome Emitente") // ADICIONADO
     };
 
     const abaTributos = planilhaNF.getSheetByName(ABA_NF_TRIBUTOS_TOTAIS);
@@ -324,13 +325,13 @@ function RateioCrud_obterDadosParaRelatorio(termosDeBusca) {
 
       if (termosSet.has(chaveAtual) || termosSet.has(numeroAtual)) {
         
-        // Evita duplicidade se o usuário digitar chave E número da mesma nota
         if (chavesEncontradas.has(chaveAtual)) {
           return;
         }
 
         resultados.push({
           numeroNF: numeroAtual,
+          nomeFornecedor: linha[colMapNF.nomeEmitente], // ADICIONADO
           chaveAcesso: chaveAtual,
           dataEmissao: new Date(linha[colMapNF.dataEmissao]).toLocaleDateString('pt-BR'),
           valorTotalNf: _RateioCrud_parsearValorNumerico(mapaChaveParaTotal[chaveAtual] || 0),
