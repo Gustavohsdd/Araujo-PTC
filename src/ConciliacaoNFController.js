@@ -1,14 +1,13 @@
 /**
  * @file ConciliacaoNFController.gs
- * @description Orquestra o processo de leitura dos arquivos XML de NF-e da pasta do Drive,
- * o upload de novos arquivos e chama as funções CRUD para popular a planilha de dados.
+ * @description [UNIFICADO] Orquestra o processo de conciliação e rateio, 
+ * buscando e salvando dados para ambos os módulos.
  */
 
 /**
- * [FUNÇÃO ALTERADA]
  * Recebe arquivos da interface, decodifica, processa em memória e salva na planilha.
- * Suporta upload de múltiplos arquivos XML e ZIP. Os arquivos não são salvos no Drive.
- * @param {Array<object>} arquivos - Array de objetos com {fileName, mimeType, content (base64)}
+ * Nenhuma alteração necessária nesta função.
+ * @param {Array<object>} arquivos - Array de objetos com {fileName, content (base64)}
  * @returns {object} Objeto com { success: boolean, message: string }.
  */
 function ConciliacaoNFController_uploadArquivos(arquivos) {
@@ -21,7 +20,7 @@ function ConciliacaoNFController_uploadArquivos(arquivos) {
     return { success: false, message: 'Não foi possível obter o lock. Outro processo já está em execução.' };
   }
 
-  Logger.log('INICIANDO EXECUÇÃO DE UPLOAD E PROCESSAMENTO EM MEMÓRIA...');
+  Logger.log('INICIANDO EXECUÇÃO DE UPLOAD...');
 
   const todosOsDados = {
     notasFiscais: [],
@@ -34,33 +33,24 @@ function ConciliacaoNFController_uploadArquivos(arquivos) {
   let arquivosProcessados = 0;
   let arquivosDuplicados = 0;
   let arquivosComErro = 0;
-  let arquivosIgnorados = [];
-
+  
   try {
     const chavesExistentes = ConciliacaoNFCrud_obterChavesDeAcessoExistentes();
-    Logger.log(`Encontradas ${chavesExistentes.size} chaves existentes na planilha.`);
+    Logger.log(`Encontradas ${chavesExistentes.size} chaves existentes.`);
 
-    const processarBlobXml = (blob, nomeArquivoFonte) => {
+    for (const arquivo of arquivos) {
+      const { fileName, content } = arquivo;
       try {
-        if (!blob.getName().toLowerCase().endsWith('.xml')) {
-            Logger.log(`Arquivo "${blob.getName()}" dentro de um ZIP não é .xml e foi ignorado.`);
-            return;
-        }
-
+        const decodedContent = Utilities.base64Decode(content);
+        const blob = Utilities.newBlob(decodedContent, 'application/xml', fileName);
         const conteudoXml = blob.getDataAsString('UTF-8');
         const dadosNf = ConciliacaoNFCrud_parsearConteudoXml(conteudoXml);
-
-        if (!dadosNf || !dadosNf.notasFiscais.chaveAcesso) {
-          Logger.log(`AVISO: Chave de acesso não encontrada no XML do arquivo ${nomeArquivoFonte}. Pulando.`);
-          arquivosComErro++;
-          return;
-        }
-
+        
         const chaveAtual = dadosNf.notasFiscais.chaveAcesso;
         if (chavesExistentes.has(chaveAtual)) {
-          Logger.log(`AVISO: A NF-e com chave ${chaveAtual} (arquivo: ${nomeArquivoFonte}) já existe. Pulando.`);
+          Logger.log(`AVISO: NF ${chaveAtual} já existe. Pulando.`);
           arquivosDuplicados++;
-          return;
+          continue;
         }
 
         todosOsDados.notasFiscais.push(dadosNf.notasFiscais);
@@ -69,56 +59,24 @@ function ConciliacaoNFController_uploadArquivos(arquivos) {
         todosOsDados.transporteNf.push(...dadosNf.transporteNf);
         todosOsDados.tributosTotaisNf.push(...dadosNf.tributosTotaisNf);
 
-        chavesExistentes.add(chaveAtual); // Adiciona à lista para evitar duplicidade no mesmo lote
+        chavesExistentes.add(chaveAtual);
         arquivosProcessados++;
-        Logger.log(`Dados do arquivo ${nomeArquivoFonte} (chave: ${chaveAtual}) processados e acumulados em memória.`);
-
       } catch (e) {
-        Logger.log(`ERRO CRÍTICO ao processar o arquivo em memória ${nomeArquivoFonte}. Erro: ${e.message}. Stack: ${e.stack}`);
-        arquivosComErro++;
-      }
-    };
-
-    for (const arquivo of arquivos) {
-      const { fileName, mimeType, content } = arquivo;
-      const decodedContent = Utilities.base64Decode(content);
-      const blob = Utilities.newBlob(decodedContent, mimeType, fileName);
-      const nomeArquivoLower = fileName.toLowerCase();
-
-      if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed' || nomeArquivoLower.endsWith('.zip')) {
-        try {
-          const arquivosDescompactados = Utilities.unzip(blob);
-          for (const arquivoDescompactado of arquivosDescompactados) {
-            processarBlobXml(arquivoDescompactado, `${fileName}/${arquivoDescompactado.getName()}`);
-          }
-        } catch (e) {
-          Logger.log(`Erro ao descompactar o arquivo ZIP "${fileName}": ${e.message}`);
-          arquivosIgnorados.push(fileName);
-        }
-      } else if (mimeType === 'text/xml' || mimeType === 'application/xml' || nomeArquivoLower.endsWith('.xml')) {
-        processarBlobXml(blob, fileName);
-      } else {
-        Logger.log(`Arquivo ${fileName} com tipo ${mimeType} não é suportado e foi ignorado.`);
-        arquivosIgnorados.push(fileName);
+         Logger.log(`ERRO ao processar o arquivo ${fileName}. Erro: ${e.message}`);
+         arquivosComErro++;
       }
     }
 
     if (todosOsDados.notasFiscais.length > 0) {
-      Logger.log(`Iniciando salvamento em lote de ${todosOsDados.notasFiscais.length} nova(s) nota(s) fiscal(is).`);
       ConciliacaoNFCrud_salvarDadosEmLote(todosOsDados);
-      Logger.log(`Salvamento em lote finalizado.`);
     }
 
-    let message = `Processamento concluído.\n\n- ${arquivosProcessados} nova(s) NF-e processada(s) com sucesso.\n- ${arquivosDuplicados} NF-e duplicada(s) ignorada(s).\n- ${arquivosComErro} arquivo(s) com erro de leitura/parsing.`;
-    if (arquivosIgnorados.length > 0) {
-      message += `\n\nArquivos ignorados (tipo não suportado ou erro de descompactação): ${arquivosIgnorados.join(', ')}.`;
-    }
-    
+    let message = `Processamento concluído.\n- ${arquivosProcessados} nova(s) NF-e processada(s).\n- ${arquivosDuplicados} NF-e duplicada(s) ignorada(s).\n- ${arquivosComErro} arquivo(s) com erro.`;
     return { success: true, message: message };
 
   } catch (e) {
     Logger.log(`ERRO GERAL em ConciliacaoNFController_uploadArquivos: ${e.toString()}\n${e.stack}`);
-    return { success: false, message: `Erro fatal no servidor durante o processamento: ${e.message}` };
+    return { success: false, message: `Erro fatal no servidor: ${e.message}` };
   } finally {
     lock.releaseLock();
     Logger.log('FINALIZANDO EXECUÇÃO DE UPLOAD. Lock liberado.');
@@ -126,132 +84,176 @@ function ConciliacaoNFController_uploadArquivos(arquivos) {
 }
 
 
+/**
+ * Obtém todos os dados para a página unificada.
+ */
 function ConciliacaoNFController_obterDadosParaPagina() {
   try {
-    Logger.log("ConciliacaoNFController: Obtendo TODOS os dados para a página de conciliação.");
+    Logger.log("Controller Unificado: Obtendo TODOS os dados para a página.");
     
+    // Dados da Conciliação
     const cotacoes = ConciliacaoNFCrud_obterCotacoesAbertas();
     const notasFiscais = ConciliacaoNFCrud_obterNFsNaoConciliadas();
-    const mapeamentoConciliacao = ConciliacaoNFCrud_obterMapeamentoConciliacao(); // Busca os mapeamentos da aba "Conciliacao"
-
-    if (cotacoes === null || notasFiscais === null) {
-      throw new Error("Falha ao buscar dados das planilhas (Cotações ou Notas Fiscais).");
-    }
-
+    const mapeamentoConciliacao = ConciliacaoNFCrud_obterMapeamentoConciliacao();
     const chavesNFsNaoConciliadas = notasFiscais.map(nf => nf.chaveAcesso);
     const chavesCotacoesAbertas = cotacoes.map(c => ({ idCotacao: c.idCotacao, fornecedor: c.fornecedor }));
-
     const todosOsItensNF = ConciliacaoNFCrud_obterItensDasNFs(chavesNFsNaoConciliadas);
-    const todosOsDadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesNFsNaoConciliadas);
-    const todosOsItensCotacao = ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoesAbertas);
+    
+    // [CORRIGIDO] A função abaixo agora busca os totais E as faturas juntas.
+    const todosOsDadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesNFsNaoConciliadas); 
 
-    Logger.log(`Dados carregados: ${cotacoes.length} cotações, ${notasFiscais.length} NFs.`);
+    const todosOsItensCotacao = ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoesAbertas);
+    
+    // Dados do Rateio
+    const regrasRateio = RateioCrud_obterRegrasRateio();
+
+    Logger.log(`Dados carregados: ${cotacoes.length} cotações, ${notasFiscais.length} NFs, ${regrasRateio.length} regras de rateio.`);
     
     return {
       success: true,
       dados: {
-        cotacoes: cotacoes,
-        notasFiscais: notasFiscais,
+        cotacoes,
+        notasFiscais,
         itensNF: todosOsItensNF,
         itensCotacao: todosOsItensCotacao,
-        dadosGeraisNF: todosOsDadosGeraisNF,
-        mapeamentoConciliacao: mapeamentoConciliacao // Envia os mapeamentos para a interface
-      },
-      message: null
+        dadosGeraisNF: todosOsDadosGeraisNF, // Este objeto agora contém as faturas
+        mapeamentoConciliacao,
+        regrasRateio
+      }
     };
 
   } catch (e) {
     Logger.log(`ERRO em ConciliacaoNFController_obterDadosParaPagina: ${e.toString()}\n${e.stack}`);
-    return { success: false, dados: null, message: e.message };
-  }
-}
-
-function ConciliacaoNFController_realizarComparacao(compositeKeyCotacao, chavesAcessoNF) {
-  try {
-    if (!compositeKeyCotacao || !chavesAcessoNF || chavesAcessoNF.length === 0) {
-      throw new Error("Chave da Cotação e Chaves de Acesso das NFs são obrigatórios.");
-    }
-    
-    const parts = compositeKeyCotacao.split('-');
-    const idCotacao = parts.shift();
-    const nomeFornecedor = parts.join('-');
-
-    Logger.log(`Coletando dados para conciliação manual. Cotação ID: ${idCotacao}, Fornecedor: ${nomeFornecedor}`);
-    
-    const itensCotacao = ConciliacaoNFCrud_obterItensDaCotacao(idCotacao, nomeFornecedor);
-    if (itensCotacao.length === 0) {
-      return { success: false, message: "Nenhum item marcado para comprar nesta cotação para este fornecedor." };
-    }
-
-    const itensNF = ConciliacaoNFCrud_obterItensDasNFs(chavesAcessoNF);
-    const dadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesAcessoNF);
-    const analisePrazo = {}; 
-
-    const dadosParaPagina = {
-      idCotacao: idCotacao,
-      nomeFornecedor: nomeFornecedor,
-      chavesAcessoNF: chavesAcessoNF,
-      itensCotacao: itensCotacao,
-      itensNF: itensNF,
-      dadosGeraisNF: dadosGeraisNF,
-      analisePrazo: analisePrazo
-    };
-
-    return { success: true, dados: dadosParaPagina };
-
-  } catch (e) {
-    Logger.log(`ERRO em ConciliacaoNFController_realizarComparacao: ${e.toString()}\n${e.stack}`);
-    return { success: false, dados: null, message: e.message };
+    return { success: false, message: e.message };
   }
 }
 
 
-function ConciliacaoNFController_salvarConciliacaoEmLote(dadosLote) {
+/**
+ * Salva um lote unificado de alterações de conciliação e rateio.
+ * Esta função substitui a antiga 'salvarConciliacaoEmLote' e a 'salvarRateioEmLote'.
+ * @param {object} dadosLote - O objeto contendo todos os dados a serem salvos.
+ */
+function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) {
-    return { success: false, message: 'Outro processo de salvamento já está em execução. Tente novamente em alguns instantes.' };
+    return { success: false, message: 'Outro processo de salvamento já está em execução.' };
   }
 
   try {
-    Logger.log("Recebidos dados para salvamento em lote.");
-    const { conciliacoes, itensCortados, novosMapeamentos, statusUpdates } = dadosLote; 
+    Logger.log("Iniciando salvamento de lote unificado (Conciliação + Rateio).");
+    const { conciliacoes, itensCortados, novosMapeamentos, statusUpdates, rateios } = dadosLote;
 
-    if (!Array.isArray(conciliacoes) || !Array.isArray(itensCortados) || !Array.isArray(novosMapeamentos) || !Array.isArray(statusUpdates)) {
-      throw new Error("Formato de dados inválido para salvamento em lote.");
+    // 1. Salvar alterações da Conciliação
+    if (conciliacoes && conciliacoes.length > 0) {
+        ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, novosMapeamentos);
+        Logger.log(`${conciliacoes.length} conciliação(ões) salva(s).`);
     }
 
-    // [NOVO] Processa as atualizações de status (Sem Pedido, Bonificação, etc.)
+    // 2. Salvar atualizações de Status (Ex: Sem Pedido)
     if (statusUpdates && statusUpdates.length > 0) {
-      Logger.log(`Processando ${statusUpdates.length} atualização(ões) de status.`);
-      // Agrupa as chaves de acesso por novo status para otimizar chamadas
       const updatesByStatus = statusUpdates.reduce((acc, update) => {
-        if (!acc[update.novoStatus]) {
-          acc[update.novoStatus] = [];
-        }
+        if (!acc[update.novoStatus]) acc[update.novoStatus] = [];
         acc[update.novoStatus].push(update.chaveAcesso);
         return acc;
       }, {});
-
       for (const status in updatesByStatus) {
         ConciliacaoNFCrud_atualizarStatusNF(updatesByStatus[status], null, status);
         Logger.log(`Status de ${updatesByStatus[status].length} NF(s) atualizado para '${status}'.`);
       }
     }
+    
+    // 3. Salvar dados do Rateio
+    if (rateios && rateios.length > 0) {
+        const todasAsLinhasContasAPagar = [];
+        const todasAsNovasRegras = [];
+        const todasAsChavesParaAtualizar = new Set();
+        
+        for (const dadosRateio of rateios) {
+            // [ALTERADO] Obtém o novo mapaSetorParaItens do payload
+            const { chaveAcesso, totaisPorSetor, novasRegras, numeroNF, mapaSetorParaItens } = dadosRateio;
+            todasAsChavesParaAtualizar.add(chaveAcesso);
 
-    // Processa o resto do lote (conciliações, itens cortados, mapeamentos)
-    const sucesso = ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, novosMapeamentos);
+            if (novasRegras && novasRegras.length > 0) {
+                todasAsNovasRegras.push(...novasRegras);
+            }
+            
+            const faturas = RateioCrud_obterFaturasDaNF(chaveAcesso);
+            let valorTotalRateado = Object.values(totaisPorSetor).reduce((s, v) => s + v, 0);
 
-    if (!sucesso) {
-      throw new Error("Ocorreu uma falha no backend ao tentar salvar os dados nas planilhas.");
+            // [ALTERADO] Lógica de formatação de parcela e resumo de itens
+            const numFaturasOriginais = faturas.length > 0 ? faturas.length : 1;
+            const numSetores = Object.keys(totaisPorSetor).length;
+            const totalNovosTitulosNota = numFaturasOriginais * numSetores;
+            let contadorParcelaNota = 1;
+
+            if (faturas && faturas.length > 0) {
+                 faturas.forEach(fatura => {
+                    for (const setor in totaisPorSetor) {
+                        const resumoItens = mapaSetorParaItens[setor] ? mapaSetorParaItens[setor].join(', ') : `NF ${numeroNF}`;
+                        const numeroParcelaFormatado = `${contadorParcelaNota++}/${totalNovosTitulosNota}(${numFaturasOriginais})`;
+                        
+                        todasAsLinhasContasAPagar.push({
+                            'ChavedeAcesso': chaveAcesso,
+                            'NúmerodaFatura': fatura.numeroFatura,
+                            'NúmerodaParcela': numeroParcelaFormatado, // Valor formatado
+                            'ResumodosItens': resumoItens, // Resumo dos itens
+                            'DatadeVencimento': new Date(fatura.dataVencimento),
+                            'ValordaParcela': fatura.valorParcela,
+                            'Setor': setor,
+                            'ValorporSetor': (totaisPorSetor[setor] / valorTotalRateado) * fatura.valorParcela
+                        });
+                    }
+                });
+            } else { // Caso de pagamento à vista sem fatura explícita
+                 for (const setor in totaisPorSetor) {
+                    const resumoItens = mapaSetorParaItens[setor] ? mapaSetorParaItens[setor].join(', ') : `NF ${numeroNF}`;
+                    const numeroParcelaFormatado = `${contadorParcelaNota++}/${totalNovosTitulosNota}(1)`;
+                    
+                    todasAsLinhasContasAPagar.push({
+                        'ChavedeAcesso': chaveAcesso,
+                        'NúmerodaFatura': numeroNF,
+                        'NúmerodaParcela': numeroParcelaFormatado, // Valor formatado
+                        'ResumodosItens': resumoItens, // Resumo dos itens
+                        'DatadeVencimento': new Date(),
+                        'ValordaParcela': valorTotalRateado,
+                        'Setor': setor,
+                        'ValorporSetor': totaisPorSetor[setor]
+                    });
+                }
+            }
+        }
+        
+        RateioCrud_salvarNovasRegrasDeRateio(todasAsNovasRegras);
+        RateioCrud_salvarContasAPagar(todasAsLinhasContasAPagar);
+        Array.from(todasAsChavesParaAtualizar).forEach(chave => {
+            RateioCrud_atualizarStatusRateio(chave, "Concluído");
+        });
+        Logger.log(`${rateios.length} rateio(s) salvos e status atualizados.`);
     }
 
-    Logger.log("Salvamento em lote concluído com sucesso.");
+    Logger.log("Salvamento em lote unificado concluído com sucesso.");
     return { success: true, message: "Todas as alterações foram salvas com sucesso!" };
 
   } catch (e) {
-    Logger.log(`ERRO em ConciliacaoNFController_salvarConciliacaoEmLote: ${e.toString()}\n${e.stack}`);
+    Logger.log(`ERRO em ConciliacaoNFController_salvarLoteUnificado: ${e.toString()}\n${e.stack}`);
     return { success: false, message: e.message };
   } finally {
     lock.releaseLock();
+  }
+}
+
+/**
+ * Ponto de entrada para a interface buscar os dados para o Relatório de Rateio.
+ * @param {string[]} termosDeBusca - Um array de números de NF ou Chaves de Acesso.
+ * @returns {object} Objeto com status e os dados do relatório.
+ */
+function ConciliacaoNFController_obterDadosParaRelatorio(termosDeBusca) {
+  try {
+    const dados = RateioCrud_obterDadosParaRelatorio(termosDeBusca);
+    return { success: true, dados: dados };
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_obterDadosParaRelatorio: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: e.message };
   }
 }

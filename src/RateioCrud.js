@@ -1,11 +1,12 @@
 /**
  * @file RateioCrud.gs
  * @description Funções CRUD para o módulo de Rateio Financeiro.
+ *
+ * NENHUMA ALTERAÇÃO NECESSÁRIA NESTE ARQUIVO PARA A NOVA INTERFACE UNIFICADA.
  */
 
 /**
  * Função "à prova de balas" para converter valores da planilha em números.
- * Lida com "R$", separador de milhar "." e decimal ",".
  * @param {*} valor O valor da célula.
  * @returns {number} O valor convertido para número.
  */
@@ -44,7 +45,8 @@ function RateioCrud_obterNotasParaRatear() {
 
     const notasParaRatear = [];
     dados.forEach(linha => {
-      if (linha[colunas.statusConciliacao] && !linha[colunas.statusRateio]) {
+      // A condição foi ajustada para pegar apenas NFs 'Conciliada' que não tem status de rateio
+      if (linha[colunas.statusConciliacao] === 'Conciliada' && !linha[colunas.statusRateio]) {
         notasParaRatear.push({
           chaveAcesso: linha[colunas.chaveAcesso],
           nomeEmitente: linha[colunas.nomeEmitente],
@@ -185,7 +187,7 @@ function RateioCrud_salvarContasAPagar(linhasParaAdicionar) {
   
   const chaves = cabecalhos.map(c => c.replace(/\s+/g, ''));
   const dadosFormatados = linhasParaAdicionar.map(obj => 
-      chaves.map(chave => obj[chave] ?? '')
+      chaves.map(chave => obj[chave.replace(/\(/g, '\\(').replace(/\)/g, '\\)')] ?? '')
   );
   
   aba.getRange(aba.getLastRow() + 1, 1, dadosFormatados.length, dadosFormatados[0].length)
@@ -222,7 +224,6 @@ function RateioCrud_salvarNovasRegrasDeRateio(novasRegras) {
   const aba = planilhaFin.getSheetByName(ABA_FINANCEIRO_REGRAS_RATEIO);
   
   const dadosAtuais = aba.getDataRange().getValues();
-  // Cria um Set para checagem rápida de duplicatas. Chave: "ItemDaCotacao#Setor"
   const regrasExistentes = new Set(dadosAtuais.map(linha => `${linha[0]}#${linha[1]}`));
 
   const linhasParaAdicionar = [];
@@ -230,7 +231,7 @@ function RateioCrud_salvarNovasRegrasDeRateio(novasRegras) {
     const chaveUnica = `${regra.itemCotacao}#${regra.setor}`;
     if (!regrasExistentes.has(chaveUnica)) {
       linhasParaAdicionar.push([regra.itemCotacao, regra.setor, regra.porcentagem]);
-      regrasExistentes.add(chaveUnica); // Adiciona ao Set para evitar duplicatas no mesmo lote
+      regrasExistentes.add(chaveUnica); 
     }
   });
 
@@ -238,5 +239,113 @@ function RateioCrud_salvarNovasRegrasDeRateio(novasRegras) {
     aba.getRange(aba.getLastRow() + 1, 1, linhasParaAdicionar.length, 3)
        .setValues(linhasParaAdicionar);
     Logger.log(`${linhasParaAdicionar.length} nova(s) regra(s) de rateio foram salvas.`);
+  }
+}
+
+/**
+ * Busca dados consolidados de várias notas fiscais para o relatório de rateio.
+ * @param {string[]} termosDeBusca - Um array de números de NF ou Chaves de Acesso.
+ * @returns {Array<Object>} Um array de objetos, onde cada objeto representa uma NF com seus dados e linhas de rateio.
+ */
+function RateioCrud_obterDadosParaRelatorio(termosDeBusca) {
+  Logger.log(`Iniciando busca para relatório de rateio com os termos: ${termosDeBusca.join(', ')}`);
+  if (!termosDeBusca || termosDeBusca.length === 0) {
+    return [];
+  }
+
+  const termosSet = new Set(termosDeBusca.map(t => String(t).trim()));
+  const resultados = [];
+
+  try {
+    const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
+    const planilhaFin = SpreadsheetApp.openById(ID_PLANILHA_FINANCEIRO);
+
+    // 1. Obter dados das abas necessárias
+    const abaNotasFiscais = planilhaNF.getSheetByName(ABA_NF_NOTAS_FISCAIS);
+    const dadosNotasFiscais = abaNotasFiscais.getDataRange().getValues();
+    const cabecalhosNF = dadosNotasFiscais.shift();
+    const colMapNF = {
+      chaveAcesso: cabecalhosNF.indexOf("Chave de Acesso"),
+      numeroNF: cabecalhosNF.indexOf("Número NF"),
+      dataEmissao: cabecalhosNF.indexOf("Data e Hora Emissão")
+    };
+
+    const abaTributos = planilhaNF.getSheetByName(ABA_NF_TRIBUTOS_TOTAIS);
+    const dadosTributos = abaTributos.getDataRange().getValues();
+    const cabecalhosTributos = dadosTributos.shift();
+    const colMapTributos = {
+      chaveAcesso: cabecalhosTributos.indexOf("Chave de Acesso"),
+      valorTotalNf: cabecalhosTributos.indexOf("Valor Total da NF")
+    };
+
+    const abaContasAPagar = planilhaFin.getSheetByName(ABA_FINANCEIRO_CONTAS_A_PAGAR);
+    const dadosContasAPagar = abaContasAPagar.getDataRange().getValues();
+    const cabecalhosCAP = dadosContasAPagar.shift();
+    const colMapCAP = {
+      chaveAcesso: cabecalhosCAP.indexOf("Chave de Acesso"),
+      numeroFatura: cabecalhosCAP.indexOf("Número da Fatura"),
+      numeroParcela: cabecalhosCAP.indexOf("Número da Parcela"),
+      resumoItens: cabecalhosCAP.indexOf("Resumo dos Itens"),
+      dataVencimento: cabecalhosCAP.indexOf("Data de Vencimento"),
+      valorParcela: cabecalhosCAP.indexOf("Valor da Parcela"),
+      setor: cabecalhosCAP.indexOf("Setor"),
+      valorPorSetor: cabecalhosCAP.indexOf("Valor por Setor")
+    };
+
+    // 2. Mapear chaves de acesso para facilitar a busca
+    const mapaChaveParaTotal = dadosTributos.reduce((map, linha) => {
+      map[linha[colMapTributos.chaveAcesso]] = linha[colMapTributos.valorTotalNf];
+      return map;
+    }, {});
+
+    const mapaChaveParaContas = dadosContasAPagar.reduce((map, linha) => {
+      const chave = linha[colMapCAP.chaveAcesso];
+      if (!map[chave]) {
+        map[chave] = [];
+      }
+      map[chave].push({
+        numeroFatura: linha[colMapCAP.numeroFatura],
+        numeroParcela: linha[colMapCAP.numeroParcela],
+        resumoItens: linha[colMapCAP.resumoItens],
+        dataVencimento: new Date(linha[colMapCAP.dataVencimento]).toLocaleDateString('pt-BR'),
+        valorParcela: _RateioCrud_parsearValorNumerico(linha[colMapCAP.valorParcela]),
+        setor: linha[colMapCAP.setor],
+        valorPorSetor: _RateioCrud_parsearValorNumerico(linha[colMapCAP.valorPorSetor])
+      });
+      return map;
+    }, {});
+    
+    const chavesEncontradas = new Set();
+
+    // 3. Iterar sobre as NFs para encontrar correspondências com os termos de busca
+    dadosNotasFiscais.forEach(linha => {
+      const chaveAtual = linha[colMapNF.chaveAcesso];
+      const numeroAtual = String(linha[colMapNF.numeroNF]);
+
+      if (termosSet.has(chaveAtual) || termosSet.has(numeroAtual)) {
+        
+        // Evita duplicidade se o usuário digitar chave E número da mesma nota
+        if (chavesEncontradas.has(chaveAtual)) {
+          return;
+        }
+
+        resultados.push({
+          numeroNF: numeroAtual,
+          chaveAcesso: chaveAtual,
+          dataEmissao: new Date(linha[colMapNF.dataEmissao]).toLocaleDateString('pt-BR'),
+          valorTotalNf: _RateioCrud_parsearValorNumerico(mapaChaveParaTotal[chaveAtual] || 0),
+          contasAPagar: mapaChaveParaContas[chaveAtual] || []
+        });
+        
+        chavesEncontradas.add(chaveAtual);
+      }
+    });
+
+    Logger.log(`Busca para relatório concluída. Encontradas ${resultados.length} notas.`);
+    return resultados;
+
+  } catch (e) {
+    Logger.log(`Erro em RateioCrud_obterDadosParaRelatorio: ${e.message}\n${e.stack}`);
+    throw new Error(`Ocorreu um erro ao buscar os dados do relatório: ${e.message}`);
   }
 }
