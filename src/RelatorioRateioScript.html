@@ -76,7 +76,6 @@ function onDadosRelatorioSuccess(response) {
           <td>${conta.numeroFatura}</td>
           <td>${conta.numeroParcela}</td>
           <td>${conta.setor}</td>
-          <td>${conta.resumoItens}</td>
           <td>${conta.dataVencimento}</td>
           <td class="text-end">${formatarMoeda(conta.valorParcela)}</td>
           <td class="text-end fw-bold">${formatarMoeda(conta.valorPorSetor)}</td>
@@ -86,7 +85,7 @@ function onDadosRelatorioSuccess(response) {
     } else {
       // Ajusta o colspan para a nova quantidade de colunas
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="7" class="text-center text-muted">Nenhum registro de rateio encontrado para esta nota.</td>';
+      tr.innerHTML = '<td colspan="6" class="text-center text-muted">Nenhum registro de rateio encontrado para esta nota.</td>';
       tbody.appendChild(tr);
     }
     
