@@ -26,7 +26,8 @@ function addEventListeners() {
     // Header
     $('#btn-upload-xml').on('click', () => $('#xml-upload-input').click());
     $('#xml-upload-input').on('change', onFileUpload);
-    $('#btn-salvar-lote').on('click', onBtnSalvarLoteClick); 
+    $('#btn-salvar-lote').on('click', onBtnSalvarLoteClick);
+    $('#btn-abrir-relatorio-rateio').on('click', onAbrirRelatorioRateioClick); 
     // Painel Esquerdo
     $('#search-input').on('input', onSearchInputChange);
     $('#nf-list-container').on('click', '.nf-list-item:not(.staged)', onNfListItemClick);
@@ -644,5 +645,24 @@ function toggleLoader(show) {
 function formatarMoeda(valor) {
     if (typeof valor !== 'number' || isNaN(valor)) return "R$ 0,00";
     return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+/**
+ * Abre a página do Relatório de Rateio em uma nova aba.
+ */
+function onAbrirRelatorioRateioClick() {
+    toggleLoader(true);
+    // Esta função já existe no seu App.js e é perfeita para isso.
+    google.script.run
+        .withSuccessHandler(response => {
+            toggleLoader(false);
+            if (response.success && response.url) {
+                window.open(response.url, '_blank');
+            } else {
+                onFailure({ message: response.message || 'Não foi possível obter a URL do relatório.' });
+            }
+        })
+        .withFailureHandler(onFailure)
+        .App_obterUrlWebApp({ view: 'relatoriorateio' });
 }
 </script>

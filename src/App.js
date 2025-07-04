@@ -2,7 +2,7 @@
 
 // Constantes globais de App.gs
 const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual",
-  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf", "rateionf"];
+  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf", "rateionf", "relatoriorateio"];
 
 const App_VIEW_FILENAME_MAP = {
   "fornecedores": "FornecedoresView",
@@ -14,7 +14,8 @@ const App_VIEW_FILENAME_MAP = {
   "EnviarManualmenteView": "EnviarManualmenteView",
   "marcarprodutos": "MarcacaoProdutosView",
   "conciliacaonf": "ConciliacaoNFView",
-  "rateionf": "RateioNFView"
+  "rateionf": "RateioNFView",
+  "relatoriorateio": "RelatorioRateioView"
 }
 
   const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL'); 
@@ -127,6 +128,14 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
     // --- MODIFICAÇÃO FIM ---
     
+    case 'relatoriorateio':
+      Logger.log("App.gs: Carregando RelatorioRateioView.");
+      const templateRelatorioRateio = HtmlService.createTemplateFromFile('RelatorioRateioView');
+      return templateRelatorioRateio.evaluate()
+        .setTitle("Relatório de Rateio Financeiro")
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+
     case 'rateionf':
       Logger.log("App.gs: Carregando RateioNFView.");
       const templateRateio = HtmlService.createTemplateFromFile('RateioNFView');

@@ -1,0 +1,91 @@
+<script>
+// Aguarda o documento carregar para adicionar os eventos
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('btn-generate-report').addEventListener('click', onGenerateReportClick);
+});
+
+function toggleLoader(show) {
+  document.getElementById('loader').classList.toggle('d-none', !show);
+}
+
+function formatarMoeda(valor) {
+  if (typeof valor !== 'number' || isNaN(valor)) return "R$ 0,00";
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function onGenerateReportClick() {
+  const input = document.getElementById('search-terms').value;
+  if (!input.trim()) {
+    alert('Por favor, informe ao menos um número de nota ou chave de acesso.');
+    return;
+  }
+
+  // Processa a entrada para aceitar múltiplos separadores
+  const termosDeBusca = input.split(/[\s,;\n]+/).filter(term => term.trim() !== '');
+  
+  toggleLoader(true);
+  google.script.run
+    .withSuccessHandler(onDadosRelatorioSuccess)
+    .withFailureHandler(onFailure)
+    .ConciliacaoNFController_obterDadosParaRelatorio(termosDeBusca);
+}
+
+function onFailure(error) {
+  toggleLoader(false);
+  alert('Ocorreu um erro ao gerar o relatório: ' + error.message);
+  console.error('Falha na chamada ao servidor:', error);
+}
+
+function onDadosRelatorioSuccess(response) {
+  toggleLoader(false);
+
+  if (!response.success) {
+    onFailure(response);
+    return;
+  }
+
+  const reportContainer = document.getElementById('report-container');
+  reportContainer.innerHTML = ''; // Limpa o conteúdo anterior
+
+  if (response.dados.length === 0) {
+    reportContainer.innerHTML = `<div class="text-center text-muted p-5">
+      <i class="bi bi-x-circle" style="font-size: 4rem; color: #dc3545;"></i>
+      <p class="mt-2">Nenhuma nota fiscal encontrada para os termos informados.</p>
+    </div>`;
+    return;
+  }
+
+  const cardTemplate = document.getElementById('template-report-card');
+
+  response.dados.forEach(nota => {
+    const cardClone = cardTemplate.content.cloneNode(true);
+    const cardElement = cardClone.querySelector('.report-card');
+
+    cardElement.querySelector('.nf-numero').textContent = nota.numeroNF;
+    cardElement.querySelector('.nf-data-emissao').textContent = nota.dataEmissao;
+    cardElement.querySelector('.nf-valor-total').textContent = formatarMoeda(nota.valorTotalNf);
+
+    const tbody = cardElement.querySelector('.rateio-tbody');
+    if (nota.contasAPagar && nota.contasAPagar.length > 0) {
+      nota.contasAPagar.forEach(conta => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${conta.numeroFatura}</td>
+          <td>${conta.numeroParcela}</td>
+          <td>${conta.setor}</td>
+          <td>${conta.resumoItens}</td>
+          <td>${conta.dataVencimento}</td>
+          <td class="text-end">${formatarMoeda(conta.valorPorSetor)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } else {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="6" class="text-center text-muted">Nenhum registro de rateio encontrado para esta nota.</td>';
+      tbody.appendChild(tr);
+    }
+    
+    reportContainer.appendChild(cardElement);
+  });
+}
+</script>
