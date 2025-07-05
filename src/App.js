@@ -1,9 +1,8 @@
 // @ts-nocheck
 
 // Constantes globais de App.gs
-// --- MODIFICAÇÃO INÍCIO ---
-const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual", "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos"]; 
-// --- MODIFICAÇÃO FIM ---
+const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual",
+  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf", "rateionf", "relatoriorateio"];
 
 const App_VIEW_FILENAME_MAP = {
   "fornecedores": "FornecedoresView",
@@ -13,9 +12,10 @@ const App_VIEW_FILENAME_MAP = {
   "cotacaoIndividual": "CotacaoIndividualView",
   "contagemdeestoque": "ContagemDeEstoqueView",
   "EnviarManualmenteView": "EnviarManualmenteView",
-  // --- MODIFICAÇÃO INÍCIO ---
-  "marcarprodutos": "MarcacaoProdutosView"
-  // --- MODIFICAÇÃO FIM ---
+  "marcarprodutos": "MarcacaoProdutosView",
+  "conciliacaonf": "ConciliacaoNFView",
+  "rateionf": "RateioNFView",
+  "relatoriorateio": "RelatorioRateioView"
 }
 
   const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL'); 
@@ -118,8 +118,32 @@ function doGet(e) {
         .setTitle("Marcação de Recebimento")
         .addMetaTag('viewport', 'width=device-width, initial-scale=1') // Garante responsividade
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+    
+    case 'conciliacaonf':
+      Logger.log("App.gs: Carregando ConciliacaoNFView.");
+      const templateConciliacao = HtmlService.createTemplateFromFile('ConciliacaoNFView');
+      return templateConciliacao.evaluate()
+        .setTitle("Conciliação de NF-e")
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
     // --- MODIFICAÇÃO FIM ---
-        
+    
+    case 'relatoriorateio':
+      Logger.log("App.gs: Carregando RelatorioRateioView.");
+      const templateRelatorioRateio = HtmlService.createTemplateFromFile('RelatorioRateioView');
+      return templateRelatorioRateio.evaluate()
+        .setTitle("Relatório de Rateio Financeiro")
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+
+    case 'rateionf':
+      Logger.log("App.gs: Carregando RateioNFView.");
+      const templateRateio = HtmlService.createTemplateFromFile('RateioNFView');
+      return templateRateio.evaluate()
+        .setTitle("Rateio Financeiro de NF-e")
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+
     default:
       // Comportamento padrão: carregar a página principal
       Logger.log("App.gs: Carregando PaginaPrincipal (comportamento padrão).");

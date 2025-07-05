@@ -28,14 +28,12 @@ function initCotacoesScript() {
   const CotacoesScript_ID_INPUT_BUSCA_FORNECEDOR = 'CotacoesScript_inputBuscaFornecedor';
   const CotacoesScript_ID_INPUT_BUSCA_PRODUTO = 'CotacoesScript_inputBuscaProduto';
 
-
   const CotacoesScript_ORDEM_STATUS = [
     "Nova Cotação", 
     "Contagem de Estoque", "Aguardando Preços", "Realizando Cotação", "Negociando Preços",
     "Definindo Empresa para Faturamento", "Definindo Condições de Pagamento",
     "Aguardando Faturamento", "Faturado", "Recebido Parcialmente", "Finalizado", "Cancelado"
   ];
-  // console.log("CotacoesScript_ORDEM_STATUS:", CotacoesScript_ORDEM_STATUS);
 
   let CotacoesScript_dadosOpcoesCriacao = null; 
 
@@ -68,25 +66,36 @@ function initCotacoesScript() {
   function CotacoesScript_toggleAccordion(headerButton) {
     const contentId = headerButton.getAttribute('aria-controls');
     const content = document.getElementById(contentId);
-    const isOpen = headerButton.getAttribute('aria-expanded') === 'true';
-
-    headerButton.setAttribute('aria-expanded', !isOpen);
-    headerButton.classList.toggle('active', !isOpen);
-    if (content) {
-      content.classList.toggle('hidden', isOpen);
+    
+    // Se o elemento de conteúdo correspondente não for encontrado, a função para aqui para evitar erros.
+    if (!content) {
+      console.error('Elemento de conteúdo do acordeão não encontrado:', contentId);
+      return;
     }
+  
+    // Verifica qual é o estado atual do acordeão (se está expandido ou não)
+    const isExpanded = headerButton.getAttribute('aria-expanded') === 'true';
+  
+    // Inverte o estado de expansão. Se estava 'true', vira 'false', e vice-versa.
+    headerButton.setAttribute('aria-expanded', !isExpanded);
+  
+    // Alterna a classe 'active' no próprio botão. Se a classe existe, ela é removida. Se não existe, é adicionada.
+    headerButton.classList.toggle('active');
+  
+    // Alterna a classe 'hidden' no painel de conteúdo. Se a classe existe, ela é removida (mostrando o conteúdo). Se não existe, é adicionada (ocultando o conteúdo).
+    content.classList.toggle('hidden');
   }
 
+  function CotacoesScript_handleAccordionClick() {
+      CotacoesScript_toggleAccordion(this);
+  }
+  
   function CotacoesScript_vincularEventosAcordeoes() {
     const accordionHeaders = document.querySelectorAll(`#${CotacoesScript_ID_LISTA_STATUS_COTACOES} .accordion-header`);
     accordionHeaders.forEach(header => {
       header.removeEventListener('click', CotacoesScript_handleAccordionClick); 
       header.addEventListener('click', CotacoesScript_handleAccordionClick);
     });
-  }
-
-  function CotacoesScript_handleAccordionClick() {
-      CotacoesScript_toggleAccordion(this);
   }
 
   function CotacoesScript_renderizarResumoCotacao(cotacaoResumo) {
@@ -152,84 +161,67 @@ function initCotacoesScript() {
     return itemDiv;
   }
 
-  // CotacoesScript.html
-function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
-  // Para cada status definido na ordem, verifica se há cotações
-  CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
-    // Normaliza o ID do content e do count span
-    const chaveParaIdHtmlBase = statusNomeOriginal === 'Nova Cotação'
-      ? 'nova-cotacao'
-      : statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
-    const contentDivId = `content-${chaveParaIdHtmlBase}`;
+  function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
+    CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
+      const chaveParaIdHtmlBase = statusNomeOriginal === 'Nova Cotação'
+        ? 'nova-cotacao'
+        : statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
+      const contentDivId = `content-${chaveParaIdHtmlBase}`;
 
-    const chaveParaCountSpan = statusNomeOriginal === 'Nova Cotação'
-      ? 'nova_cotacao'
-      : statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
-    const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
+      const chaveParaCountSpan = statusNomeOriginal === 'Nova Cotação'
+        ? 'nova_cotacao'
+        : statusNomeOriginal.toLowerCase().replace(/\s+/g, '_');
+      const countSpanId = `CotacoesScript_count_${chaveParaCountSpan}`;
 
-    // Obtém elementos do DOM
-    const contentDiv = document.getElementById(contentDivId);
-    const countSpan = document.getElementById(countSpanId);
-    const accordionItem = document.querySelector(`.accordion-item[data-status="${statusNomeOriginal}"]`);
+      const contentDiv = document.getElementById(contentDivId);
+      const countSpan = document.getElementById(countSpanId);
+      const accordionItem = document.querySelector(`.accordion-item[data-status="${statusNomeOriginal}"]`);
 
-    // Cotação(s) para este status
-    const cotacoesDoStatus = cotacoesAgrupadasPorStatus[statusNomeOriginal] || [];
+      const cotacoesDoStatus = cotacoesAgrupadasPorStatus[statusNomeOriginal] || [];
 
-    // Se não houver nenhuma cotação, oculta o acordeão e pula para o próximo status
-    if (cotacoesDoStatus.length === 0) {
-      if (accordionItem) accordionItem.style.display = 'none';
-      return;
-    }
+      if (cotacoesDoStatus.length === 0) {
+        if (accordionItem) accordionItem.style.display = 'none';
+        return;
+      }
 
-    // Caso contrário, garante que o acordeão esteja visível
-    if (accordionItem) accordionItem.style.display = '';
+      if (accordionItem) accordionItem.style.display = '';
 
-    // Limpa e popula o container de conteúdo
-    if (contentDiv) {
-      contentDiv.innerHTML = '';
-      if (countSpan) countSpan.textContent = `(${cotacoesDoStatus.length})`;
+      if (contentDiv) {
+        contentDiv.innerHTML = '';
+        if (countSpan) countSpan.textContent = `(${cotacoesDoStatus.length})`;
 
-      // Ordena da mais recente para a mais antiga
-      cotacoesDoStatus.sort((a, b) => {
-        const dateA = a.Data_Abertura_Original ? new Date(a.Data_Abertura_Original) : new Date(0);
-        const dateB = b.Data_Abertura_Original ? new Date(b.Data_Abertura_Original) : new Date(0);
-        return dateB - dateA;
-      });
+        cotacoesDoStatus.sort((a, b) => {
+          const dateA = a.Data_Abertura_Original ? new Date(a.Data_Abertura_Original) : new Date(0);
+          const dateB = b.Data_Abertura_Original ? new Date(b.Data_Abertura_Original) : new Date(0);
+          return dateB - dateA;
+        });
 
-      // Renderiza cada resumo de cotação
-      cotacoesDoStatus.forEach(cotacaoResumo => {
-        const itemHtml = CotacoesScript_renderizarResumoCotacao(cotacaoResumo);
-        contentDiv.appendChild(itemHtml);
-      });
-    }
-  });
+        cotacoesDoStatus.forEach(cotacaoResumo => {
+          const itemHtml = CotacoesScript_renderizarResumoCotacao(cotacaoResumo);
+          contentDiv.appendChild(itemHtml);
+        });
+      }
+    });
 
-  // Re-vincula os eventos de clique nos cabeçalhos (necessário após remoção/adição)
-  CotacoesScript_vincularEventosAcordeoes();
-}
-
+    CotacoesScript_vincularEventosAcordeoes();
+  }
 
   function CotacoesScript_processarDadosRecebidos(arrayDeResumosDeCotacao) {
-    // console.log("CotacoesScript_processarDadosRecebidos: Dados brutos recebidos do servidor:", JSON.parse(JSON.stringify(arrayDeResumosDeCotacao))); 
     if (!arrayDeResumosDeCotacao || arrayDeResumosDeCotacao.length === 0) {
-      // console.log("CotacoesScript_processarDadosRecebidos: Nenhum resumo de cotação recebido.");
       return {};
     }
     const cotacoesAgrupadasPorStatus = {};
     arrayDeResumosDeCotacao.forEach(resumoCotacao => {
       const status = resumoCotacao.Status_da_Cotacao || "Status Desconhecido";
-       // console.log(`  > Processando item com status: "${status}" (ID Cotação: ${resumoCotacao.ID_da_Cotacao})`);
       if (!cotacoesAgrupadasPorStatus[status]) {
         cotacoesAgrupadasPorStatus[status] = [];
       }
       cotacoesAgrupadasPorStatus[status].push(resumoCotacao);
     });
-    // console.log("CotacoesScript_processarDadosRecebidos: Resumos agrupados por status final:", JSON.parse(JSON.stringify(cotacoesAgrupadasPorStatus))); 
     return cotacoesAgrupadasPorStatus;
   }
 
   function CotacoesScript_carregarTodasCotacoes() {
-    // console.log("CotacoesScript_carregarTodasCotacoes: Iniciando carregamento...");
     CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
         let chaveParaIdHtmlBase = statusNomeOriginal.toLowerCase().replace(/\s+/g, '-');
         if (statusNomeOriginal === "Nova Cotação") {
@@ -255,7 +247,6 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
 
     google.script.run
       .withSuccessHandler(function(resposta) {
-        // console.log("CotacoesScript_carregarTodasCotacoes: Resposta do servidor:", JSON.parse(JSON.stringify(resposta))); 
         if (resposta && resposta.success && Array.isArray(resposta.dados)) { 
           const cotacoesAgrupadas = CotacoesScript_processarDadosRecebidos(resposta.dados);
           CotacoesScript_popularAcordeoes(cotacoesAgrupadas);
@@ -324,7 +315,6 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
         const buscaProdutoInput = document.getElementById(CotacoesScript_ID_INPUT_BUSCA_PRODUTO);
         if(buscaProdutoInput) buscaProdutoInput.value = "";
 
-
         if (!CotacoesScript_dadosOpcoesCriacao) { 
             CotacoesScript_setLoadingStateOpcoesModal(true);
             google.script.run
@@ -358,10 +348,8 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
           const containerElement = document.getElementById(containerInfo.id);
           if(containerElement) {
             if (containerInfo.hasSearch) {
-                 // Apenas o conteúdo do container de checkboxes é alterado
                  containerElement.innerHTML = `<p class="text-gray-500 text-sm">${placeholderText}</p>`;
             } else {
-                // Se não houver input de busca (ex: categorias), define o conteúdo do container normalmente
                 containerElement.innerHTML = `<p class="text-gray-500 text-sm">${placeholderText}</p>`;
             }
           }
@@ -389,24 +377,22 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
       CotacoesScript_setLoadingStateOpcoesModal(false); 
   }
 
-  // Função para filtrar checkboxes
   function CotacoesScript_filtrarCheckboxes(containerId, termoBusca) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    const termoLowerCase = String(termoBusca).toLowerCase(); // Garante que termoBusca seja string
+    const termoLowerCase = String(termoBusca).toLowerCase();
     const labels = container.getElementsByTagName('label');
 
     for (let i = 0; i < labels.length; i++) {
         const label = labels[i];
         const textoLabel = label.textContent || label.innerText || "";
         if (textoLabel.toLowerCase().includes(termoLowerCase)) {
-            label.style.display = "flex"; // Mostra (usando flex como no estilo original)
+            label.style.display = "flex";
         } else {
-            label.style.display = "none"; // Esconde
+            label.style.display = "none";
         }
     }
   }
-
 
   function CotacoesScript_popularCheckboxes(containerId, items, namePrefix, usarNomeComoValor = false) { 
       const container = document.getElementById(containerId);
@@ -423,7 +409,6 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
           const itemName = typeof item === 'object' ? item.nome : item;
 
           const label = document.createElement('label');
-          // Mantém display: flex para alinhamento correto
           label.style.display = 'flex'; 
           label.className = 'items-center space-x-2 text-sm text-gray-700 py-1';
           const checkbox = document.createElement('input');
@@ -540,7 +525,6 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
   }
 
   function CotacoesScript_inicializar() {
-    // console.log("CotacoesScript_inicializar: Script sendo inicializado."); 
     CotacoesScript_vincularEventosAcordeoes();
     
     const btnNovaCotacaoGlobal = document.getElementById(CotacoesScript_ID_BTN_NOVA_COTACAO_GLOBAL);
@@ -553,7 +537,6 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
     const btnCriarCotacaoModal = document.getElementById(CotacoesScript_ID_BTN_CRIAR_COTACAO_MODAL);
     const selectTipoCriacao = document.getElementById(CotacoesScript_ID_SELECT_TIPO_CRIACAO);
     const modalOverlay = document.getElementById(CotacoesScript_ID_MODAL_NOVA_COTACAO_OVERLAY);
-
 
     if(btnFecharModal) btnFecharModal.addEventListener('click', CotacoesScript_fecharModalNovaCotacao);
     if(btnCancelarModal) btnCancelarModal.addEventListener('click', CotacoesScript_fecharModalNovaCotacao);
@@ -586,7 +569,6 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
         });
     }
 
-    // --- MODIFICAÇÃO INÍCIO ---
     const btnAbrirMarcacao = document.getElementById('CotacoesScript_btnAbrirMarcacaoProdutos');
     if (btnAbrirMarcacao) {
       btnAbrirMarcacao.addEventListener('click', () => {
@@ -605,16 +587,35 @@ function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
           .App_obterUrlWebApp({ view: 'marcarprodutos' });
       });
     }
-    // --- MODIFICAÇÃO FIM ---
-
-
+    
+    const btnConciliarCotacao = document.getElementById('CotacoesScript_btnConciliarCotacao');
+    if (btnConciliarCotacao) {
+      btnConciliarCotacao.addEventListener('click', () => {
+        CotacoesScript_exibirFeedbackGlobal('Abrindo página de conciliação...', false, 2000);
+        google.script.run
+          .withSuccessHandler(response => {
+            if (response.success && response.url) {
+              window.open(response.url, '_blank');
+            } else {
+              CotacoesScript_exibirFeedbackGlobal(response.message || 'Erro ao gerar URL para a página de conciliação.', true);
+            }
+          })
+          .withFailureHandler(err => {
+             CotacoesScript_exibirFeedbackGlobal('Falha de comunicação ao tentar abrir a página: ' + err.message, true);
+          })
+          .App_obterUrlWebApp({ view: 'conciliacaonf' });
+      });
+    }
+    
     CotacoesScript_carregarTodasCotacoes();
   }
 
+  // Inicializa o script quando o DOM estiver pronto
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', CotacoesScript_inicializar);
   } else {
     CotacoesScript_inicializar();
   }
 }
+
 </script>

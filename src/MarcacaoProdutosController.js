@@ -36,9 +36,11 @@ function MarcacaoProdutosController_obterProdutosParaMarcacao() {
     const indiceFornecedor = cabecalhos.indexOf("Fornecedor");
     const indiceSubproduto = cabecalhos.indexOf("SubProduto");
     const indiceIdCotacao = cabecalhos.indexOf("ID da Cotação");
+    const indiceComprar = cabecalhos.indexOf("Comprar"); // MODIFICADO: Adicionado índice para a coluna "Comprar"
 
-    if ([indiceStatusCotacao, indiceStatusSubproduto, indiceFornecedor, indiceSubproduto, indiceIdCotacao].includes(-1)) {
-      const msg = "Não foi possível encontrar todas as colunas necessárias na aba Cotações: 'Status da Cotação', 'Status do SubProduto', 'Fornecedor', 'SubProduto', 'ID da Cotação'.";
+    // MODIFICADO: Adicionado 'indiceComprar' e mensagem de erro atualizada
+    if ([indiceStatusCotacao, indiceStatusSubproduto, indiceFornecedor, indiceSubproduto, indiceIdCotacao, indiceComprar].includes(-1)) {
+      const msg = "Não foi possível encontrar todas as colunas necessárias na aba Cotações: 'Status da Cotação', 'Status do SubProduto', 'Fornecedor', 'SubProduto', 'ID da Cotação', 'Comprar'.";
       Logger.log(`MarcacaoProdutosController: ${msg}`);
       return { success: false, dados: null, message: msg };
     }
@@ -51,11 +53,17 @@ function MarcacaoProdutosController_obterProdutosParaMarcacao() {
     valores.forEach((linha, index) => {
       const statusCotacao = linha[indiceStatusCotacao];
       const statusSubproduto = linha[indiceStatusSubproduto];
+      const quantidadeAComprar = parseFloat(linha[indiceComprar]); // MODIFICADO: Pega o valor da coluna "Comprar" e converte para número
 
       const statusValidos = ["Aguardando Faturamento", "Faturado"];
       const statusInvalidosSubproduto = ["Recebido", "Cortado", "Recebido Parcialmente"];
 
-      if (statusValidos.includes(statusCotacao) && !statusInvalidosSubproduto.includes(statusSubproduto)) {
+      // MODIFICADO: Adicionada a condição para verificar se a quantidade a comprar é um número maior que zero
+      if (statusValidos.includes(statusCotacao) && 
+          !statusInvalidosSubproduto.includes(statusSubproduto) &&
+          !isNaN(quantidadeAComprar) &&
+          quantidadeAComprar > 0) {
+        
         const fornecedor = linha[indiceFornecedor] || "Fornecedor Não Especificado";
         
         if (!produtosAgrupados[fornecedor]) {

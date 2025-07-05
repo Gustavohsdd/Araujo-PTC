@@ -19,7 +19,11 @@ function RelatoriosCRUD_gerarDadosAnaliseCompra(idCotacaoAlvo) {
     const todosOsDados = abaCotacoes.getDataRange().getValues();
     const cabecalhos = todosOsDados.shift();
 
-    const idxSubProduto = cabecalhos.indexOf("SubProduto");
+    // --- ALTERAÇÃO INICIADA ---
+    // Alterado de "SubProduto" para "Produto" para agrupar pela coluna correta.
+    const idxProduto = cabecalhos.indexOf("Produto"); 
+    // --- ALTERAÇÃO FINALIZADA ---
+
     const idxIdCotacao = cabecalhos.indexOf("ID da Cotação");
     const idxDataAbertura = cabecalhos.indexOf("Data Abertura");
     const idxPreco = cabecalhos.indexOf("Preço");
@@ -27,14 +31,20 @@ function RelatoriosCRUD_gerarDadosAnaliseCompra(idCotacaoAlvo) {
     const idxPrecoPorFator = cabecalhos.indexOf("Preço por Fator");
     const idxUN = cabecalhos.indexOf("UN");
 
-    if ([idxSubProduto, idxIdCotacao, idxDataAbertura, idxPreco, idxComprar, idxPrecoPorFator, idxUN].includes(-1)) {
-      throw new Error("Uma ou mais colunas essenciais (SubProduto, ID da Cotação, Data, Preço, Comprar, Preço por Fator, UN) não foram encontradas na aba Cotações.");
+    // --- ALTERAÇÃO INICIADA ---
+    // Atualizada a verificação de erro para a coluna "Produto".
+    if ([idxProduto, idxIdCotacao, idxDataAbertura, idxPreco, idxComprar, idxPrecoPorFator, idxUN].includes(-1)) {
+      throw new Error("Uma ou mais colunas essenciais (Produto, ID da Cotação, Data, Preço, Comprar, Preço por Fator, UN) não foram encontradas na aba Cotações.");
     }
+    // --- ALTERAÇÃO FINALIZADA ---
 
     const produtosDaCotacao = new Set();
     todosOsDados.forEach(linha => {
       if (String(linha[idxIdCotacao]) === String(idCotacaoAlvo)) {
-        produtosDaCotacao.add(linha[idxSubProduto]);
+        // --- ALTERAÇÃO INICIADA ---
+        // Usa o índice de "Produto" para identificar os itens da cotação.
+        produtosDaCotacao.add(linha[idxProduto]); 
+        // --- ALTERAÇÃO FINALIZADA ---
       }
     });
 
@@ -44,7 +54,10 @@ function RelatoriosCRUD_gerarDadosAnaliseCompra(idCotacaoAlvo) {
 
     for (const produto of produtosDaCotacao) {
       const historicoProduto = todosOsDados
-        .filter(linha => linha[idxSubProduto] === produto && linha[idxComprar] > 0)
+        // --- ALTERAÇÃO INICIADA ---
+        // Filtra o histórico com base no nome do "Produto".
+        .filter(linha => linha[idxProduto] === produto && linha[idxComprar] > 0)
+        // --- ALTERAÇÃO FINALIZADA ---
         .map(linha => ({
           data: new Date(linha[idxDataAbertura]),
           preco: parseFloat(linha[idxPreco]) || 0,

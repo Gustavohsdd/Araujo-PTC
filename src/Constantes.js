@@ -82,35 +82,13 @@ const CABECALHOS_COTACOES = [
   "Condição de Pagamento",
   "Status da Cotação",
   "Status do SubProduto",
-  "Quantidade Recebida"
+  "Quantidade Recebida",
+  "Divergencia da Nota",
+  "Quantidade na Nota",
+  "Preço da Nota",
+  "Número da Nota"
 ]
 
-// Aba Pedidos
-const ABA_PEDIDOS = "Pedidos";
-const CABECALHOS_PEDIDOS = [
-  "ID do Pedido",
-  "Data Abertura",
-  "Produto",
-  "SubProduto",
-  "Categoria",
-  "Fornecedor",
-  "Tamanho",
-  "UN",
-  "Fator",
-  "Estoque Mínimo",
-  "Estoque Atual",
-  "Preço",
-  "Preço por Fator",
-  "Comprar",
-  "Valor Total",
-  "Economia em Cotação",
-  "NCM",
-  "CST",
-  "CFOP",
-  "Empresa Faturada",
-  "Condição de Pagamento",
-  "Status do Pedido"
-];
 
 // Aba Portal
 const ABA_PORTAL = "Portal";
@@ -136,6 +114,14 @@ const CABECALHOS_CADASTROS = [
   "Contato"
 ];
 
+// Aba Conciliacao
+const ABA_CONCILIACAO = "Conciliacao";
+const CABECALHOS_CONCILIACAO = [
+  "Item da Cotação",
+  "Descrição Produto (NF)",
+  "GTIN/EAN (Cód. Barras)"
+];
+
 // Constantes para o Portal do Fornecedor
 const STATUS_PORTAL = {
   LINK_GERADO: "Link Gerado", // Link criado, aguardando primeira resposta
@@ -145,4 +131,5 @@ const STATUS_PORTAL = {
   ERRO_PORTAL: "Erro no Portal", // Erro ao processar o link/dados
   EXPIRADO: "Expirado"        // (Opcional) Se links tiverem validade
 };
+
 Object.freeze(STATUS_PORTAL);

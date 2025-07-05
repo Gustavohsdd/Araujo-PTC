@@ -133,3 +133,163 @@ function CotacoesController_criarNovaCotacao(opcoesCriacao) {
     };
   }
 }
+
+/**
+ * Função interna para verificar se uma cotação está completa e, se estiver,
+ * alterar seu status para "Finalizado".
+ * Uma cotação é considerada completa quando todos os subprodutos marcados para
+ * compra (coluna 'Comprar' > 0) têm um status de subproduto preenchido.
+ * @param {string|number} idCotacao O ID da cotação a ser verificada.
+ */
+function _verificarEFinalizarCotacaoSeCompleta(idCotacao) {
+  try {
+    Logger.log(`Iniciando verificação de finalização para cotação ID: ${idCotacao}`);
+
+    const abaCotacoes = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_COTACOES);
+    const ultimaLinha = abaCotacoes.getLastRow();
+    if (ultimaLinha <= 1) return;
+
+    const range = abaCotacoes.getRange(2, 1, ultimaLinha - 1, abaCotacoes.getLastColumn());
+    const todosOsValores = range.getValues();
+    const cabecalhos = Utilities_obterCabecalhos(ABA_COTACOES);
+
+    const indiceIdCotacao = cabecalhos.indexOf("ID da Cotação");
+    const indiceStatusCotacao = cabecalhos.indexOf("Status da Cotação");
+    const indiceComprar = cabecalhos.indexOf("Comprar");
+    const indiceStatusSubproduto = cabecalhos.indexOf("Status do SubProduto");
+
+    // Filtra apenas as linhas da cotação relevante
+    const linhasDaCotacao = todosOsValores.filter(linha => linha[indiceIdCotacao] == idCotacao);
+
+    if (linhasDaCotacao.length === 0) {
+      Logger.log(`Nenhuma linha encontrada para a cotação ${idCotacao}.`);
+      return;
+    }
+    
+    // Se a cotação já está Finalizada ou Cancelada, não faz nada.
+    const statusAtual = linhasDaCotacao[0][indiceStatusCotacao];
+    if (statusAtual === "Finalizado" || statusAtual === "Cancelado") {
+      Logger.log(`Cotação ${idCotacao} já está em um estado final. Abortando.`);
+      return;
+    }
+
+    // Pega todos os itens que deveriam ser comprados (Comprar > 0)
+    const itensParaComprar = linhasDaCotacao.filter(linha => {
+      const comprarValor = parseFloat(linha[indiceComprar]);
+      return !isNaN(comprarValor) && comprarValor > 0;
+    });
+
+    // Se não há itens marcados para comprar, não há o que finalizar.
+    if (itensParaComprar.length === 0) {
+      Logger.log(`Cotação ${idCotacao} não possui itens marcados para comprar.`);
+      return;
+    }
+    
+    // Verifica se TODOS os itens para comprar já têm um status de subproduto
+    const todosItensMarcados = itensParaComprar.every(linha => {
+      const statusSub = linha[indiceStatusSubproduto];
+      return statusSub !== "" && statusSub !== null && statusSub !== undefined;
+    });
+
+    if (todosItensMarcados) {
+      Logger.log(`Todos os itens da cotação ${idCotacao} foram marcados. Atualizando status para "Finalizado".`);
+      // Se todos estão marcados, atualiza o status principal da cotação para "Finalizado"
+      // Itera sobre todas as linhas da planilha original para encontrar e marcar as linhas corretas.
+      todosOsValores.forEach((linha, index) => {
+        if (linha[indiceIdCotacao] == idCotacao) {
+          // Atualiza o valor na matriz de dados
+          todosOsValores[index][indiceStatusCotacao] = "Finalizado";
+        }
+      });
+      
+      // Escreve a matriz de dados inteira de volta na planilha
+      range.setValues(todosOsValores);
+      SpreadsheetApp.flush();
+    } else {
+      Logger.log(`Cotação ${idCotacao} ainda tem itens pendentes de marcação.`);
+    }
+
+  } catch (e) {
+    Logger.log(`ERRO em _verificarEFinalizarCotacaoSeCompleta para ID ${idCotacao}: ${e.toString()}`);
+  }
+}
+
+/**
+ * Função de automação para cancelar cotações com mais de 3 meses de abertura
+ * e que não possuam nenhum subproduto com status "Cancelado".
+ * Esta função foi projetada para ser executada por um acionador de tempo (trigger).
+ */
+function automatizacao_cancelarCotacoesAntigas() {
+  Logger.log("Iniciando rotina de cancelamento de cotações antigas.");
+  try {
+    const abaCotacoes = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_COTACOES);
+    const ultimaLinha = abaCotacoes.getLastRow();
+    if (ultimaLinha <= 1) return;
+
+    const range = abaCotacoes.getRange(2, 1, ultimaLinha - 1, abaCotacoes.getLastColumn());
+    const todosOsValores = range.getValues();
+    const cabecalhos = Utilities_obterCabecalhos(ABA_COTACOES);
+
+    const indiceIdCotacao = cabecalhos.indexOf("ID da Cotação");
+    const indiceDataAbertura = cabecalhos.indexOf("Data Abertura");
+    const indiceStatusCotacao = cabecalhos.indexOf("Status da Cotação");
+    const indiceStatusSubproduto = cabecalhos.indexOf("Status do SubProduto");
+
+    const hoje = new Date();
+    const tresMesesAtras = new Date(hoje.getFullYear(), hoje.getMonth() - 3, hoje.getDate());
+    
+    // Agrupa todas as linhas por ID de Cotação
+    const cotacoesAgrupadas = todosOsValores.reduce((acc, linha) => {
+      const id = linha[indiceIdCotacao];
+      if (!id) return acc;
+      if (!acc[id]) {
+        acc[id] = {
+          linhas: [],
+          dataAbertura: new Date(linha[indiceDataAbertura]),
+          statusAtual: linha[indiceStatusCotacao]
+        };
+      }
+      acc[id].linhas.push(linha);
+      return acc;
+    }, {});
+
+    const idsParaCancelar = [];
+
+    // Itera sobre as cotações agrupadas para identificar quais devem ser canceladas
+    for (const id in cotacoesAgrupadas) {
+      const cotacao = cotacoesAgrupadas[id];
+
+      // Pula cotações já finalizadas/canceladas ou que não são antigas o suficiente
+      if (cotacao.statusAtual === "Finalizado" || cotacao.statusAtual === "Cancelado" || cotacao.dataAbertura > tresMesesAtras) {
+        continue;
+      }
+      
+      // Verifica se algum item já foi cancelado manualmente
+      const temItemCancelado = cotacao.linhas.some(linha => linha[indiceStatusSubproduto] === "Cancelado");
+      
+      if (!temItemCancelado) {
+        idsParaCancelar.push(id);
+      }
+    }
+
+    if (idsParaCancelar.length > 0) {
+      Logger.log(`Cotações a serem canceladas: ${idsParaCancelar.join(', ')}`);
+      // Itera sobre a matriz de dados e atualiza o status
+      todosOsValores.forEach((linha, index) => {
+        const idLinha = linha[indiceIdCotacao].toString();
+        if (idsParaCancelar.includes(idLinha)) {
+          todosOsValores[index][indiceStatusCotacao] = "Cancelado";
+        }
+      });
+      
+      // Escreve a matriz atualizada de volta na planilha
+      range.setValues(todosOsValores);
+      SpreadsheetApp.flush();
+    } else {
+      Logger.log("Nenhuma cotação antiga encontrada para cancelar.");
+    }
+
+  } catch (e) {
+    Logger.log(`ERRO na rotina automatizacao_cancelarCotacoesAntigas: ${e.toString()}`);
+  }
+}

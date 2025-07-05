@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body {
+      background-color: #f0f2f5;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+    }
+    .container {
+      max-width: 1140px;
+    }
+    .report-card {
+      background-color: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      padding: 0;
+      page-break-inside: avoid;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      font-size: 0.8rem; /* Reduz o tamanho da fonte base do card */
+    }
+    .card-header-custom {
+      background-color: #f8f9fa;
+      padding: 0.75rem 1rem; /* Padding reduzido */
+      border-bottom: 1px solid #e0e0e0;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+    }
+    .card-header-custom h5 {
+      font-size: 1.1rem; /* Tamanho da fonte do título ajustado */
+      margin-bottom: 0.25rem;
+    }
+    .card-header-custom .text-muted {
+      font-size: 0.75rem; /* Tamanho da fonte dos detalhes ajustado */
+    }
+    .card-body {
+      padding: 1rem; /* Padding do corpo reduzido */
+    }
+    .table {
+      font-size: 0.75rem; /* Fonte da tabela reduzida */
+      margin-bottom: 0;
+    }
+    .table th, .table td {
+      padding: 0.3rem 0.5rem; /* Padding das células reduzido */
+      vertical-align: middle;
+    }
+    .loader {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(255, 255, 255, 0.7); z-index: 9999;
+      display: flex; justify-content: center; align-items: center;
+    }
+
+    @media print {
+      body { background-color: #fff; font-size: 10pt; }
+      .no-print { display: none !important; }
+      .report-card {
+        border: 1px solid #ccc;
+        box-shadow: none;
+        margin-top: 1cm;
+        page-break-after: always;
+      }
+      .container { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loader" class="loader d-none">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Carregando...</span>
+    </div>
+  </div>
+
+  <header class="bg-primary text-white p-3 mb-4 no-print shadow-sm">
+    <div class="container d-flex justify-content-between align-items-center">
+      <h3><i class="bi bi-file-earmark-bar-graph-fill"></i> Relatório de Rateio</h3>
+      <button class="btn btn-light" onclick="window.print()">
+        <i class="bi bi-printer-fill"></i> Imprimir Relatório
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card p-3 mb-4 no-print">
+      <div class="mb-2">
+        <label for="search-terms" class="form-label fw-bold">Informe os Números ou Chaves de Acesso das Notas</label>
+        <textarea class="form-control form-control-sm" id="search-terms" rows="3" placeholder="Digite um valor por linha, ou separado por vírgula/espaço..."></textarea>
+      </div>
+      <button id="btn-generate-report" class="btn btn-primary w-100">Gerar Relatório</button>
+    </div>
+
+    <div id="report-container">
+      <div class="text-center text-muted p-5">
+        <i class="bi bi-search" style="font-size: 3rem;"></i>
+        <p class="mt-2">O relatório gerado aparecerá aqui.</p>
+      </div>
+    </div>
+  </main>
+  
+  <template id="template-report-card">
+    <div class="report-card">
+      <div class="card-header-custom">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h5>NF <span class="nf-numero text-primary"></span></h5>
+                <div class="text-muted">Fornecedor: <strong class="nf-fornecedor"></strong></div>
+            </div>
+            <div class="text-end">
+                <div class="text-muted">Emissão: <strong class="nf-data-emissao"></strong></div>
+                <div>Valor Total: <strong class="nf-valor-total fs-6 text-success"></strong></div>
+            </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <h6 class="mb-2">Detalhamento do Rateio (Contas a Pagar)</h6>
+        <table class="table table-sm table-striped table-bordered">
+          <thead class="table-light">
+            <tr>
+              <th>Fatura</th>
+              <th>Parcela</th>
+              <th>Setor</th>
+              <th>Vencimento</th>
+              <th class="text-end">Valor da Parcela</th>
+              <th class="text-end">Valor por Setor</th>
+            </tr>
+          </thead>
+          <tbody class="rateio-tbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <?!= App_incluirHtml('RelatorioRateioScript', true); ?>
+</body>
+</html>
