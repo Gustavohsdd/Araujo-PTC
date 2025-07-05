@@ -13,6 +13,12 @@ function formatarMoeda(valor) {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function formatarPorcentagem(valor) {
+    if (typeof valor !== 'number' || isNaN(valor)) return "0,00%";
+    return valor.toFixed(2).replace('.', ',') + '%';
+}
+
+
 function onGenerateReportClick() {
   const input = document.getElementById('search-terms').value;
   if (!input.trim()) {
@@ -22,18 +28,37 @@ function onGenerateReportClick() {
 
   // Processa a entrada para aceitar múltiplos separadores
   const termosDeBusca = input.split(/[\s,;\n]+/).filter(term => term.trim() !== '');
-  
+
   toggleLoader(true);
-  google.script.run
-    .withSuccessHandler(onDadosRelatorioSuccess)
-    .withFailureHandler(onFailure)
-    .ConciliacaoNFController_obterDadosParaRelatorio(termosDeBusca);
+
+  // [CORREÇÃO] A linha abaixo foi ajustada para usar um seletor CSS válido.
+  const reportType = document.querySelector('input[name="reportType"]:checked').value;
+
+  if (reportType === 'summary') {
+      google.script.run
+        .withSuccessHandler(onDadosRelatorioSinteticoSuccess)
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_obterDadosParaRelatorioSintetico(termosDeBusca);
+  } else {
+      google.script.run
+        .withSuccessHandler(onDadosRelatorioSuccess)
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_obterDadosParaRelatorio(termosDeBusca);
+  }
 }
 
 function onFailure(error) {
   toggleLoader(false);
   alert('Ocorreu um erro ao gerar o relatório: ' + error.message);
   console.error('Falha na chamada ao servidor:', error);
+}
+
+function handleEmptyResponse() {
+    const reportContainer = document.getElementById('report-container');
+    reportContainer.innerHTML = `<div class="text-center text-muted p-5">
+      <i class="bi bi-x-circle" style="font-size: 4rem; color: #dc3545;"></i>
+      <p class="mt-2">Nenhuma nota fiscal encontrada para os termos informados.</p>
+    </div>`;
 }
 
 function onDadosRelatorioSuccess(response) {
@@ -48,10 +73,7 @@ function onDadosRelatorioSuccess(response) {
   reportContainer.innerHTML = ''; // Limpa o conteúdo anterior
 
   if (response.dados.length === 0) {
-    reportContainer.innerHTML = `<div class="text-center text-muted p-5">
-      <i class="bi bi-x-circle" style="font-size: 4rem; color: #dc3545;"></i>
-      <p class="mt-2">Nenhuma nota fiscal encontrada para os termos informados.</p>
-    </div>`;
+    handleEmptyResponse();
     return;
   }
 
@@ -61,17 +83,17 @@ function onDadosRelatorioSuccess(response) {
     const cardClone = cardTemplate.content.cloneNode(true);
     const cardElement = cardClone.querySelector('.report-card');
 
-    // Popula os novos campos do cabeçalho do card
     cardElement.querySelector('.nf-numero').textContent = nota.numeroNF;
-    cardElement.querySelector('.nf-fornecedor').textContent = nota.nomeFornecedor; // NOVO
+    cardElement.querySelector('.nf-fornecedor').textContent = nota.nomeFornecedor;
     cardElement.querySelector('.nf-data-emissao').textContent = nota.dataEmissao;
     cardElement.querySelector('.nf-valor-total').textContent = formatarMoeda(nota.valorTotalNf);
 
     const tbody = cardElement.querySelector('.rateio-tbody');
+    tbody.innerHTML = ''; // Limpa o tbody anterior
+
     if (nota.contasAPagar && nota.contasAPagar.length > 0) {
       nota.contasAPagar.forEach(conta => {
         const tr = document.createElement('tr');
-        // Adiciona a nova coluna <td> para o 'Valor da Parcela'
         tr.innerHTML = `
           <td>${conta.numeroFatura}</td>
           <td>${conta.numeroParcela}</td>
@@ -83,13 +105,62 @@ function onDadosRelatorioSuccess(response) {
         tbody.appendChild(tr);
       });
     } else {
-      // Ajusta o colspan para a nova quantidade de colunas
       const tr = document.createElement('tr');
       tr.innerHTML = '<td colspan="6" class="text-center text-muted">Nenhum registro de rateio encontrado para esta nota.</td>';
       tbody.appendChild(tr);
     }
-    
-    reportContainer.appendChild(cardElement);
+
+    reportContainer.appendChild(cardClone);
+  });
+}
+
+function onDadosRelatorioSinteticoSuccess(response) {
+  toggleLoader(false);
+
+  if (!response.success) {
+    onFailure(response);
+    return;
+  }
+
+  const reportContainer = document.getElementById('report-container');
+  reportContainer.innerHTML = ''; // Limpa o conteúdo anterior
+
+  if (response.dados.length === 0) {
+    handleEmptyResponse();
+    return;
+  }
+
+  const cardTemplate = document.getElementById('template-report-card-sintetico');
+
+  response.dados.forEach(nota => {
+    const cardClone = cardTemplate.content.cloneNode(true);
+    const cardElement = cardClone.querySelector('.report-card');
+
+    cardElement.querySelector('.nf-numero').textContent = nota.numeroNF;
+    cardElement.querySelector('.nf-fornecedor').textContent = nota.nomeFornecedor;
+    cardElement.querySelector('.nf-data-emissao').textContent = nota.dataEmissao;
+    cardElement.querySelector('.nf-valor-total').textContent = formatarMoeda(nota.valorTotalNf);
+
+    const tbody = cardElement.querySelector('.rateio-tbody');
+    tbody.innerHTML = ''; // Limpa o tbody anterior
+
+    if (nota.rateioPorSetor && nota.rateioPorSetor.length > 0) {
+      nota.rateioPorSetor.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.setor}</td>
+          <td class="text-end fw-bold">${formatarMoeda(item.valor)}</td>
+          <td class="text-end">${formatarPorcentagem(item.porcentagem)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } else {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="3" class="text-center text-muted">Nenhum registro de rateio encontrado para esta nota.</td>';
+      tbody.appendChild(tr);
+    }
+
+    reportContainer.appendChild(cardClone);
   });
 }
 </script>

@@ -263,3 +263,18 @@ function ConciliacaoNFController_obterDadosParaRelatorio(termosDeBusca) {
     return { success: false, message: e.message };
   }
 }
+
+/**
+ * Ponto de entrada para a interface buscar os dados para o Relatório de Rateio SINTÉTICO.
+ * @param {string[]} termosDeBusca - Um array de números de NF ou Chaves de Acesso.
+ * @returns {object} Objeto com status e os dados do relatório.
+ */
+function ConciliacaoNFController_obterDadosParaRelatorioSintetico(termosDeBusca) {
+  try {
+    const dados = RateioCrud_obterDadosParaRelatorioSintetico(termosDeBusca);
+    return { success: true, dados: dados };
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_obterDadosParaRelatorioSintetico: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: e.message };
+  }
+}

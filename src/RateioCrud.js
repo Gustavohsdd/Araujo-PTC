@@ -391,3 +391,128 @@ function RateioCrud_obterSetoresUnicos() {
     return []; // Retorna um array vazio em caso de erro
   }
 }
+
+/**
+ * Busca dados consolidados de rateio por setor para o relatório sintético.
+ * @param {string[]} termosDeBusca - Um array de números de NF ou Chaves de Acesso.
+ * @returns {Array<Object>} Um array de objetos, onde cada objeto representa uma NF com totais por setor.
+ */
+function RateioCrud_obterDadosParaRelatorioSintetico(termosDeBusca) {
+  Logger.log(`Iniciando busca para relatório SINTÉTICO com os termos: ${termosDeBusca.join(', ')}`);
+  if (!termosDeBusca || termosDeBusca.length === 0) {
+    return [];
+  }
+
+  const termosSet = new Set(termosDeBusca.map(t => String(t).trim()));
+  const resultados = {}; // Usaremos um mapa para agregar os resultados
+
+  try {
+    const planilhaNF = SpreadsheetApp.openById(ID_PLANILHA_NF);
+    const planilhaFin = SpreadsheetApp.openById(ID_PLANILHA_FINANCEIRO);
+
+    // 1. Obter dados das abas de Notas Fiscais e Tributos
+    const abaNotasFiscais = planilhaNF.getSheetByName(ABA_NF_NOTAS_FISCAIS);
+    const dadosNotasFiscais = abaNotasFiscais.getDataRange().getValues();
+    const cabecalhosNF = dadosNotasFiscais.shift();
+    const colMapNF = {
+      chaveAcesso: cabecalhosNF.indexOf("Chave de Acesso"),
+      numeroNF: cabecalhosNF.indexOf("Número NF"),
+      dataEmissao: cabecalhosNF.indexOf("Data e Hora Emissão"),
+      nomeEmitente: cabecalhosNF.indexOf("Nome Emitente")
+    };
+
+    const abaTributos = planilhaNF.getSheetByName(ABA_NF_TRIBUTOS_TOTAIS);
+    const dadosTributos = abaTributos.getDataRange().getValues();
+    const cabecalhosTributos = dadosTributos.shift();
+    const colMapTributos = {
+      chaveAcesso: cabecalhosTributos.indexOf("Chave de Acesso"),
+      valorTotalNf: cabecalhosTributos.indexOf("Valor Total da NF")
+    };
+    
+    // Mapear valor total da NF pela chave de acesso
+    const mapaChaveParaTotal = dadosTributos.reduce((map, linha) => {
+      map[linha[colMapTributos.chaveAcesso]] = _RateioCrud_parsearValorNumerico(linha[colMapTributos.valorTotalNf]);
+      return map;
+    }, {});
+
+
+    // 2. Iterar sobre as NFs para encontrar as que correspondem aos termos de busca
+    const chavesEncontradas = new Set();
+    dadosNotasFiscais.forEach(linha => {
+      const chaveAtual = linha[colMapNF.chaveAcesso];
+      const numeroAtual = String(linha[colMapNF.numeroNF]);
+
+      if (termosSet.has(chaveAtual) || termosSet.has(numeroAtual)) {
+         if (chavesEncontradas.has(chaveAtual)) {
+          return;
+        }
+        
+        resultados[chaveAtual] = {
+          numeroNF: numeroAtual,
+          nomeFornecedor: linha[colMapNF.nomeEmitente],
+          chaveAcesso: chaveAtual,
+          dataEmissao: new Date(linha[colMapNF.dataEmissao]).toLocaleDateString('pt-BR'),
+          valorTotalNf: mapaChaveParaTotal[chaveAtual] || 0,
+          rateioPorSetor: {} // Objeto para armazenar a soma por setor
+        };
+        chavesEncontradas.add(chaveAtual);
+      }
+    });
+
+    // 3. Obter dados da aba Contas a Pagar e agregar por setor
+    const abaContasAPagar = planilhaFin.getSheetByName(ABA_FINANCEIRO_CONTAS_A_PAGAR);
+    const dadosContasAPagar = abaContasAPagar.getDataRange().getValues();
+    const cabecalhosCAP = dadosContasAPagar.shift();
+    const colMapCAP = {
+      chaveAcesso: cabecalhosCAP.indexOf("Chave de Acesso"),
+      setor: cabecalhosCAP.indexOf("Setor"),
+      valorPorSetor: cabecalhosCAP.indexOf("Valor por Setor")
+    };
+
+    dadosContasAPagar.forEach(linha => {
+      const chave = linha[colMapCAP.chaveAcesso];
+      // Se a chave desta linha de rateio pertence a uma das NFs que estamos buscando
+      if (resultados[chave]) {
+        const setor = linha[colMapCAP.setor];
+        const valor = _RateioCrud_parsearValorNumerico(linha[colMapCAP.valorPorSetor]);
+        
+        if (setor && valor > 0) {
+           if (!resultados[chave].rateioPorSetor[setor]) {
+             resultados[chave].rateioPorSetor[setor] = 0;
+           }
+           resultados[chave].rateioPorSetor[setor] += valor;
+        }
+      }
+    });
+
+    // 4. Calcular porcentagens e formatar a saída
+    const relatorioFinal = Object.values(resultados).map(nf => {
+      const setoresArray = [];
+      const totalNota = nf.valorTotalNf;
+
+      for (const setor in nf.rateioPorSetor) {
+        const valorSetor = nf.rateioPorSetor[setor];
+        const porcentagem = (totalNota > 0) ? (valorSetor / totalNota) * 100 : 0;
+        setoresArray.push({
+          setor: setor,
+          valor: valorSetor,
+          porcentagem: porcentagem
+        });
+      }
+      
+      // Ordena os setores por nome
+      setoresArray.sort((a, b) => a.setor.localeCompare(b.setor));
+
+      nf.rateioPorSetor = setoresArray; // Substitui o objeto por um array ordenado
+      return nf;
+    });
+
+
+    Logger.log(`Busca para relatório sintético concluída. Encontradas ${relatorioFinal.length} notas.`);
+    return relatorioFinal;
+
+  } catch (e) {
+    Logger.log(`Erro em RateioCrud_obterDadosParaRelatorioSintetico: ${e.message}\n${e.stack}`);
+    throw new Error(`Ocorreu um erro ao buscar os dados do relatório sintético: ${e.message}`);
+  }
+}

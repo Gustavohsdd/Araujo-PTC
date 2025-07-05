@@ -140,34 +140,77 @@
     </a>
   </template>
 
-   <template id="template-workspace">
+     <template id="template-workspace">
     <div class="workspace-header">
         <div class="row align-items-center">
+            <!-- Coluna da Esquerda: Ações -->
             <div class="col-md-5">
                 <h4><i class="bi bi-link-45deg"></i> Vincular a uma Cotação</h4>
                 <select class="form-select select-cotacao-fornecedor" disabled>
                     <option selected disabled>Selecione a cotação...</option>
                 </select>
+                
+                <!-- Ações para Notas sem Pedido -->
                 <div class="sem-pedido-actions border-top mt-3 pt-3">
                     <small class="text-muted d-block mb-2">Ou, se não houver pedido vinculado:</small>
-                    <button id="btn-marcar-bonificacao" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-gift-fill"></i> Marcar como Bonificação
-                    </button>
-                    <button id="btn-marcar-tipo-b" class="btn btn-sm btn-outline-warning ms-2">
-                        <i class="bi bi-bookmark-star-fill"></i> Marcar como NF Tipo B
-                    </button>
-                    <button id="btn-marcar-sem-pedido" class="btn btn-sm btn-outline-primary ms-2">
-                        <i class="bi bi-arrow-right-circle-fill"></i> Iniciar Rateio Direto
-                    </button>
+                    
+                    <!-- NOVO: Grupo de Botões (Split Button) -->
+                    <div class="btn-group">
+                        <button id="btn-marcar-sem-pedido" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-arrow-right-circle-fill"></i> Iniciar Rateio Direto
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a id="btn-marcar-bonificacao" class="dropdown-item" href="#">
+                                    <i class="bi bi-gift-fill me-2"></i>Marcar como Bonificação
+                                </a>
+                            </li>
+                            <li>
+                                <a id="btn-marcar-tipo-b" class="dropdown-item" href="#">
+                                    <i class="bi bi-bookmark-star-fill me-2"></i>Marcar como NF Tipo B
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
-                </div>
+            </div>
+
+            <!-- Coluna da Direita: Resumo Financeiro -->
             <div class="col-md-7">
+                <!-- NOVO: Estrutura de Totais Detalhada -->
                 <div class="p-2 border rounded">
-                  <div class="d-flex justify-content-between"><span>Total da Nota:</span> <strong class="total-notas-valor text-info">R$ 0,00</strong></div>
-                  <div class="d-flex justify-content-between"><span>Total Itens para Rateio:</span> <strong class="total-conciliado-valor text-success">R$ 0,00</strong></div>
+                  <div class="d-flex justify-content-between">
+                    <span>Total dos Produtos (NF):</span> 
+                    <strong class="total-produtos-valor text-body-secondary">R$ 0,00</strong>
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <span>(+) Total Impostos:</span> 
+                    <strong class="total-impostos-valor text-danger">R$ 0,00</strong>
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <span>(+) Outras Despesas:</span> 
+                    <strong class="total-outras-despesas-valor text-danger">R$ 0,00</strong>
+                  </div>
+                   <div class="d-flex justify-content-between">
+                    <span>(-) Total Desconto:</span> 
+                    <strong class="total-desconto-valor text-success">R$ 0,00</strong>
+                  </div>
                   <hr class="my-1">
-                  <div class="d-flex justify-content-between"><span>Diferença (Outros Custos):</span> 
-                    <div><strong class="diferenca-totais-valor text-danger me-1">R$ 0,00</strong></div>
+                  <div class="d-flex justify-content-between fw-bold">
+                    <span>Total da Nota:</span> 
+                    <strong class="total-notas-valor text-primary">R$ 0,00</strong>
+                  </div>
+                   <hr class="my-1">
+                   <div class="d-flex justify-content-between">
+                    <span>Total Itens para Rateio:</span> 
+                    <strong class="total-conciliado-valor text-info">R$ 0,00</strong>
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <span>Diferença (Rateio vs NF):</span> 
+                    <strong class="diferenca-totais-valor text-warning">R$ 0,00</strong>
                   </div>
                 </div>
             </div>
@@ -211,6 +254,7 @@
       </button>
     </div>
   </template>
+
 
   <template id="template-matched-item">
      <div class="card mb-2 matched-item-card">

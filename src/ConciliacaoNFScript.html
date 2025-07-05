@@ -645,31 +645,44 @@ function onPorcentagemOuSetorChange(event) {
     recalcularErenderizarResumoRateio();
 }
 
-/**
- * [ALTERADO] Recalcula e renderiza os resumos de totais e rateio.
- * Corrigido para usar a nova propriedade 'itemNF_Agregada' em vez de 'itemNF_Ajustada'.
- */
 function recalcularErenderizarResumoRateio() {
     const nfInfo = $('#workspace-content').data('active-nf');
     if (!nfInfo) return;
     const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
     if (!totaisNF) return;
 
-    // Cálculos Gerais
+    // --- INÍCIO DA MODIFICAÇÃO: Cálculo e Exibição dos Totais Detalhados ---
+
+    // 1. Calcula o total de impostos somando os campos individuais
+    const totalImpostos = (totaisNF.totalValorIcms || 0) +
+                          (totaisNF.totalValorIcmsSt || 0) +
+                          (totaisNF.totalValorIpi || 0) +
+                          (totaisNF.totalValorPis || 0) +
+                          (totaisNF.totalValorCofins || 0);
+
+    // 2. Preenche os novos campos no painel de resumo financeiro
+    $('.total-produtos-valor').text(formatarMoeda(totaisNF.totalValorProdutos || 0));
+    $('.total-impostos-valor').text(formatarMoeda(totalImpostos));
+    $('.total-outras-despesas-valor').text(formatarMoeda(totaisNF.totalOutrasDespesas || 0));
+    $('.total-desconto-valor').text(formatarMoeda(totaisNF.totalValorDesconto || 0));
+    $('.total-notas-valor').text(formatarMoeda(totaisNF.valorTotalNf));
+
+    // --- FIM DA MODIFICAÇÃO ---
+
+    // Cálculos Gerais (Lógica existente mantida)
     let totalConciliadoBruto = 0;
     const mapaSetorParaItens = {};
     $('.matched-item-card').each(function() {
         const info = $(this).data('conciliacao-info');
-        // [CORREÇÃO] Usando a propriedade correta 'itemNF_Agregada'
         if (info && info.itemNF_Agregada) {
           totalConciliadoBruto += info.itemNF_Agregada.qtdNF * info.itemNF_Agregada.precoNF;
         }
     });
-    $('.total-notas-valor').text(formatarMoeda(totaisNF.valorTotalNf));
+    
     $('.total-conciliado-valor').text(formatarMoeda(totalConciliadoBruto));
     $('.diferenca-totais-valor').text(formatarMoeda(totaisNF.valorTotalNf - totalConciliadoBruto));
 
-    // Cálculos de Rateio
+    // Cálculos de Rateio (Lógica existente mantida)
     const totaisPorSetor = {};
     const custosAdicionais = totaisNF.valorTotalNf - totalConciliadoBruto;
     $('.matched-item-card').each(function() {
@@ -679,7 +692,6 @@ function recalcularErenderizarResumoRateio() {
 
         if (!concInfo || !concInfo.itemNF_Agregada || !rateioInfo) return;
 
-        // [CORREÇÃO] Usando a propriedade correta 'itemNF_Agregada'
         const valorBrutoItem = concInfo.itemNF_Agregada.qtdNF * concInfo.itemNF_Agregada.precoNF;
         const proporcaoItem = totalConciliadoBruto > 0.01 ? valorBrutoItem / totalConciliadoBruto : 0;
         const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
@@ -699,7 +711,7 @@ function recalcularErenderizarResumoRateio() {
         }
     });
 
-    // Renderiza Resumo do Rateio
+    // Renderiza Resumo do Rateio (Lógica existente mantida)
     const resumoContainer = $('#resumo-setor-container').empty();
     let totalCalculado = Object.values(totaisPorSetor).reduce((s, v) => s + v, 0);
     let resumoHtml = '<ul class="list-group list-group-flush">';
@@ -710,7 +722,7 @@ function recalcularErenderizarResumoRateio() {
     resumoContainer.html(resumoHtml);
     $('#total-rateado').text(formatarMoeda(totalCalculado));
 
-    // Renderiza a Pré-visualização do Contas a Pagar
+    // Renderiza a Pré-visualização do Contas a Pagar (Lógica existente mantida)
     const faturasContainer = $('#faturas-preview-container').empty();
     const faturas = totaisNF.faturas || [];
     const numFaturasOriginais = faturas.length > 0 ? faturas.length : 1;

@@ -5,6 +5,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
+    /* === ESTILOS GERAIS (TELA) === */
     body {
       background-color: #f0f2f5;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -13,39 +14,44 @@
     .container {
       max-width: 1140px;
     }
+    #report-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px; /* Espaçamento entre os cards na tela */
+    }
     .report-card {
       background-color: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
-      margin-bottom: 1rem;
-      padding: 0;
-      page-break-inside: avoid;
       box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-      font-size: 0.8rem; /* Reduz o tamanho da fonte base do card */
+      font-size: 0.8rem;
+      padding: 0;
+      /* ALTERADO: Define a largura para 2 cards por linha na tela */
+      width: calc(50% - 10px);
     }
     .card-header-custom {
       background-color: #f8f9fa;
-      padding: 0.75rem 1rem; /* Padding reduzido */
+      padding: 0.75rem 1rem;
       border-bottom: 1px solid #e0e0e0;
       border-top-left-radius: 8px;
       border-top-right-radius: 8px;
     }
     .card-header-custom h5 {
-      font-size: 1.1rem; /* Tamanho da fonte do título ajustado */
+      font-size: 1.1rem;
       margin-bottom: 0.25rem;
     }
     .card-header-custom .text-muted {
-      font-size: 0.75rem; /* Tamanho da fonte dos detalhes ajustado */
+      font-size: 0.75rem;
     }
     .card-body {
-      padding: 1rem; /* Padding do corpo reduzido */
+      padding: 1rem;
     }
     .table {
-      font-size: 0.75rem; /* Fonte da tabela reduzida */
+      font-size: 0.75rem;
       margin-bottom: 0;
     }
     .table th, .table td {
-      padding: 0.3rem 0.5rem; /* Padding das células reduzido */
+      padding: 0.3rem 0.5rem;
       vertical-align: middle;
     }
     .loader {
@@ -54,18 +60,53 @@
       display: flex; justify-content: center; align-items: center;
     }
 
-    @media print {
-      body { background-color: #fff; font-size: 10pt; }
-      .no-print { display: none !important; }
+    /* === ESTILOS RESPONSIVOS (TELA) === */
+    @media (max-width: 992px) {
       .report-card {
-        border: 1px solid #ccc;
-        box-shadow: none;
-        margin-top: 1cm;
-        page-break-after: always;
+        /* MANTIDO: 2 cards por linha em telas médias */
+        width: calc(50% - 8px);
       }
-      .container { max-width: 100%; }
+    }
+    @media (max-width: 768px) {
+      .report-card {
+        /* MANTIDO: 1 card por linha em telas pequenas */
+        width: 100%;
+      }
+    }
+
+    /* === ESTILOS DE IMPRESSÃO === */
+    @media print {
+      body {
+        background-color: #fff !important;
+        font-size: 9pt;
+       -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .container {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      #report-container {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: flex-start !important; /* Alinha os cards ao início */
+        gap: 10px !important; /* Adiciona um pequeno espaço na impressão */
+      }
+      .report-card {
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        page-break-inside: avoid !important; /* Tenta não cortar o card ao meio */
+        /* ALTERADO: Define a largura para 2 cards por linha na impressão */
+        width: 48% !important;
+      }
     }
   </style>
+
 </head>
 <body>
 
@@ -78,9 +119,18 @@
   <header class="bg-primary text-white p-3 mb-4 no-print shadow-sm">
     <div class="container d-flex justify-content-between align-items-center">
       <h3><i class="bi bi-file-earmark-bar-graph-fill"></i> Relatório de Rateio</h3>
-      <button class="btn btn-light" onclick="window.print()">
-        <i class="bi bi-printer-fill"></i> Imprimir Relatório
-      </button>
+      <div class="d-flex align-items-center">
+          <div id="report-type-selector" class="btn-group me-3" role="group">
+            <input type="radio" class="btn-check" name="reportType" id="reportTypeDetailed" autocomplete="off" value="detailed" checked>
+            <label class="btn btn-outline-light" for="reportTypeDetailed"><i class="bi bi-list-columns-reverse"></i> Detalhado</label>
+
+            <input type="radio" class="btn-check" name="reportType" id="reportTypeSummary" autocomplete="off" value="summary">
+            <label class="btn btn-outline-light" for="reportTypeSummary"><i class="bi bi-pie-chart-fill"></i> Por Setor</label>
+        </div>
+        <button class="btn btn-light" onclick="window.print()">
+            <i class="bi bi-printer-fill"></i> Imprimir Relatório
+        </button>
+      </div>
     </div>
   </header>
 
@@ -126,6 +176,37 @@
               <th>Vencimento</th>
               <th class="text-end">Valor da Parcela</th>
               <th class="text-end">Valor por Setor</th>
+            </tr>
+          </thead>
+          <tbody class="rateio-tbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <template id="template-report-card-sintetico">
+    <div class="report-card">
+      <div class="card-header-custom">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h5>NF <span class="nf-numero text-primary"></span></h5>
+                <div class="text-muted">Fornecedor: <strong class="nf-fornecedor"></strong></div>
+            </div>
+            <div class="text-end">
+                <div class="text-muted">Emissão: <strong class="nf-data-emissao"></strong></div>
+                <div>Valor Total: <strong class="nf-valor-total fs-6 text-success"></strong></div>
+            </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <h6 class="mb-2">Detalhamento do Rateio por Setor</h6>
+        <table class="table table-sm table-striped table-bordered">
+          <thead class="table-light">
+            <tr>
+              <th>Setor</th>
+              <th class="text-end">Valor Rateado</th>
+              <th class="text-end">Porcentagem (%)</th>
             </tr>
           </thead>
           <tbody class="rateio-tbody">
