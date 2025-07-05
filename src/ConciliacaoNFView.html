@@ -58,14 +58,6 @@
     .total-percent-item.is-valid { color: #198754 !important; }
     .ajuste-info { font-size: 0.75rem; }
 
-<<<<<<< HEAD
-    #accordion-fornecedores {
-    overflow-y: auto; /* Permite a barra de rolagem vertical */
-    flex-grow: 1;     /* Faz com que o container ocupe o espaço disponível */
-    }
-
-=======
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
   </style>
 </head>
 <body>
@@ -100,13 +92,7 @@
       <div class="panel-header">
         <input type="text" id="search-input" class="form-control" placeholder="Buscar por Fornecedor, Nº da NF...">
       </div>
-<<<<<<< HEAD
-      
-        <div class="accordion accordion-flush" id="accordion-fornecedores">
-      </div>
-=======
       <div id="nf-list-container"></div>
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     </aside>
 
     <main id="panel-direito">
@@ -141,45 +127,15 @@
      <a href="#" class="list-group-item list-group-item-action">
         <div class="d-flex w-100 justify-content-between">
             <div class="item-description"></div>
-<<<<<<< HEAD
-=======
             <button class="btn btn-outline-warning btn-sm py-0 px-1 btn-ajuste-manual" title="Ajustar Fator de Conversão (Fardo/Caixa)">
                 <i class="bi bi-box-seam"></i>
             </button>
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         </div>
         <small>Qtd: <strong class="original-qtd"></strong> | Preço: <strong class="original-preco"></strong></small>
         <div class="ajuste-info text-muted fst-italic"></div>
     </a>
   </template>
 
-<<<<<<< HEAD
-   <template id="template-workspace">
-    <div class="workspace-header">
-        <div class="row align-items-center">
-            <div class="col-md-5">
-                <h4><i class="bi bi-link-45deg"></i> Vincular a uma Cotação</h4>
-                <select class="form-select select-cotacao-fornecedor" disabled>
-                    <option selected disabled>Selecione a cotação...</option>
-                </select>
-                <div class="sem-pedido-actions border-top mt-3 pt-3">
-                    <small class="text-muted d-block mb-2">Ou, se não houver pedido vinculado:</small>
-                    <button id="btn-marcar-bonificacao" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-gift-fill"></i> Marcar como Bonificação
-                    </button>
-                    <button id="btn-marcar-tipo-b" class="btn btn-sm btn-outline-warning ms-2">
-                        <i class="bi bi-bookmark-star-fill"></i> Marcar como NF Tipo B
-                    </button>
-                    <button id="btn-marcar-sem-pedido" class="btn btn-sm btn-outline-primary ms-2">
-                        <i class="bi bi-arrow-right-circle-fill"></i> Iniciar Rateio Direto
-                    </button>
-                </div>
-                </div>
-            <div class="col-md-7">
-                <div class="p-2 border rounded">
-                  <div class="d-flex justify-content-between"><span>Total da Nota:</span> <strong class="total-notas-valor text-info">R$ 0,00</strong></div>
-                  <div class="d-flex justify-content-between"><span>Total Itens para Rateio:</span> <strong class="total-conciliado-valor text-success">R$ 0,00</strong></div>
-=======
   <template id="template-workspace">
     <div class="workspace-header">
         <div class="row align-items-center">
@@ -193,7 +149,6 @@
                 <div class="p-2 border rounded">
                   <div class="d-flex justify-content-between"><span>Total da Nota:</span> <strong class="total-notas-valor text-info">R$ 0,00</strong></div>
                   <div class="d-flex justify-content-between"><span>Total Conciliado (NF):</span> <strong class="total-conciliado-valor text-success">R$ 0,00</strong></div>
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
                   <hr class="my-1">
                   <div class="d-flex justify-content-between"><span>Diferença (Outros Custos):</span> 
                     <div><strong class="diferenca-totais-valor text-danger me-1">R$ 0,00</strong></div>
@@ -215,11 +170,7 @@
     </div>
     
     <div class="matched-items-section mt-3">
-<<<<<<< HEAD
-        <h5><i class="bi bi-check2-circle text-success"></i> Itens para Rateio</h5>
-=======
         <h5><i class="bi bi-check2-circle text-success"></i> Itens Conciliados & Rateio</h5>
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         <div id="matched-items-container"></div>
     </div>
 
@@ -287,23 +238,6 @@
   </template>
 
   <template id="template-rateio-row">
-<<<<<<< HEAD
-    <div class="row gx-2 mb-1 align-items-center manual-rate-row">
-        <div class="col-6">
-            <input type="text" class="form-control form-control-sm input-setor" list="datalist-setores" placeholder="Nome do Setor">
-            </div>
-        <div class="col-4">
-            <div class="input-group input-group-sm">
-                <input type="number" class="form-control input-porcentagem" placeholder="%" min="0" max="100" step="0.01">
-                <span class="input-group-text">%</span>
-            </div>
-        </div>
-        <div class="col-2 text-end">
-            <button class="btn btn-sm btn-outline-danger btn-remove-setor py-0 px-1" type="button"><i class="bi bi-trash"></i></button>
-        </div>
-      </div>
-    </template>
-=======
         <div class="row gx-2 mb-1 align-items-center manual-rate-row">
             <div class="col-6">
                 <input type="text" class="form-control form-control-sm input-setor" placeholder="Nome do Setor">
@@ -319,7 +253,6 @@
             </div>
         </div>
    </template>
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
   
   <div class="modal fade" id="ajusteManualModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
