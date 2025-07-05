@@ -440,10 +440,7 @@ function ConciliacaoNFCrud_atualizarMapeamentoConciliacao(novosMapeamentos) {
     Logger.log(`ERRO em ConciliacaoNFCrud_atualizarMapeamentoConciliacao: ${e.message}\n${e.stack}`);
   }
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, novosMapeamentos) {
     Logger.log(`Iniciando salvamento em lote. Conciliações: ${conciliacoes.length}, Itens cortados: ${itensCortados.length}`);
     try {
@@ -511,12 +508,8 @@ function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, n
            Logger.log("IDs de Cotação atualizados nas Notas Fiscais.");
         }
         if (novosMapeamentos && novosMapeamentos.length > 0) {
-<<<<<<< HEAD
           // [CORREÇÃO] O nome da função chamada aqui estava com um erro de digitação.
           ConciliacaoNFCrud_atualizarMapeamentoConciliacao(novosMapeamentos);
-=======
-          ConciliacaoNFCrud_atualizarMameamentoConciliacao(novosMapeamentos);
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         }
         return true;
     } catch (e) {
@@ -524,10 +517,7 @@ function ConciliacaoNFCrud_salvarAlteracoesEmLote(conciliacoes, itensCortados, n
         return false;
     }
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoes) {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
     const aba = planilha.getSheetByName(ABA_COTACOES);

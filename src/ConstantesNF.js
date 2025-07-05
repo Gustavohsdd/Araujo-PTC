@@ -5,11 +5,7 @@
 
 // --- IDs GLOBAIS ---
 // ID da Planilha que armazena os dados extraídos das Notas Fiscais.
-<<<<<<< HEAD
 const ID_PLANILHA_NF = '1-YKacsqlFJ7ijRY1Vsba4t5OKfyj0Gmc8l1W0POEJJo';
-=======
-const ID_PLANILHA_NF = '1QUZ_RB09IZuevSPaCQxyCSWhLUqDKVwdNbEZVBVHSBo';
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 
 // ID da Pasta no Google Drive onde os arquivos XML das NF-e são armazenados.
 const ID_PASTA_XML = '188nkMfRmqwqQ5kwZeviTjdv8v19g1VyQ';

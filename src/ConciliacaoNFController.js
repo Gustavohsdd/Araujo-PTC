@@ -98,26 +98,14 @@ function ConciliacaoNFController_obterDadosParaPagina() {
     const chavesNFsNaoConciliadas = notasFiscais.map(nf => nf.chaveAcesso);
     const chavesCotacoesAbertas = cotacoes.map(c => ({ idCotacao: c.idCotacao, fornecedor: c.fornecedor }));
     const todosOsItensNF = ConciliacaoNFCrud_obterItensDasNFs(chavesNFsNaoConciliadas);
-<<<<<<< HEAD
     const todosOsDadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesNFsNaoConciliadas); 
-=======
-    
-    // [CORRIGIDO] A função abaixo agora busca os totais E as faturas juntas.
-    const todosOsDadosGeraisNF = ConciliacaoNFCrud_obterDadosGeraisDasNFs(chavesNFsNaoConciliadas); 
-
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     const todosOsItensCotacao = ConciliacaoNFCrud_obterTodosItensCotacoesAbertas(chavesCotacoesAbertas);
     
     // Dados do Rateio
     const regrasRateio = RateioCrud_obterRegrasRateio();
-<<<<<<< HEAD
     const setoresUnicos = RateioCrud_obterSetoresUnicos(); // ADICIONADO
 
     Logger.log(`Dados carregados: ${cotacoes.length} cotações, ${notasFiscais.length} NFs, ${regrasRateio.length} regras, ${setoresUnicos.length} setores.`);
-=======
-
-    Logger.log(`Dados carregados: ${cotacoes.length} cotações, ${notasFiscais.length} NFs, ${regrasRateio.length} regras de rateio.`);
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     
     return {
       success: true,
@@ -126,16 +114,10 @@ function ConciliacaoNFController_obterDadosParaPagina() {
         notasFiscais,
         itensNF: todosOsItensNF,
         itensCotacao: todosOsItensCotacao,
-<<<<<<< HEAD
         dadosGeraisNF: todosOsDadosGeraisNF,
         mapeamentoConciliacao,
         regrasRateio,
         setoresUnicos // ADICIONADO
-=======
-        dadosGeraisNF: todosOsDadosGeraisNF, // Este objeto agora contém as faturas
-        mapeamentoConciliacao,
-        regrasRateio
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
       }
     };
 
@@ -147,14 +129,9 @@ function ConciliacaoNFController_obterDadosParaPagina() {
 
 
 /**
-<<<<<<< HEAD
  * [ALTERADO] Salva um lote unificado de alterações de conciliação e rateio.
  * Esta função substitui a antiga 'salvarConciliacaoEmLote' e a 'salvarRateioEmLote'.
  * A lógica de rateio agora inclui um tratamento para pagamentos "À Vista" (sem faturas).
-=======
- * Salva um lote unificado de alterações de conciliação e rateio.
- * Esta função substitui a antiga 'salvarConciliacaoEmLote' e a 'salvarRateioEmLote'.
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
  * @param {object} dadosLote - O objeto contendo todos os dados a serem salvos.
  */
 function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
@@ -173,11 +150,7 @@ function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
         Logger.log(`${conciliacoes.length} conciliação(ões) salva(s).`);
     }
 
-<<<<<<< HEAD
     // 2. Salvar atualizações de Status (Ex: Sem Pedido, Bonificação, NF Tipo B)
-=======
-    // 2. Salvar atualizações de Status (Ex: Sem Pedido)
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     if (statusUpdates && statusUpdates.length > 0) {
       const updatesByStatus = statusUpdates.reduce((acc, update) => {
         if (!acc[update.novoStatus]) acc[update.novoStatus] = [];
@@ -197,10 +170,6 @@ function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
         const todasAsChavesParaAtualizar = new Set();
         
         for (const dadosRateio of rateios) {
-<<<<<<< HEAD
-=======
-            // [ALTERADO] Obtém o novo mapaSetorParaItens do payload
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             const { chaveAcesso, totaisPorSetor, novasRegras, numeroNF, mapaSetorParaItens } = dadosRateio;
             todasAsChavesParaAtualizar.add(chaveAcesso);
 
@@ -209,7 +178,6 @@ function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
             }
             
             const faturas = RateioCrud_obterFaturasDaNF(chaveAcesso);
-<<<<<<< HEAD
             let valorTotalRateadoNota = Object.values(totaisPorSetor).reduce((s, v) => s + v, 0);
 
             // [LÓGICA ALTERADA] Trata faturas existentes ou cria lançamento "À Vista"
@@ -224,26 +192,10 @@ function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
                     for (const setor in totaisPorSetor) {
                         const resumoItens = mapaSetorParaItens[setor] ? mapaSetorParaItens[setor].join(', ') : `NF ${numeroNF}`;
                         const numeroParcelaFormatado = `${contadorParcelaNota++}/${totalNovosTitulosNota}(Ref: ${fatura.numeroParcela})`;
-=======
-            let valorTotalRateado = Object.values(totaisPorSetor).reduce((s, v) => s + v, 0);
-
-            // [ALTERADO] Lógica de formatação de parcela e resumo de itens
-            const numFaturasOriginais = faturas.length > 0 ? faturas.length : 1;
-            const numSetores = Object.keys(totaisPorSetor).length;
-            const totalNovosTitulosNota = numFaturasOriginais * numSetores;
-            let contadorParcelaNota = 1;
-
-            if (faturas && faturas.length > 0) {
-                 faturas.forEach(fatura => {
-                    for (const setor in totaisPorSetor) {
-                        const resumoItens = mapaSetorParaItens[setor] ? mapaSetorParaItens[setor].join(', ') : `NF ${numeroNF}`;
-                        const numeroParcelaFormatado = `${contadorParcelaNota++}/${totalNovosTitulosNota}(${numFaturasOriginais})`;
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
                         
                         todasAsLinhasContasAPagar.push({
                             'ChavedeAcesso': chaveAcesso,
                             'NúmerodaFatura': fatura.numeroFatura,
-<<<<<<< HEAD
                             'NúmerodaParcela': numeroParcelaFormatado,
                             'ResumodosItens': resumoItens,
                             'DatadeVencimento': new Date(fatura.dataVencimento),
@@ -271,31 +223,6 @@ function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
                         'ValordaParcela': valorTotalRateadoNota, // O valor da "parcela única" é o total da nota
                         'Setor': setor,
                         'ValorporSetor': totaisPorSetor[setor] // O valor por setor já é o valor final
-=======
-                            'NúmerodaParcela': numeroParcelaFormatado, // Valor formatado
-                            'ResumodosItens': resumoItens, // Resumo dos itens
-                            'DatadeVencimento': new Date(fatura.dataVencimento),
-                            'ValordaParcela': fatura.valorParcela,
-                            'Setor': setor,
-                            'ValorporSetor': (totaisPorSetor[setor] / valorTotalRateado) * fatura.valorParcela
-                        });
-                    }
-                });
-            } else { // Caso de pagamento à vista sem fatura explícita
-                 for (const setor in totaisPorSetor) {
-                    const resumoItens = mapaSetorParaItens[setor] ? mapaSetorParaItens[setor].join(', ') : `NF ${numeroNF}`;
-                    const numeroParcelaFormatado = `${contadorParcelaNota++}/${totalNovosTitulosNota}(1)`;
-                    
-                    todasAsLinhasContasAPagar.push({
-                        'ChavedeAcesso': chaveAcesso,
-                        'NúmerodaFatura': numeroNF,
-                        'NúmerodaParcela': numeroParcelaFormatado, // Valor formatado
-                        'ResumodosItens': resumoItens, // Resumo dos itens
-                        'DatadeVencimento': new Date(),
-                        'ValordaParcela': valorTotalRateado,
-                        'Setor': setor,
-                        'ValorporSetor': totaisPorSetor[setor]
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
                     });
                 }
             }
@@ -304,11 +231,8 @@ function ConciliacaoNFController_salvarLoteUnificado(dadosLote) {
         RateioCrud_salvarNovasRegrasDeRateio(todasAsNovasRegras);
         RateioCrud_salvarContasAPagar(todasAsLinhasContasAPagar);
         Array.from(todasAsChavesParaAtualizar).forEach(chave => {
-<<<<<<< HEAD
             // O status para rateio sem pedido já é setado no payload vindo do frontend,
             // aqui apenas garantimos que o status do MÓDULO DE RATEIO seja concluído.
-=======
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             RateioCrud_atualizarStatusRateio(chave, "Concluído");
         });
         Logger.log(`${rateios.length} rateio(s) salvos e status atualizados.`);

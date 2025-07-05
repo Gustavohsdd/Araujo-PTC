@@ -349,7 +349,6 @@ function RateioCrud_obterDadosParaRelatorio(termosDeBusca) {
     Logger.log(`Erro em RateioCrud_obterDadosParaRelatorio: ${e.message}\n${e.stack}`);
     throw new Error(`Ocorreu um erro ao buscar os dados do relatório: ${e.message}`);
   }
-<<<<<<< HEAD
 }
 
 /**
@@ -391,6 +390,4 @@ function RateioCrud_obterSetoresUnicos() {
     Logger.log(`Erro em RateioCrud_obterSetoresUnicos: ${e.message}`);
     return []; // Retorna um array vazio em caso de erro
   }
-=======
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 }

@@ -5,11 +5,7 @@
 
 // --- IDs GLOBAIS ---
 // ID da Planilha que armazena os dados de Boletos e Rateios.
-<<<<<<< HEAD
 const ID_PLANILHA_FINANCEIRO = '1JNJrbZqXUdG28KlZMhmgOzxEuVKDrEpi5t08yBTFnzw';
-=======
-const ID_PLANILHA_FINANCEIRO = '1WXcYsH3rl6px5zVPLCiHI4Vfo9y_563lqcc9wEk63eA';
->>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 
 // --- NOMES DAS ABAS ---
 const ABA_FINANCEIRO_REGRAS_RATEIO = 'RegrasRateio';
