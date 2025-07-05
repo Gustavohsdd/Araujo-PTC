@@ -7,7 +7,10 @@ let todosOsItensCotacao = [];
 let todosOsDadosGeraisNF = [];
 let mapaConciliacao = [];
 let regrasRateio = [];
+<<<<<<< HEAD
 let setoresUnicos = [];
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 let stagedPayloads = [];
 let ajusteModalInstance = null;
 let activeItemForAdjustment = null; 
@@ -31,6 +34,7 @@ function addEventListeners() {
     $('#btn-abrir-relatorio-rateio').on('click', onAbrirRelatorioRateioClick); 
     // Painel Esquerdo
     $('#search-input').on('input', onSearchInputChange);
+<<<<<<< HEAD
 
     $('#accordion-fornecedores').on('click', '.nf-list-item:not(.staged)', onNfListItemClick);
 
@@ -54,6 +58,21 @@ function addEventListeners() {
     // Ajuste Manual
     // [CORREÇÃO] A linha abaixo que referenciava a função deletada 'onBtnAjusteManualClick' foi removida.
     panelDireito.on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
+=======
+    $('#nf-list-container').on('click', '.nf-list-item:not(.staged)', onNfListItemClick);
+    // Painel Direito
+    $('#panel-direito').on('change', '.select-cotacao-fornecedor', onSelectCotacaoChange);
+    $('#panel-direito').on('click', '#cotacao-items-list .list-group-item:not(.matched)', onCotacaoItemClick);
+    $('#panel-direito').on('click', '#nf-items-list .list-group-item:not(.matched)', onNfItemClick);
+    $('#panel-direito').on('click', '#btn-concluir-conciliacao', onBtnConcluirConciliacaoClick);
+    // Rateio
+    $('#panel-direito').on('click', '.btn-add-setor', onAdicionarSetorManualClick);
+    $('#panel-direito').on('click', '.btn-remove-setor', onRemoverSetorManualClick);
+    $('#panel-direito').on('input', '.input-porcentagem, .input-setor', onPorcentagemOuSetorChange);
+    // Ajuste Manual
+    $('#panel-direito').on('click', '.btn-ajuste-manual', onBtnAjusteManualClick);
+    $('#panel-direito').on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $('#btn-salvar-ajuste-manual').on('click', onBtnSalvarAjusteManualClick);
     $('#ajuste-fator').on('input', calcularVisualizacaoAjuste);
 }
@@ -69,6 +88,7 @@ function resetApplication() {
         .ConciliacaoNFController_obterDadosParaPagina();
 }
 
+<<<<<<< HEAD
 /**
  * [NOVO] Adiciona um payload para marcar a NF como 'NF Tipo B'.
  * Este é um estado final sem rateio.
@@ -92,6 +112,8 @@ function onMarcarTipoBClick() {
     atualizarBotaoSalvarLote();
 }
 
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 // ===== CALLBACKS DO SERVIDOR E PROCESSAMENTO DE DADOS =====
 function onDadosIniciaisSuccess(response) {
     toggleLoader(false);
@@ -106,6 +128,7 @@ function onDadosIniciaisSuccess(response) {
     todosOsItensCotacao = response.dados.itensCotacao;
     mapaConciliacao = response.dados.mapeamentoConciliacao || [];
     regrasRateio = response.dados.regrasRateio || [];
+<<<<<<< HEAD
     setoresUnicos = response.dados.setoresUnicos || []; // ADICIONADO
 
     // Cria a datalist de setores dinamicamente no body
@@ -117,6 +140,8 @@ function onDadosIniciaisSuccess(response) {
         $('body').append(datalist);
     }
     
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     renderizarListaDeTrabalho();
 }
 function onFailure(error) {
@@ -157,11 +182,16 @@ function onUploadSuccess(response) {
 
 // ===== PAINEL ESQUERDO (LISTA DE NFS) =====
 function renderizarListaDeTrabalho() {
+<<<<<<< HEAD
     const container = $('#accordion-fornecedores').empty();
+=======
+    const container = $('#nf-list-container').empty();
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     if (todasAsNFs.length === 0) {
         container.html('<p class="p-3 text-muted text-center">Nenhuma nota fiscal pendente.</p>');
         return;
     }
+<<<<<<< HEAD
 
     // 1. Agrupar NFs por fornecedor
     const nfsPorFornecedor = todasAsNFs.reduce((acc, nf) => {
@@ -244,6 +274,28 @@ function onSearchInputChange() {
         if (fornecedorVisivel && searchTerm) {
             accordionItem.find('.accordion-collapse').addClass('show');
         }
+=======
+    todasAsNFs.sort((a,b) => a.nomeEmitente.localeCompare(b.nomeEmitente) || a.numeroNF - b.numeroNF);
+    todasAsNFs.forEach(nf => {
+        const template = $('#template-nf-list-item').prop('content').cloneNode(true);
+        const nfItem = $(template.querySelector('.nf-list-item'));
+        nfItem.data('nf-info', nf);
+        nfItem.find('.nf-title').text(`NF ${nf.numeroNF}`);
+        nfItem.find('.nf-fornecedor').text(nf.nomeEmitente);
+        nfItem.find('.nf-data').text(nf.dataEmissao);
+        const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
+        nfItem.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
+        container.append(nfItem);
+    });
+}
+function onSearchInputChange() {
+    const searchTerm = $(this).val().toLowerCase().trim();
+    $('#nf-list-container .nf-list-item').each(function() {
+        const item = $(this);
+        const nfInfo = item.data('nf-info');
+        const textToSearch = `${nfInfo.nomeEmitente.toLowerCase()} ${nfInfo.numeroNF}`;
+        item.toggle(textToSearch.includes(searchTerm));
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     });
 }
 
@@ -317,6 +369,7 @@ function onCotacaoItemClick(e) {
         selectedCotacaoItem = itemEl;
     }
 }
+<<<<<<< HEAD
 
 /**
  * [ALTERADO] Ponto de entrada quando um item da NF é clicado manualmente.
@@ -327,10 +380,16 @@ function onNfItemClick(e) {
     if ($(e.target).closest('.btn-ajuste-manual').length > 0) return;
 
     // Verifica se o usuário já selecionou um item da cotação
+=======
+function onNfItemClick(e) {
+    e.preventDefault();
+    if ($(e.target).closest('.btn-ajuste-manual').length > 0) return;
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     if (!selectedCotacaoItem) {
         alert("Selecione primeiro um item da Cotação para ligar.");
         return;
     }
+<<<<<<< HEAD
 
     // Chama a nova função de vinculação, passando o item de cotação selecionado
     // globalmente e o item da NF que foi clicado.
@@ -458,10 +517,29 @@ function tentarConciliacaoAutomatica() {
                         _ConciliacaoNFScript_vincularItemNF(cotItemEl, nfItemEl);
                     }
                 });
+=======
+    conciliarItens(selectedCotacaoItem, $(this));
+    selectedCotacaoItem.removeClass('selected-for-match');
+    selectedCotacaoItem = null;
+}
+function tentarConciliacaoAutomatica() {
+    $('#cotacao-items-list .list-group-item').each(function() {
+        const cotItemEl = $(this);
+        const cotItem = cotItemEl.data('item-info');
+        const mapeamento = mapaConciliacao.find(m => m.itemCotacao === cotItem.subProduto);
+        if (mapeamento) {
+            $('#nf-items-list .list-group-item:not(.matched)').each(function() {
+                const nfItemEl = $(this);
+                if (nfItemEl.data('item-info').descricaoNF === mapeamento.descricaoNF) {
+                    conciliarItens(cotItemEl, nfItemEl);
+                    return false;
+                }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             });
         }
     });
 }
+<<<<<<< HEAD
 
 /**
  * [ALTERADO] Atualiza a exibição de um card de conciliação.
@@ -501,6 +579,44 @@ function _atualizarVisualMatchedCard(card) {
     }
 }
 
+=======
+function conciliarItens(cotacaoItemEl, nfItemEl) {
+    cotacaoItemEl.addClass('matched');
+    nfItemEl.addClass('matched');
+    const itemCot = cotacaoItemEl.data('item-info');
+    const itemNF_Original = nfItemEl.data('item-info');
+    const ajusteManual = nfItemEl.data('ajuste-manual');
+    const itemNF_ParaComparar = ajusteManual ? { ...itemNF_Original, ...ajusteManual } : { ...itemNF_Original };
+    const template = $('#template-matched-item').prop('content').cloneNode(true);
+    const card = $(template.querySelector('.matched-item-card'));
+    card.data('conciliacao-info', {
+        itemCot: itemCot,
+        itemNF_Original: itemNF_Original,
+        itemNF_Ajustada: itemNF_ParaComparar,
+        fator: ajusteManual ? ajusteManual.fator : 1
+    });
+    $('#matched-items-container').append(card);
+    _atualizarVisualMatchedCard(card);
+    _popularRateioDoCard(card);
+    recalcularErenderizarResumoRateio();
+}
+function _atualizarVisualMatchedCard(card) {
+    const info = card.data('conciliacao-info');
+    if (!info) return;
+    card.find('.item-cot-descricao').text(info.itemCot.subProduto);
+    card.find('.item-nf-descricao').text(info.itemNF_Original.descricaoNF);
+    const diffPreco = info.itemNF_Ajustada.precoNF - info.itemCot.preco;
+    const diffQtd = info.itemNF_Ajustada.qtdNF - info.itemCot.qtdComprar;
+    card.find('.divergencia-preco').html(Math.abs(diffPreco) < 0.01 ? `<span class="badge text-bg-success">OK</span>` : `<span class="badge text-bg-danger">${formatarMoeda(diffPreco)}</span>`);
+    card.find('.divergencia-qtd').html(Math.abs(diffQtd) < 0.001 ? `<span class="badge text-bg-success">OK</span>` : `<span class="badge text-bg-warning">${diffQtd > 0 ? '+' : ''}${diffQtd.toFixed(2)}</span>`);
+    const fatorInfoEl = card.find('.fator-info');
+    if (info.fator !== 1) {
+        fatorInfoEl.html(`<i class="bi bi-box-seam"></i> Fator: ${info.fator} | Qtd: ${info.itemNF_Ajustada.qtdNF.toFixed(2)}, Preço: ${formatarMoeda(info.itemNF_Ajustada.precoNF)}`);
+    } else {
+        fatorInfoEl.empty();
+    }
+}
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function _popularRateioDoCard(card) {
     const info = card.data('conciliacao-info');
     if (!info) return;
@@ -521,15 +637,35 @@ function _popularRateioDoCard(card) {
     }
     onPorcentagemOuSetorChange({ target: card.find('.rateio-section')[0] });
 }
+<<<<<<< HEAD
 
 /**
  * [ALTERADO] Abre o modal de ajuste para um item conciliado.
  * Adaptado para a nova estrutura de dados (array de itens da NF).
  */
+=======
+function onBtnAjusteManualClick(e) {
+    e.preventDefault(); e.stopPropagation();
+    activeItemForAdjustment = $(this).closest('.list-group-item');
+    const itemNF_Original = activeItemForAdjustment.data('item-info');
+    const itemCot = selectedCotacaoItem ? selectedCotacaoItem.data('item-info') : { subProduto: 'Nenhum item selecionado', qtdComprar: 0, preco: 0 };
+    $('#ajuste-cot-descricao').text(itemCot.subProduto);
+    $('#ajuste-cot-qtd').text(itemCot.qtdComprar.toFixed(2));
+    $('#ajuste-cot-preco').text(formatarMoeda(itemCot.preco));
+    $('#ajuste-nf-descricao').text(itemNF_Original.descricaoNF);
+    $('#ajuste-nf-qtd').text(itemNF_Original.qtdNF.toFixed(2));
+    $('#ajuste-nf-preco').text(formatarMoeda(itemNF_Original.precoNF));
+    const ajusteExistente = activeItemForAdjustment.data('ajuste-manual');
+    $('#ajuste-fator').val(ajusteExistente ? ajusteExistente.fator : 1);
+    calcularVisualizacaoAjuste();
+    ajusteModalInstance.show();
+}
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onBtnReajustarItemClick(e) {
     e.preventDefault(); e.stopPropagation();
     activeItemForAdjustment = $(this).closest('.matched-item-card');
     const info = activeItemForAdjustment.data('conciliacao-info');
+<<<<<<< HEAD
 
     // Como o botão só está habilitado para 1 item, podemos pegar o primeiro com segurança.
     const itemNF_Original = info.itensNF_Original[0];
@@ -586,12 +722,40 @@ function calcularVisualizacaoAjuste() {
  * A lógica agora atualiza a fonte da verdade (o item na lista da NF) e
  * força a re-sincronização do card agregado.
  */
+=======
+    $('#ajuste-cot-descricao').text(info.itemCot.subProduto);
+    $('#ajuste-cot-qtd').text(info.itemCot.qtdComprar.toFixed(2));
+    $('#ajuste-cot-preco').text(formatarMoeda(info.itemCot.preco));
+    $('#ajuste-nf-descricao').text(info.itemNF_Original.descricaoNF);
+    $('#ajuste-nf-qtd').text(info.itemNF_Original.qtdNF.toFixed(2));
+    $('#ajuste-nf-preco').text(formatarMoeda(info.itemNF_Original.precoNF));
+    $('#ajuste-fator').val(info.fator);
+    calcularVisualizacaoAjuste();
+    ajusteModalInstance.show();
+}
+function calcularVisualizacaoAjuste() {
+    let itemNF_Original;
+    if (activeItemForAdjustment.hasClass('matched-item-card')) {
+        itemNF_Original = activeItemForAdjustment.data('conciliacao-info').itemNF_Original;
+    } else {
+        itemNF_Original = activeItemForAdjustment.data('item-info');
+    }
+    if (!itemNF_Original) return;
+    const fator = parseFloat($('#ajuste-fator').val()) || 1;
+    if (fator <= 0) return;
+    const novaQtd = itemNF_Original.qtdNF * fator;
+    const novoPreco = itemNF_Original.precoNF / fator;
+    $('#ajuste-nova-qtd').text(novaQtd.toFixed(4));
+    $('#ajuste-novo-preco').text(formatarMoeda(novoPreco));
+}
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onBtnSalvarAjusteManualClick() {
     const fator = parseFloat($('#ajuste-fator').val());
     if (!fator || fator <= 0) {
         alert("Insira um fator válido (número maior que zero).");
         return;
     }
+<<<<<<< HEAD
 
     if (activeItemForAdjustment && activeItemForAdjustment.hasClass('matched-item-card')) {
         const info = activeItemForAdjustment.data('conciliacao-info');
@@ -614,6 +778,28 @@ function onBtnSalvarAjusteManualClick() {
     ajusteModalInstance.hide();
 }
 
+=======
+    if (activeItemForAdjustment.hasClass('matched-item-card')) {
+        const info = activeItemForAdjustment.data('conciliacao-info');
+        info.fator = fator;
+        info.itemNF_Ajustada.qtdNF = info.itemNF_Original.qtdNF * fator;
+        info.itemNF_Ajustada.precoNF = info.itemNF_Original.precoNF / fator;
+        activeItemForAdjustment.data('conciliacao-info', info);
+        _atualizarVisualMatchedCard(activeItemForAdjustment);
+        recalcularErenderizarResumoRateio();
+    } else {
+        const itemNF_Original = activeItemForAdjustment.data('item-info');
+        const dadosAjustados = {
+            fator: fator,
+            qtdNF: itemNF_Original.qtdNF * fator,
+            precoNF: itemNF_Original.precoNF / fator
+        };
+        activeItemForAdjustment.data('ajuste-manual', dadosAjustados);
+        activeItemForAdjustment.find('.ajuste-info').html(`<i class="bi bi-box-seam"></i> Fator ${fator} aplicado`);
+    }
+    ajusteModalInstance.hide();
+}
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onAdicionarSetorManualClick(event) {
     const card = $(event.target).closest('.matched-item-card');
     if (card.data('rateio-info').isAutomatico) return;
@@ -645,25 +831,37 @@ function onPorcentagemOuSetorChange(event) {
     recalcularErenderizarResumoRateio();
 }
 
+<<<<<<< HEAD
 /**
  * [ALTERADO] Recalcula e renderiza os resumos de totais e rateio.
  * Corrigido para usar a nova propriedade 'itemNF_Agregada' em vez de 'itemNF_Ajustada'.
  */
+=======
+// [ALTERADO] Função corrigida para incluir a pré-visualização do Contas a Pagar
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function recalcularErenderizarResumoRateio() {
     const nfInfo = $('#workspace-content').data('active-nf');
     if (!nfInfo) return;
     const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
     if (!totaisNF) return;
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     // Cálculos Gerais
     let totalConciliadoBruto = 0;
     const mapaSetorParaItens = {};
     $('.matched-item-card').each(function() {
         const info = $(this).data('conciliacao-info');
+<<<<<<< HEAD
         // [CORREÇÃO] Usando a propriedade correta 'itemNF_Agregada'
         if (info && info.itemNF_Agregada) {
           totalConciliadoBruto += info.itemNF_Agregada.qtdNF * info.itemNF_Agregada.precoNF;
         }
+=======
+        totalConciliadoBruto += info.itemNF_Ajustada.qtdNF * info.itemNF_Ajustada.precoNF;
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     });
     $('.total-notas-valor').text(formatarMoeda(totaisNF.valorTotalNf));
     $('.total-conciliado-valor').text(formatarMoeda(totalConciliadoBruto));
@@ -676,11 +874,15 @@ function recalcularErenderizarResumoRateio() {
         const card = $(this);
         const concInfo = card.data('conciliacao-info');
         const rateioInfo = card.data('rateio-info');
+<<<<<<< HEAD
 
         if (!concInfo || !concInfo.itemNF_Agregada || !rateioInfo) return;
 
         // [CORREÇÃO] Usando a propriedade correta 'itemNF_Agregada'
         const valorBrutoItem = concInfo.itemNF_Agregada.qtdNF * concInfo.itemNF_Agregada.precoNF;
+=======
+        const valorBrutoItem = concInfo.itemNF_Ajustada.qtdNF * concInfo.itemNF_Ajustada.precoNF;
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         const proporcaoItem = totalConciliadoBruto > 0.01 ? valorBrutoItem / totalConciliadoBruto : 0;
         const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
         const aplicarRateio = (setor, porcentagem) => {
@@ -710,6 +912,10 @@ function recalcularErenderizarResumoRateio() {
     resumoContainer.html(resumoHtml);
     $('#total-rateado').text(formatarMoeda(totalCalculado));
 
+<<<<<<< HEAD
+=======
+    // ***** INÍCIO DA CORREÇÃO *****
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     // Renderiza a Pré-visualização do Contas a Pagar
     const faturasContainer = $('#faturas-preview-container').empty();
     const faturas = totaisNF.faturas || [];
@@ -717,10 +923,17 @@ function recalcularErenderizarResumoRateio() {
     const numSetores = Object.keys(totaisPorSetor).length;
     const totalNovosTitulos = numFaturasOriginais * numSetores;
 
+<<<<<<< HEAD
     if (totalNovosTitulos > 0 && totalCalculado > 0.001) {
         faturasContainer.append(`<h6>Serão criados ${totalNovosTitulos} novo(s) título(s):</h6>`);
         let faturasHtml = '<ul class="list-group list-group-flush small">';
         if (faturas.length > 0) {
+=======
+    if (totalNovosTitulos > 0) {
+        faturasContainer.append(`<h6>Serão criados ${totalNovosTitulos} novo(s) título(s):</h6>`);
+        let faturasHtml = '<ul class="list-group list-group-flush small">';
+        if (faturas.length > 0 && totalCalculado > 0) {
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             let novoNumeroParcela = 1;
             faturas.forEach(fatura => {
                 Object.keys(totaisPorSetor).sort().forEach(setor => {
@@ -736,7 +949,11 @@ function recalcularErenderizarResumoRateio() {
                     </li>`;
                 });
             });
+<<<<<<< HEAD
         } else { // Pagamento à vista
+=======
+        } else if (totalCalculado > 0) { // Pagamento à vista
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             Object.keys(totaisPorSetor).sort().forEach(setor => {
                 const valorRateado = totaisPorSetor[setor];
                 faturasHtml += `<li class="list-group-item">
@@ -747,18 +964,31 @@ function recalcularErenderizarResumoRateio() {
                     <div class="text-muted">Pagamento à Vista</div>
                 </li>`;
             });
+<<<<<<< HEAD
         } 
+=======
+        } else {
+             faturasHtml += '<li class="list-group-item text-muted">Nenhum valor a ser rateado.</li>';
+        }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         faturasHtml += '</ul>';
         faturasContainer.html(faturasHtml);
     } else {
         faturasContainer.html('<p class="text-muted small">Nenhuma pré-visualização disponível.</p>');
     }
+<<<<<<< HEAD
 }
 
 /**
  * [ALTERADO] Coleta os dados da tela para preparar o payload para o salvamento em lote.
  * Contém a correção de um erro de digitação ('conciliaacao-info').
  */
+=======
+    // ***** FIM DA CORREÇÃO *****
+}
+
+// ===== SALVAMENTO EM LOTE =====
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onBtnConcluirConciliacaoClick() {
     let erroValidacao = false;
     $('.matched-item-card').each(function() {
@@ -775,13 +1005,20 @@ function onBtnConcluirConciliacaoClick() {
     const [idCotacao, ...nomeFornecedorParts] = compositeKey.split('-');
     const nomeFornecedor = nomeFornecedorParts.join('-');
 
+<<<<<<< HEAD
     const conciliacaoPayload = { idCotacao, nomeFornecedor, numeroNF: nfInfo.numeroNF, chavesAcessoNF: [nfInfo.chaveAcesso], itensConciliados: [], novosMapeamentos: [] };
     const itensCortados = [];
 
+=======
+    // 1. Payload da Conciliação
+    const conciliacaoPayload = { idCotacao, nomeFornecedor, numeroNF: nfInfo.numeroNF, chavesAcessoNF: [nfInfo.chaveAcesso], itensConciliados: [], novosMapeamentos: [] };
+    const itensCortados = [];
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $('.matched-item-card').each(function() {
         const info = $(this).data('conciliacao-info');
         conciliacaoPayload.itensConciliados.push({
             subProduto: info.itemCot.subProduto, 
+<<<<<<< HEAD
             quantidadeNota: info.itemNF_Agregada.qtdNF,
             precoNota: info.itemNF_Agregada.precoNF,
             divergenciaNota: formatarMoeda(info.itemNF_Agregada.precoNF - info.itemCot.preco)
@@ -795,19 +1032,41 @@ function onBtnConcluirConciliacaoClick() {
         });
     });
 
+=======
+            quantidadeNota: info.itemNF_Ajustada.qtdNF,
+            precoNota: info.itemNF_Ajustada.precoNF,
+            divergenciaNota: formatarMoeda(info.itemNF_Ajustada.precoNF - info.itemCot.preco)
+        });
+        conciliacaoPayload.novosMapeamentos.push({
+            itemCotacao: info.itemCot.subProduto, 
+            descricaoNF: info.itemNF_Original.descricaoNF,
+            gtin: info.itemNF_Original.gtin || ''
+        });
+    });
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $('#cotacao-items-list .list-group-item:not(.matched)').each(function() {
         itensCortados.push({ idCotacao, nomeFornecedor, subProduto: $(this).data('item-info').subProduto });
     });
 
+<<<<<<< HEAD
+=======
+    // 2. Payload do Rateio
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     const totaisPorSetor = {};
     const novasRegras = [];
     const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
     const totalConciliadoBruto = conciliacaoPayload.itensConciliados.reduce((sum, item) => sum + (item.quantidadeNota * item.precoNota), 0);
     const custosAdicionais = totaisNF.valorTotalNf - totalConciliadoBruto;
+<<<<<<< HEAD
+=======
+    
+    // [NOVO] Cria o mapa de Setor -> Itens para enviar ao backend
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     const mapaSetorParaItens = {};
 
     $('.matched-item-card').each(function() {
         const card = $(this);
+<<<<<<< HEAD
         // [CORREÇÃO] Corrigido o erro de digitação de 'conciliaacao-info' para 'conciliacao-info'
         const concInfo = card.data('conciliacao-info');
         const rateioInfo = card.data('rateio-info');
@@ -815,10 +1074,22 @@ function onBtnConcluirConciliacaoClick() {
         const proporcaoItem = totalConciliadoBruto > 0.01 ? valorBrutoItem / totalConciliadoBruto : 0;
         const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
 
+=======
+        const concInfo = card.data('conciliacao-info');
+        const rateioInfo = card.data('rateio-info');
+        const valorBrutoItem = concInfo.itemNF_Ajustada.qtdNF * concInfo.itemNF_Ajustada.precoNF;
+        const proporcaoItem = totalConciliadoBruto > 0.01 ? valorBrutoItem / totalConciliadoBruto : 0;
+        const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
+        
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         const aplicarRateio = (setor, porcentagem) => {
             if (!setor || !porcentagem) return;
             setor = setor.trim();
             totaisPorSetor[setor] = (totaisPorSetor[setor] || 0) + (custoEfetivoItem * (porcentagem / 100));
+<<<<<<< HEAD
+=======
+            // Adiciona o item da cotação ao mapa do setor
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             if (!mapaSetorParaItens[setor]) mapaSetorParaItens[setor] = new Set();
             mapaSetorParaItens[setor].add(concInfo.itemCot.subProduto);
         };
@@ -835,6 +1106,10 @@ function onBtnConcluirConciliacaoClick() {
         }
     });
 
+<<<<<<< HEAD
+=======
+    // Converte os Sets em Arrays para o JSON
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     for(const setor in mapaSetorParaItens){
       mapaSetorParaItens[setor] = Array.from(mapaSetorParaItens[setor]);
     }
@@ -844,9 +1119,16 @@ function onBtnConcluirConciliacaoClick() {
         totaisPorSetor, 
         novasRegras, 
         numeroNF: nfInfo.numeroNF,
+<<<<<<< HEAD
         mapaSetorParaItens: mapaSetorParaItens
     };
 
+=======
+        mapaSetorParaItens: mapaSetorParaItens // [NOVO] Adiciona o mapa ao payload
+    };
+
+    // 3. Adicionar ao Lote
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     stagedPayloads.push({
         conciliacoes: [conciliacaoPayload], 
         itensCortados, 
@@ -855,6 +1137,10 @@ function onBtnConcluirConciliacaoClick() {
         statusUpdates: []
     });
 
+<<<<<<< HEAD
+=======
+    // 4. Atualizar UI
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso)
         .addClass('staged').removeClass('active').find('.status-icon').removeClass('d-none');
     workspace.addClass('d-none').empty();
@@ -921,6 +1207,7 @@ function onAbrirRelatorioRateioClick() {
         .withFailureHandler(onFailure)
         .App_obterUrlWebApp({ view: 'relatoriorateio' });
 }
+<<<<<<< HEAD
 
 /**
  * Adiciona um payload para marcar a NF como 'Bonificação' e atualiza a UI.
@@ -1072,4 +1359,6 @@ function onBtnConcluirRateioSemPedidoClick() {
     $('#workspace-welcome').removeClass('d-none');
     atualizarBotaoSalvarLote();
 }
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 </script>
