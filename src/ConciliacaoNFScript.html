@@ -7,6 +7,10 @@ let todosOsItensCotacao = [];
 let todosOsDadosGeraisNF = [];
 let mapaConciliacao = [];
 let regrasRateio = [];
+<<<<<<< HEAD
+let setoresUnicos = [];
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 let stagedPayloads = [];
 let ajusteModalInstance = null;
 let activeItemForAdjustment = null; 
@@ -30,6 +34,31 @@ function addEventListeners() {
     $('#btn-abrir-relatorio-rateio').on('click', onAbrirRelatorioRateioClick); 
     // Painel Esquerdo
     $('#search-input').on('input', onSearchInputChange);
+<<<<<<< HEAD
+
+    $('#accordion-fornecedores').on('click', '.nf-list-item:not(.staged)', onNfListItemClick);
+
+    // Painel Direito (Delegated events)
+    const panelDireito = $('#panel-direito');
+    panelDireito.on('change', '.select-cotacao-fornecedor', onSelectCotacaoChange);
+    panelDireito.on('click', '#cotacao-items-list .list-group-item:not(.matched)', onCotacaoItemClick);
+    panelDireito.on('click', '#nf-items-list .list-group-item:not(.matched)', onNfItemClick);
+    panelDireito.on('click', '#btn-concluir-conciliacao', onBtnConcluirConciliacaoClick);
+
+    // Adiciona listeners para os novos botões de ação
+    panelDireito.on('click', '#btn-marcar-bonificacao', onMarcarBonificacaoClick);
+    panelDireito.on('click', '#btn-marcar-sem-pedido', onMarcarSemPedidoClick);
+    panelDireito.on('click', '#btn-marcar-tipo-b', onMarcarTipoBClick);
+
+    // Rateio
+    panelDireito.on('click', '.btn-add-setor', onAdicionarSetorManualClick);
+    panelDireito.on('click', '.btn-remove-setor', onRemoverSetorManualClick);
+    panelDireito.on('input', '.input-porcentagem, .input-setor', onPorcentagemOuSetorChange);
+
+    // Ajuste Manual
+    // [CORREÇÃO] A linha abaixo que referenciava a função deletada 'onBtnAjusteManualClick' foi removida.
+    panelDireito.on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
+=======
     $('#nf-list-container').on('click', '.nf-list-item:not(.staged)', onNfListItemClick);
     // Painel Direito
     $('#panel-direito').on('change', '.select-cotacao-fornecedor', onSelectCotacaoChange);
@@ -43,6 +72,7 @@ function addEventListeners() {
     // Ajuste Manual
     $('#panel-direito').on('click', '.btn-ajuste-manual', onBtnAjusteManualClick);
     $('#panel-direito').on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $('#btn-salvar-ajuste-manual').on('click', onBtnSalvarAjusteManualClick);
     $('#ajuste-fator').on('input', calcularVisualizacaoAjuste);
 }
@@ -58,6 +88,32 @@ function resetApplication() {
         .ConciliacaoNFController_obterDadosParaPagina();
 }
 
+<<<<<<< HEAD
+/**
+ * [NOVO] Adiciona um payload para marcar a NF como 'NF Tipo B'.
+ * Este é um estado final sem rateio.
+ */
+function onMarcarTipoBClick() {
+    const nfInfo = $('#workspace-content').data('active-nf');
+    if (!nfInfo || !confirm(`Tem certeza que deseja marcar a NF ${nfInfo.numeroNF} como 'NF Tipo B'? Esta ação não poderá ser desfeita após salvar.`)) {
+        return;
+    }
+    
+    stagedPayloads.push({
+        statusUpdates: [{ chaveAcesso: nfInfo.chaveAcesso, novoStatus: 'NF Tipo B' }]
+    });
+
+    $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso)
+        .addClass('staged').removeClass('active').find('.status-icon').removeClass('d-none')
+        .find('.staged-status-badge').text('Tipo B').removeClass('d-none'); // Atualiza o badge
+        
+    $('#workspace-content').addClass('d-none').empty();
+    $('#workspace-welcome').removeClass('d-none');
+    atualizarBotaoSalvarLote();
+}
+
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 // ===== CALLBACKS DO SERVIDOR E PROCESSAMENTO DE DADOS =====
 function onDadosIniciaisSuccess(response) {
     toggleLoader(false);
@@ -72,6 +128,20 @@ function onDadosIniciaisSuccess(response) {
     todosOsItensCotacao = response.dados.itensCotacao;
     mapaConciliacao = response.dados.mapeamentoConciliacao || [];
     regrasRateio = response.dados.regrasRateio || [];
+<<<<<<< HEAD
+    setoresUnicos = response.dados.setoresUnicos || []; // ADICIONADO
+
+    // Cria a datalist de setores dinamicamente no body
+    if ($('#datalist-setores').length === 0) {
+        const datalist = $('<datalist id="datalist-setores"></datalist>');
+        setoresUnicos.forEach(setor => {
+            datalist.append(`<option value="${setor}">`);
+        });
+        $('body').append(datalist);
+    }
+    
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     renderizarListaDeTrabalho();
 }
 function onFailure(error) {
@@ -112,11 +182,99 @@ function onUploadSuccess(response) {
 
 // ===== PAINEL ESQUERDO (LISTA DE NFS) =====
 function renderizarListaDeTrabalho() {
+<<<<<<< HEAD
+    const container = $('#accordion-fornecedores').empty();
+=======
     const container = $('#nf-list-container').empty();
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     if (todasAsNFs.length === 0) {
         container.html('<p class="p-3 text-muted text-center">Nenhuma nota fiscal pendente.</p>');
         return;
     }
+<<<<<<< HEAD
+
+    // 1. Agrupar NFs por fornecedor
+    const nfsPorFornecedor = todasAsNFs.reduce((acc, nf) => {
+        const fornecedor = nf.nomeEmitente || 'Fornecedor Desconhecido';
+        if (!acc[fornecedor]) {
+            acc[fornecedor] = [];
+        }
+        acc[fornecedor].push(nf);
+        return acc;
+    }, {});
+
+    // 2. Ordenar fornecedores alfabeticamente
+    const fornecedoresOrdenados = Object.keys(nfsPorFornecedor).sort();
+
+    // 3. Renderizar o accordion
+    for (const fornecedor of fornecedoresOrdenados) {
+        const nfsDoFornecedor = nfsPorFornecedor[fornecedor];
+        const idAccordion = 'fornecedor-' + fornecedor.replace(/[^a-zA-Z0-9]/g, '');
+
+        const accordionItem = $(`
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading-${idAccordion}">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${idAccordion}" aria-expanded="true" aria-controls="collapse-${idAccordion}">
+                        ${fornecedor}
+                        <span class="badge bg-primary rounded-pill ms-2">${nfsDoFornecedor.length}</span>
+                    </button>
+                </h2>
+                <div id="collapse-${idAccordion}" class="accordion-collapse collapse show" aria-labelledby="heading-${idAccordion}">
+                    <div class="accordion-body p-0 list-group list-group-flush">
+                        </div>
+                </div>
+            </div>
+        `);
+
+        const bodyAccordion = accordionItem.find('.accordion-body');
+        nfsDoFornecedor.sort((a,b) => a.numeroNF - b.numeroNF);
+
+        nfsDoFornecedor.forEach(nf => {
+            const template = $('#template-nf-list-item').prop('content').cloneNode(true);
+            const nfItem = $(template.querySelector('.nf-list-item'));
+            nfItem.data('nf-info', nf);
+            nfItem.find('.nf-title').text(`NF ${nf.numeroNF}`);
+            nfItem.find('.nf-fornecedor').text(nf.nomeEmitente); // Mantido para dados internos
+            nfItem.find('.nf-data').text(nf.dataEmissao);
+            const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
+            nfItem.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
+
+            // Remove a classe de borda para um visual mais limpo dentro do accordion
+            nfItem.removeClass('border-bottom');
+            bodyAccordion.append(nfItem);
+        });
+
+        container.append(accordionItem);
+    }
+}
+function onSearchInputChange() {
+    const searchTerm = $(this).val().toLowerCase().trim();
+
+    $('.accordion-item').each(function() {
+        const accordionItem = $(this);
+        let fornecedorVisivel = false;
+
+        accordionItem.find('.nf-list-item').each(function() {
+            const item = $(this);
+            const nfInfo = item.data('nf-info');
+            const fornecedorNome = nfInfo.nomeEmitente.toLowerCase();
+            const nfNumero = String(nfInfo.numeroNF);
+
+            const itemVisivel = fornecedorNome.includes(searchTerm) || nfNumero.includes(searchTerm);
+            item.toggle(itemVisivel);
+
+            if (itemVisivel) {
+                fornecedorVisivel = true;
+            }
+        });
+
+        accordionItem.toggle(fornecedorVisivel);
+
+        // Garante que o accordion esteja aberto se a busca encontrar algo dentro dele
+        if (fornecedorVisivel && searchTerm) {
+            accordionItem.find('.accordion-collapse').addClass('show');
+        }
+=======
     todasAsNFs.sort((a,b) => a.nomeEmitente.localeCompare(b.nomeEmitente) || a.numeroNF - b.numeroNF);
     todasAsNFs.forEach(nf => {
         const template = $('#template-nf-list-item').prop('content').cloneNode(true);
@@ -137,6 +295,7 @@ function onSearchInputChange() {
         const nfInfo = item.data('nf-info');
         const textToSearch = `${nfInfo.nomeEmitente.toLowerCase()} ${nfInfo.numeroNF}`;
         item.toggle(textToSearch.includes(searchTerm));
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     });
 }
 
@@ -210,13 +369,155 @@ function onCotacaoItemClick(e) {
         selectedCotacaoItem = itemEl;
     }
 }
+<<<<<<< HEAD
+
+/**
+ * [ALTERADO] Ponto de entrada quando um item da NF é clicado manualmente.
+ */
+function onNfItemClick(e) {
+    e.preventDefault();
+    // Impede a ação se o clique foi no botão de ajuste manual
+    if ($(e.target).closest('.btn-ajuste-manual').length > 0) return;
+
+    // Verifica se o usuário já selecionou um item da cotação
+=======
 function onNfItemClick(e) {
     e.preventDefault();
     if ($(e.target).closest('.btn-ajuste-manual').length > 0) return;
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     if (!selectedCotacaoItem) {
         alert("Selecione primeiro um item da Cotação para ligar.");
         return;
     }
+<<<<<<< HEAD
+
+    // Chama a nova função de vinculação, passando o item de cotação selecionado
+    // globalmente e o item da NF que foi clicado.
+    _ConciliacaoNFScript_vincularItemNF(selectedCotacaoItem, $(this));
+
+    // Propositalmente NÃO limpamos 'selectedCotacaoItem' aqui.
+    // Isso permite que o usuário clique em múltiplos itens da NF para vincular
+    // ao mesmo item de cotação que permanece selecionado.
+}
+
+/**
+ * [NOVO] Calcula os valores agregados (soma de qtd, média ponderada de preço)
+ * para um card de conciliação que pode conter múltiplos itens da NF.
+ * @param {jQuery} card - O card de conciliação a ser atualizado.
+ */
+function _ConciliacaoNFScript_atualizarAgregadosDoCard(card) {
+    const info = card.data('conciliacao-info');
+    if (!info || !info.itensNF_Original || info.itensNF_Original.length === 0) return;
+
+    let totalQtdAgregada = 0;
+    let totalValorAgregado = 0;
+
+    info.itensNF_Original.forEach(itemNF => {
+        // Considera o ajuste de fator (caixa/fardo) se existir para o item
+        const itemOriginalEl = $(`#nf-items-list .list-group-item`).filter((i, el) => $(el).data('item-info').numeroItem === itemNF.numeroItem);
+        const ajuste = itemOriginalEl.data('ajuste-manual') || { fator: 1 };
+
+        const qtdAjustada = itemNF.qtdNF * ajuste.fator;
+        const precoAjustado = itemNF.precoNF / ajuste.fator;
+
+        totalQtdAgregada += qtdAjustada;
+        totalValorAgregado += qtdAjustada * precoAjustado;
+    });
+
+    const precoMedioPonderado = totalQtdAgregada > 0 ? totalValorAgregado / totalQtdAgregada : 0;
+
+    // Atualiza a propriedade 'itemNF_Agregada' no data do card
+    info.itemNF_Agregada = {
+        qtdNF: totalQtdAgregada,
+        precoNF: precoMedioPonderado
+    };
+
+    // Atualiza a exibição visual do card com os novos dados agregados
+    _atualizarVisualMatchedCard(card);
+}
+
+/**
+ * [NOVO] Função central e segura para vincular um item de cotação a um item de NF.
+ * Previne a interferência entre a seleção manual e a automática e contém a lógica
+ * para criar ou atualizar os cards de conciliação.
+ * @param {jQuery} cotacaoItemEl - O elemento jQuery do item da cotação.
+ * @param {jQuery} nfItemEl - O elemento jQuery do item da nota fiscal.
+ */
+function _ConciliacaoNFScript_vincularItemNF(cotacaoItemEl, nfItemEl) {
+    // Guardas de segurança para garantir que ambos os itens são válidos
+    if (!cotacaoItemEl || !nfItemEl || nfItemEl.hasClass('matched')) return;
+
+    const itemCotInfo = cotacaoItemEl.data('item-info');
+    const itemNfInfo = nfItemEl.data('item-info');
+
+    // Procura se já existe um card de conciliação para este item da cotação
+    let matchedCard = null;
+    $('.matched-item-card').each(function() {
+        const card = $(this);
+        if (card.data('conciliacao-info').itemCot.subProduto === itemCotInfo.subProduto) {
+            matchedCard = card;
+            return false; // Sai do loop .each
+        }
+    });
+
+    if (matchedCard) {
+        // Se o card já existe, apenas adiciona o novo item da NF ao array
+        const conciliacaoInfo = matchedCard.data('conciliacao-info');
+
+        // [CORREÇÃO] Previne que o mesmo item da NF seja adicionado duas vezes ao mesmo card
+        const isAlreadyAdded = conciliacaoInfo.itensNF_Original.some(item => item.numeroItem === itemNfInfo.numeroItem);
+        if (isAlreadyAdded) {
+            console.warn(`Item da NF ${itemNfInfo.numeroItem} já está no card. Ignorando.`);
+            return;
+        }
+
+        conciliacaoInfo.itensNF_Original.push(itemNfInfo);
+    } else {
+        // Se não existe, cria um novo card do zero
+        const template = $('#template-matched-item').prop('content').cloneNode(true);
+        matchedCard = $(template.querySelector('.matched-item-card'));
+
+        const novaConciliacaoInfo = {
+            itemCot: itemCotInfo,
+            itensNF_Original: [itemNfInfo], // Inicia como um array
+            itemNF_Agregada: {} // Objeto para os valores consolidados
+        };
+        matchedCard.data('conciliacao-info', novaConciliacaoInfo);
+
+        $('#matched-items-container').append(matchedCard);
+        _popularRateioDoCard(matchedCard); // Popula o rateio apenas na criação do card
+    }
+
+    // Marca o item da NF como 'matched' para dar feedback visual e prevenir novos cliques
+    nfItemEl.addClass('matched');
+
+    // Atualiza os cálculos agregados e o visual do card
+    _ConciliacaoNFScript_atualizarAgregadosDoCard(matchedCard);
+    recalcularErenderizarResumoRateio();
+}
+
+/**
+ * [ALTERADO] Tenta conciliar itens automaticamente com base no mapa de conciliação.
+ * A função foi corrigida para não usar ou modificar a variável global 'selectedCotacaoItem',
+ * evitando conflito com a seleção manual do usuário.
+ */
+function tentarConciliacaoAutomatica() {
+    $('#cotacao-items-list .list-group-item:not(.matched)').each(function() {
+        const cotItemEl = $(this); // O item da cotação a ser verificado
+        const cotItem = cotItemEl.data('item-info');
+        const mapeamentos = mapaConciliacao.filter(m => m.itemCotacao === cotItem.subProduto);
+
+        if (mapeamentos.length > 0) {
+            mapeamentos.forEach(mapeamento => {
+                $('#nf-items-list .list-group-item:not(.matched)').each(function() {
+                    const nfItemEl = $(this);
+                    if (nfItemEl.data('item-info').descricaoNF === mapeamento.descricaoNF) {
+                        // Passa explicitamente os dois itens para a função de vinculação,
+                        // sem depender da variável global.
+                        _ConciliacaoNFScript_vincularItemNF(cotItemEl, nfItemEl);
+                    }
+                });
+=======
     conciliarItens(selectedCotacaoItem, $(this));
     selectedCotacaoItem.removeClass('selected-for-match');
     selectedCotacaoItem = null;
@@ -233,10 +534,52 @@ function tentarConciliacaoAutomatica() {
                     conciliarItens(cotItemEl, nfItemEl);
                     return false;
                 }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             });
         }
     });
 }
+<<<<<<< HEAD
+
+/**
+ * [ALTERADO] Atualiza a exibição de um card de conciliação.
+ * Agora desabilita o botão de ajuste se múltiplos itens da NF estiverem vinculados.
+ * @param {jQuery} card - O card a ser atualizado.
+ */
+function _atualizarVisualMatchedCard(card) {
+    const info = card.data('conciliacao-info');
+    if (!info || !info.itemNF_Agregada) return;
+
+    const descricoesNF = info.itensNF_Original.map(item => `(Item ${item.numeroItem}) ${item.descricaoNF}`).join('<br>');
+    card.find('.item-cot-descricao').text(info.itemCot.subProduto);
+    card.find('.item-nf-descricao').html(descricoesNF);
+
+    const diffPreco = info.itemNF_Agregada.precoNF - info.itemCot.preco;
+    const diffQtd = info.itemNF_Agregada.qtdNF - info.itemCot.qtdComprar;
+
+    card.find('.divergencia-preco').html(Math.abs(diffPreco) < 0.01 ? `<span class="badge text-bg-success">OK</span>` : `<span class="badge text-bg-danger">${formatarMoeda(diffPreco)}</span>`);
+    card.find('.divergencia-qtd').html(Math.abs(diffQtd) < 0.001 ? `<span class="badge text-bg-success">OK</span>` : `<span class="badge text-bg-warning">${diffQtd > 0 ? '+' : ''}${diffQtd.toFixed(2)}</span>`);
+
+    const fatorInfoEl = card.find('.fator-info');
+    const ajusteButton = card.find('.btn-reajustar-item');
+
+    // [CORREÇÃO] A lógica de ajuste agora verifica se há múltiplos itens
+    if (info.itensNF_Original.length > 1) {
+        ajusteButton.prop('disabled', true).attr('title', 'Ajuste não disponível para múltiplos itens da NF vinculados.');
+        fatorInfoEl.empty();
+    } else {
+        ajusteButton.prop('disabled', false).attr('title', 'Corrigir Fator de Conversão');
+        const itemOriginalEl = $(`#nf-items-list .list-group-item`).filter((i, el) => $(el).data('item-info').numeroItem === info.itensNF_Original[0].numeroItem);
+        const ajuste = itemOriginalEl.data('ajuste-manual');
+        if (ajuste) {
+            fatorInfoEl.html(`<i class="bi bi-box-seam"></i> Fator ${ajuste.fator} aplicado.`);
+        } else {
+            fatorInfoEl.empty();
+        }
+    }
+}
+
+=======
 function conciliarItens(cotacaoItemEl, nfItemEl) {
     cotacaoItemEl.addClass('matched');
     nfItemEl.addClass('matched');
@@ -273,6 +616,7 @@ function _atualizarVisualMatchedCard(card) {
         fatorInfoEl.empty();
     }
 }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function _popularRateioDoCard(card) {
     const info = card.data('conciliacao-info');
     if (!info) return;
@@ -293,6 +637,13 @@ function _popularRateioDoCard(card) {
     }
     onPorcentagemOuSetorChange({ target: card.find('.rateio-section')[0] });
 }
+<<<<<<< HEAD
+
+/**
+ * [ALTERADO] Abre o modal de ajuste para um item conciliado.
+ * Adaptado para a nova estrutura de dados (array de itens da NF).
+ */
+=======
 function onBtnAjusteManualClick(e) {
     e.preventDefault(); e.stopPropagation();
     activeItemForAdjustment = $(this).closest('.list-group-item');
@@ -309,10 +660,69 @@ function onBtnAjusteManualClick(e) {
     calcularVisualizacaoAjuste();
     ajusteModalInstance.show();
 }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onBtnReajustarItemClick(e) {
     e.preventDefault(); e.stopPropagation();
     activeItemForAdjustment = $(this).closest('.matched-item-card');
     const info = activeItemForAdjustment.data('conciliacao-info');
+<<<<<<< HEAD
+
+    // Como o botão só está habilitado para 1 item, podemos pegar o primeiro com segurança.
+    const itemNF_Original = info.itensNF_Original[0];
+
+    $('#ajuste-cot-descricao').text(info.itemCot.subProduto);
+    $('#ajuste-cot-qtd').text(info.itemCot.qtdComprar.toFixed(2));
+    $('#ajuste-cot-preco').text(formatarMoeda(info.itemCot.preco));
+
+    $('#ajuste-nf-descricao').text(itemNF_Original.descricaoNF);
+    $('#ajuste-nf-qtd').text(itemNF_Original.qtdNF.toFixed(2));
+    $('#ajuste-nf-preco').text(formatarMoeda(itemNF_Original.precoNF));
+
+    // Busca o fator de ajuste do item original na lista da NF
+    const itemOriginalEl = $(`#nf-items-list .list-group-item`).filter((i, el) => $(el).data('item-info').numeroItem === itemNF_Original.numeroItem);
+    const ajusteExistente = itemOriginalEl.data('ajuste-manual');
+
+    $('#ajuste-fator').val(ajusteExistente ? ajusteExistente.fator : 1);
+
+    calcularVisualizacaoAjuste();
+    ajusteModalInstance.show();
+}
+
+/**
+ * [ALTERADO] Calcula e exibe a pré-visualização do ajuste no modal.
+ * A função foi corrigida para acessar o item da NF de dentro do array,
+ * resolvendo o erro que impedia a abertura do modal.
+ */
+function calcularVisualizacaoAjuste() {
+    // A função agora só precisa lidar com o 'activeItemForAdjustment' quando é um card.
+    if (!activeItemForAdjustment || !activeItemForAdjustment.hasClass('matched-item-card')) return;
+
+    // Obtém o array de itens da NF a partir dos dados do card.
+    const itensNF_Original_Array = activeItemForAdjustment.data('conciliacao-info').itensNF_Original;
+
+    // Como o botão de ajuste só é habilitado quando há um único item vinculado,
+    // podemos pegar o primeiro elemento do array com segurança.
+    const itemNF_Original = itensNF_Original_Array[0];
+
+    // Se por algum motivo o item não for encontrado, interrompe a execução.
+    if (!itemNF_Original) return;
+
+    const fator = parseFloat($('#ajuste-fator').val()) || 1;
+    if (fator <= 0) return;
+
+    const novaQtd = itemNF_Original.qtdNF * fator;
+    const novoPreco = itemNF_Original.precoNF / fator;
+    
+    $('#ajuste-nova-qtd').text(novaQtd.toFixed(4));
+    $('#ajuste-novo-preco').text(formatarMoeda(novoPreco));
+}
+
+/**
+ * [ALTERADO] Salva o fator de ajuste do modal.
+ * A lógica agora atualiza a fonte da verdade (o item na lista da NF) e
+ * força a re-sincronização do card agregado.
+ */
+=======
     $('#ajuste-cot-descricao').text(info.itemCot.subProduto);
     $('#ajuste-cot-qtd').text(info.itemCot.qtdComprar.toFixed(2));
     $('#ajuste-cot-preco').text(formatarMoeda(info.itemCot.preco));
@@ -338,12 +748,37 @@ function calcularVisualizacaoAjuste() {
     $('#ajuste-nova-qtd').text(novaQtd.toFixed(4));
     $('#ajuste-novo-preco').text(formatarMoeda(novoPreco));
 }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onBtnSalvarAjusteManualClick() {
     const fator = parseFloat($('#ajuste-fator').val());
     if (!fator || fator <= 0) {
         alert("Insira um fator válido (número maior que zero).");
         return;
     }
+<<<<<<< HEAD
+
+    if (activeItemForAdjustment && activeItemForAdjustment.hasClass('matched-item-card')) {
+        const info = activeItemForAdjustment.data('conciliacao-info');
+        const itemNF_Original_Info = info.itensNF_Original[0];
+
+        // Encontra o elemento correspondente na lista de "Itens da NF"
+        const itemOriginalEl = $(`#nf-items-list .list-group-item`).filter((i, el) => $(el).data('item-info').numeroItem === itemNF_Original_Info.numeroItem);
+
+        if(itemOriginalEl.length > 0) {
+             // Salva o fator de ajuste no próprio elemento da lista da NF
+            const dadosAjustados = { fator: fator };
+            itemOriginalEl.data('ajuste-manual', dadosAjustados);
+
+            // Força a re-sincronização do card para recalcular os agregados
+            _ConciliacaoNFScript_atualizarAgregadosDoCard(activeItemForAdjustment);
+            recalcularErenderizarResumoRateio();
+        }
+    }
+
+    ajusteModalInstance.hide();
+}
+
+=======
     if (activeItemForAdjustment.hasClass('matched-item-card')) {
         const info = activeItemForAdjustment.data('conciliacao-info');
         info.fator = fator;
@@ -364,6 +799,7 @@ function onBtnSalvarAjusteManualClick() {
     }
     ajusteModalInstance.hide();
 }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onAdicionarSetorManualClick(event) {
     const card = $(event.target).closest('.matched-item-card');
     if (card.data('rateio-info').isAutomatico) return;
@@ -395,19 +831,37 @@ function onPorcentagemOuSetorChange(event) {
     recalcularErenderizarResumoRateio();
 }
 
+<<<<<<< HEAD
+/**
+ * [ALTERADO] Recalcula e renderiza os resumos de totais e rateio.
+ * Corrigido para usar a nova propriedade 'itemNF_Agregada' em vez de 'itemNF_Ajustada'.
+ */
+=======
 // [ALTERADO] Função corrigida para incluir a pré-visualização do Contas a Pagar
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function recalcularErenderizarResumoRateio() {
     const nfInfo = $('#workspace-content').data('active-nf');
     if (!nfInfo) return;
     const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
     if (!totaisNF) return;
+<<<<<<< HEAD
+
+=======
     
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     // Cálculos Gerais
     let totalConciliadoBruto = 0;
     const mapaSetorParaItens = {};
     $('.matched-item-card').each(function() {
         const info = $(this).data('conciliacao-info');
+<<<<<<< HEAD
+        // [CORREÇÃO] Usando a propriedade correta 'itemNF_Agregada'
+        if (info && info.itemNF_Agregada) {
+          totalConciliadoBruto += info.itemNF_Agregada.qtdNF * info.itemNF_Agregada.precoNF;
+        }
+=======
         totalConciliadoBruto += info.itemNF_Ajustada.qtdNF * info.itemNF_Ajustada.precoNF;
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     });
     $('.total-notas-valor').text(formatarMoeda(totaisNF.valorTotalNf));
     $('.total-conciliado-valor').text(formatarMoeda(totalConciliadoBruto));
@@ -420,7 +874,15 @@ function recalcularErenderizarResumoRateio() {
         const card = $(this);
         const concInfo = card.data('conciliacao-info');
         const rateioInfo = card.data('rateio-info');
+<<<<<<< HEAD
+
+        if (!concInfo || !concInfo.itemNF_Agregada || !rateioInfo) return;
+
+        // [CORREÇÃO] Usando a propriedade correta 'itemNF_Agregada'
+        const valorBrutoItem = concInfo.itemNF_Agregada.qtdNF * concInfo.itemNF_Agregada.precoNF;
+=======
         const valorBrutoItem = concInfo.itemNF_Ajustada.qtdNF * concInfo.itemNF_Ajustada.precoNF;
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         const proporcaoItem = totalConciliadoBruto > 0.01 ? valorBrutoItem / totalConciliadoBruto : 0;
         const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
         const aplicarRateio = (setor, porcentagem) => {
@@ -450,7 +912,10 @@ function recalcularErenderizarResumoRateio() {
     resumoContainer.html(resumoHtml);
     $('#total-rateado').text(formatarMoeda(totalCalculado));
 
+<<<<<<< HEAD
+=======
     // ***** INÍCIO DA CORREÇÃO *****
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     // Renderiza a Pré-visualização do Contas a Pagar
     const faturasContainer = $('#faturas-preview-container').empty();
     const faturas = totaisNF.faturas || [];
@@ -458,10 +923,17 @@ function recalcularErenderizarResumoRateio() {
     const numSetores = Object.keys(totaisPorSetor).length;
     const totalNovosTitulos = numFaturasOriginais * numSetores;
 
+<<<<<<< HEAD
+    if (totalNovosTitulos > 0 && totalCalculado > 0.001) {
+        faturasContainer.append(`<h6>Serão criados ${totalNovosTitulos} novo(s) título(s):</h6>`);
+        let faturasHtml = '<ul class="list-group list-group-flush small">';
+        if (faturas.length > 0) {
+=======
     if (totalNovosTitulos > 0) {
         faturasContainer.append(`<h6>Serão criados ${totalNovosTitulos} novo(s) título(s):</h6>`);
         let faturasHtml = '<ul class="list-group list-group-flush small">';
         if (faturas.length > 0 && totalCalculado > 0) {
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             let novoNumeroParcela = 1;
             faturas.forEach(fatura => {
                 Object.keys(totaisPorSetor).sort().forEach(setor => {
@@ -477,7 +949,11 @@ function recalcularErenderizarResumoRateio() {
                     </li>`;
                 });
             });
+<<<<<<< HEAD
+        } else { // Pagamento à vista
+=======
         } else if (totalCalculado > 0) { // Pagamento à vista
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             Object.keys(totaisPorSetor).sort().forEach(setor => {
                 const valorRateado = totaisPorSetor[setor];
                 faturasHtml += `<li class="list-group-item">
@@ -488,18 +964,31 @@ function recalcularErenderizarResumoRateio() {
                     <div class="text-muted">Pagamento à Vista</div>
                 </li>`;
             });
+<<<<<<< HEAD
+        } 
+=======
         } else {
              faturasHtml += '<li class="list-group-item text-muted">Nenhum valor a ser rateado.</li>';
         }
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         faturasHtml += '</ul>';
         faturasContainer.html(faturasHtml);
     } else {
         faturasContainer.html('<p class="text-muted small">Nenhuma pré-visualização disponível.</p>');
     }
+<<<<<<< HEAD
+}
+
+/**
+ * [ALTERADO] Coleta os dados da tela para preparar o payload para o salvamento em lote.
+ * Contém a correção de um erro de digitação ('conciliaacao-info').
+ */
+=======
     // ***** FIM DA CORREÇÃO *****
 }
 
 // ===== SALVAMENTO EM LOTE =====
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 function onBtnConcluirConciliacaoClick() {
     let erroValidacao = false;
     $('.matched-item-card').each(function() {
@@ -516,13 +1005,34 @@ function onBtnConcluirConciliacaoClick() {
     const [idCotacao, ...nomeFornecedorParts] = compositeKey.split('-');
     const nomeFornecedor = nomeFornecedorParts.join('-');
 
+<<<<<<< HEAD
+    const conciliacaoPayload = { idCotacao, nomeFornecedor, numeroNF: nfInfo.numeroNF, chavesAcessoNF: [nfInfo.chaveAcesso], itensConciliados: [], novosMapeamentos: [] };
+    const itensCortados = [];
+
+=======
     // 1. Payload da Conciliação
     const conciliacaoPayload = { idCotacao, nomeFornecedor, numeroNF: nfInfo.numeroNF, chavesAcessoNF: [nfInfo.chaveAcesso], itensConciliados: [], novosMapeamentos: [] };
     const itensCortados = [];
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $('.matched-item-card').each(function() {
         const info = $(this).data('conciliacao-info');
         conciliacaoPayload.itensConciliados.push({
             subProduto: info.itemCot.subProduto, 
+<<<<<<< HEAD
+            quantidadeNota: info.itemNF_Agregada.qtdNF,
+            precoNota: info.itemNF_Agregada.precoNF,
+            divergenciaNota: formatarMoeda(info.itemNF_Agregada.precoNF - info.itemCot.preco)
+        });
+        info.itensNF_Original.forEach(itemNF => {
+            conciliacaoPayload.novosMapeamentos.push({
+                itemCotacao: info.itemCot.subProduto, 
+                descricaoNF: itemNF.descricaoNF,
+                gtin: itemNF.gtin || ''
+            });
+        });
+    });
+
+=======
             quantidadeNota: info.itemNF_Ajustada.qtdNF,
             precoNota: info.itemNF_Ajustada.precoNF,
             divergenciaNota: formatarMoeda(info.itemNF_Ajustada.precoNF - info.itemCot.preco)
@@ -533,33 +1043,53 @@ function onBtnConcluirConciliacaoClick() {
             gtin: info.itemNF_Original.gtin || ''
         });
     });
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $('#cotacao-items-list .list-group-item:not(.matched)').each(function() {
         itensCortados.push({ idCotacao, nomeFornecedor, subProduto: $(this).data('item-info').subProduto });
     });
 
+<<<<<<< HEAD
+=======
     // 2. Payload do Rateio
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     const totaisPorSetor = {};
     const novasRegras = [];
     const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
     const totalConciliadoBruto = conciliacaoPayload.itensConciliados.reduce((sum, item) => sum + (item.quantidadeNota * item.precoNota), 0);
     const custosAdicionais = totaisNF.valorTotalNf - totalConciliadoBruto;
+<<<<<<< HEAD
+=======
     
     // [NOVO] Cria o mapa de Setor -> Itens para enviar ao backend
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     const mapaSetorParaItens = {};
 
     $('.matched-item-card').each(function() {
         const card = $(this);
+<<<<<<< HEAD
+        // [CORREÇÃO] Corrigido o erro de digitação de 'conciliaacao-info' para 'conciliacao-info'
+        const concInfo = card.data('conciliacao-info');
+        const rateioInfo = card.data('rateio-info');
+        const valorBrutoItem = concInfo.itemNF_Agregada.qtdNF * concInfo.itemNF_Agregada.precoNF;
+        const proporcaoItem = totalConciliadoBruto > 0.01 ? valorBrutoItem / totalConciliadoBruto : 0;
+        const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
+
+=======
         const concInfo = card.data('conciliacao-info');
         const rateioInfo = card.data('rateio-info');
         const valorBrutoItem = concInfo.itemNF_Ajustada.qtdNF * concInfo.itemNF_Ajustada.precoNF;
         const proporcaoItem = totalConciliadoBruto > 0.01 ? valorBrutoItem / totalConciliadoBruto : 0;
         const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
         
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
         const aplicarRateio = (setor, porcentagem) => {
             if (!setor || !porcentagem) return;
             setor = setor.trim();
             totaisPorSetor[setor] = (totaisPorSetor[setor] || 0) + (custoEfetivoItem * (porcentagem / 100));
+<<<<<<< HEAD
+=======
             // Adiciona o item da cotação ao mapa do setor
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
             if (!mapaSetorParaItens[setor]) mapaSetorParaItens[setor] = new Set();
             mapaSetorParaItens[setor].add(concInfo.itemCot.subProduto);
         };
@@ -576,7 +1106,10 @@ function onBtnConcluirConciliacaoClick() {
         }
     });
 
+<<<<<<< HEAD
+=======
     // Converte os Sets em Arrays para o JSON
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     for(const setor in mapaSetorParaItens){
       mapaSetorParaItens[setor] = Array.from(mapaSetorParaItens[setor]);
     }
@@ -586,10 +1119,16 @@ function onBtnConcluirConciliacaoClick() {
         totaisPorSetor, 
         novasRegras, 
         numeroNF: nfInfo.numeroNF,
+<<<<<<< HEAD
+        mapaSetorParaItens: mapaSetorParaItens
+    };
+
+=======
         mapaSetorParaItens: mapaSetorParaItens // [NOVO] Adiciona o mapa ao payload
     };
 
     // 3. Adicionar ao Lote
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     stagedPayloads.push({
         conciliacoes: [conciliacaoPayload], 
         itensCortados, 
@@ -598,7 +1137,10 @@ function onBtnConcluirConciliacaoClick() {
         statusUpdates: []
     });
 
+<<<<<<< HEAD
+=======
     // 4. Atualizar UI
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
     $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso)
         .addClass('staged').removeClass('active').find('.status-icon').removeClass('d-none');
     workspace.addClass('d-none').empty();
@@ -665,4 +1207,158 @@ function onAbrirRelatorioRateioClick() {
         .withFailureHandler(onFailure)
         .App_obterUrlWebApp({ view: 'relatoriorateio' });
 }
+<<<<<<< HEAD
+
+/**
+ * Adiciona um payload para marcar a NF como 'Bonificação' e atualiza a UI.
+ * Este é um estado final sem rateio.
+ */
+function onMarcarBonificacaoClick() {
+    const nfInfo = $('#workspace-content').data('active-nf');
+    if (!nfInfo || !confirm(`Tem certeza que deseja marcar a NF ${nfInfo.numeroNF} como 'Bonificação'? Esta ação não poderá ser desfeita após salvar.`)) {
+        return;
+    }
+    
+    stagedPayloads.push({
+        statusUpdates: [{ chaveAcesso: nfInfo.chaveAcesso, novoStatus: 'Bonificação' }]
+    });
+
+    $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso)
+        .addClass('staged').removeClass('active').find('.status-icon').removeClass('d-none');
+    $('#workspace-content').addClass('d-none').empty();
+    $('#workspace-welcome').removeClass('d-none');
+    atualizarBotaoSalvarLote();
+}
+
+/**
+ * [ALTERADO] Inicia o fluxo de rateio para notas sem pedido de compra.
+ * Corrigido para usar a nova estrutura de dados e não criar cards em branco.
+ */
+function onMarcarSemPedidoClick() {
+    const nfInfo = $('#workspace-content').data('active-nf');
+    const dadosGerais = todosOsDadosGeraisNF.find(d => d.chaveAcesso === nfInfo.chaveAcesso);
+
+    if (!confirm(`A NF ${nfInfo.numeroNF} será preparada para o rateio direto. Deseja continuar?`)) return;
+
+    $('.select-cotacao-fornecedor').closest('.col-md-5').hide();
+    $('#cotacao-items-list').closest('.col-md-6').hide();
+    $('#nf-items-list').closest('.col-md-6').removeClass('col-md-6').addClass('col-md-12');
+    $('.comparison-container').removeClass('d-none');
+
+    const itensNestaNF = todosOsItensNF.filter(item => item.chaveAcesso === nfInfo.chaveAcesso);
+
+    itensNestaNF.forEach(itemNF => {
+        const itemCotSintetico = {
+            subProduto: itemNF.descricaoNF,
+            qtdComprar: itemNF.qtdNF,
+            preco: itemNF.precoNF
+        };
+
+        const cardTemplate = $('#template-matched-item').prop('content').cloneNode(true);
+        const card = $(cardTemplate.querySelector('.matched-item-card'));
+
+        // [CORREÇÃO] Criando a estrutura de dados correta para o card
+        card.data('conciliacao-info', {
+            itemCot: itemCotSintetico,
+            itensNF_Original: [itemNF], // Usa array
+            itemNF_Agregada: { // Usa a nova propriedade agregada
+                qtdNF: itemNF.qtdNF,
+                precoNF: itemNF.precoNF
+            }
+        });
+
+        $('#matched-items-container').append(card);
+        _atualizarVisualMatchedCard(card); // Agora esta função irá funcionar corretamente
+        _popularRateioDoCard(card);
+    });
+
+    recalcularErenderizarResumoRateio();
+    $('#rateio-summary-section').removeClass('d-none');
+
+    const btnConcluir = $('#btn-concluir-conciliacao');
+    btnConcluir.text('Concluir Rateio Direto').prop('disabled', false)
+               .off('click').on('click', onBtnConcluirRateioSemPedidoClick);
+}
+
+
+/**
+ * Função específica para concluir e preparar o payload de um rateio sem pedido.
+ */
+function onBtnConcluirRateioSemPedidoClick() {
+    let erroValidacao = false;
+    $('.matched-item-card').each(function() {
+        if ($(this).find('.total-percent-item').hasClass('is-invalid')) {
+            alert(`Erro: O rateio do item "${$(this).find('.item-nf-descricao').text()}" não soma 100%.`);
+            erroValidacao = true; return false;
+        }
+    });
+    if (erroValidacao) return;
+
+    const workspace = $('#workspace-content');
+    const nfInfo = workspace.data('active-nf');
+    
+    const totaisPorSetor = {};
+    const novasRegras = [];
+    const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
+    const totalItensBruto = $('.matched-item-card').toArray().reduce((sum, el) => {
+        const info = $(el).data('conciliacao-info');
+        return sum + (info.itemNF_Ajustada.qtdNF * info.itemNF_Ajustada.precoNF);
+    }, 0);
+    
+    const custosAdicionais = totaisNF.valorTotalNf - totalItensBruto;
+    const mapaSetorParaItens = {};
+
+    $('.matched-item-card').each(function() {
+        const card = $(this);
+        const concInfo = card.data('conciliacao-info');
+        const rateioInfo = card.data('rateio-info');
+        const valorBrutoItem = concInfo.itemNF_Ajustada.qtdNF * concInfo.itemNF_Ajustada.precoNF;
+        const proporcaoItem = totalItensBruto > 0.01 ? valorBrutoItem / totalItensBruto : 0;
+        const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
+        
+        const aplicarRateio = (setor, porcentagem) => {
+            if (!setor || !porcentagem) return;
+            setor = setor.trim();
+            totaisPorSetor[setor] = (totaisPorSetor[setor] || 0) + (custoEfetivoItem * (porcentagem / 100));
+            if (!mapaSetorParaItens[setor]) mapaSetorParaItens[setor] = new Set();
+            mapaSetorParaItens[setor].add(concInfo.itemNF_Original.descricaoNF); // Usa a descrição da NF
+        };
+
+        if (rateioInfo.isAutomatico) {
+            rateioInfo.regras.forEach(regra => aplicarRateio(regra.setor, regra.porcentagem));
+        } else {
+            card.find('.manual-rate-row').each(function() {
+                const setor = $(this).find('.input-setor').val().trim();
+                const porcentagem = parseFloat($(this).find('.input-porcentagem').val()) || 0;
+                aplicarRateio(setor, porcentagem);
+                if(setor && porcentagem > 0) novasRegras.push({ itemCotacao: concInfo.itemNF_Original.descricaoNF, setor, porcentagem });
+            });
+        }
+    });
+
+    for(const setor in mapaSetorParaItens){
+      mapaSetorParaItens[setor] = Array.from(mapaSetorParaItens[setor]);
+    }
+
+    const rateioPayload = { 
+        chaveAcesso: nfInfo.chaveAcesso, 
+        totaisPorSetor, 
+        novasRegras, 
+        numeroNF: nfInfo.numeroNF,
+        mapaSetorParaItens: mapaSetorParaItens
+    };
+    
+    stagedPayloads.push({
+        rateios: [rateioPayload],
+        statusUpdates: [{ chaveAcesso: nfInfo.chaveAcesso, novoStatus: 'Conciliada (Sem Pedido)' }]
+    });
+
+    $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso)
+        .addClass('staged').removeClass('active').find('.status-icon').removeClass('d-none');
+    workspace.addClass('d-none').empty();
+    $('#workspace-welcome').removeClass('d-none');
+    atualizarBotaoSalvarLote();
+}
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 </script>

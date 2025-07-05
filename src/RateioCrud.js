@@ -349,4 +349,48 @@ function RateioCrud_obterDadosParaRelatorio(termosDeBusca) {
     Logger.log(`Erro em RateioCrud_obterDadosParaRelatorio: ${e.message}\n${e.stack}`);
     throw new Error(`Ocorreu um erro ao buscar os dados do relatório: ${e.message}`);
   }
+<<<<<<< HEAD
+}
+
+/**
+ * Busca todos os nomes de setores únicos já cadastrados no sistema.
+ * @returns {Array<string>} Um array de strings com nomes de setores únicos e ordenados.
+ */
+function RateioCrud_obterSetoresUnicos() {
+  try {
+    const planilhaFin = SpreadsheetApp.openById(ID_PLANILHA_FINANCEIRO);
+    const setores = new Set();
+
+    // 1. Obter setores da aba de Regras de Rateio
+    const abaRegras = planilhaFin.getSheetByName(ABA_FINANCEIRO_REGRAS_RATEIO);
+    if (abaRegras && abaRegras.getLastRow() > 1) {
+      const dadosRegras = abaRegras.getRange(2, 2, abaRegras.getLastRow() - 1, 1).getValues();
+      dadosRegras.forEach(linha => {
+        if (linha[0]) setores.add(String(linha[0]).trim());
+      });
+    }
+
+    // 2. Obter setores da aba de Contas a Pagar
+    const abaContas = planilhaFin.getSheetByName(ABA_FINANCEIRO_CONTAS_A_PAGAR);
+    if (abaContas && abaContas.getLastRow() > 1) {
+      const cabecalhos = abaContas.getRange(1, 1, 1, abaContas.getLastColumn()).getValues()[0];
+      const colSetor = cabecalhos.indexOf("Setor");
+      
+      if (colSetor !== -1) {
+        const dadosContas = abaContas.getRange(2, colSetor + 1, abaContas.getLastRow() - 1, 1).getValues();
+        dadosContas.forEach(linha => {
+          if (linha[0]) setores.add(String(linha[0]).trim());
+        });
+      }
+    }
+    
+    Logger.log(`Encontrados ${setores.size} setores únicos.`);
+    return Array.from(setores).sort();
+
+  } catch (e) {
+    Logger.log(`Erro em RateioCrud_obterSetoresUnicos: ${e.message}`);
+    return []; // Retorna um array vazio em caso de erro
+  }
+=======
+>>>>>>> 1415d4a6ea5bc830f28cbb5bd785bc2e6e55d279
 }
