@@ -145,17 +145,18 @@
         <div class="row align-items-center">
             <!-- Coluna da Esquerda: Ações -->
             <div class="col-md-5">
-                <h4><i class="bi bi-link-45deg"></i> Vincular a uma Cotação</h4>
-                <select class="form-select select-cotacao-fornecedor" disabled>
-                    <option selected disabled>Selecione a cotação...</option>
-                </select>
+                <div id="bloco-vincular-cotacao">
+                    <h4><i class="bi bi-link-45deg"></i> Vincular a uma Cotação</h4>
+                    <select class="form-select select-cotacao-fornecedor" disabled>
+                        <option selected disabled>Selecione a cotação...</option>
+                    </select>
+                </div>
                 
                 <div class="mt-2">
                     <button id="btn-abrir-modal-fornecedor" class="btn btn-sm btn-outline-secondary" type="button" disabled>
                         <i class="bi bi-person-plus-fill"></i> Cadastrar / Editar Fornecedor da NF
                     </button>
                 </div>
-
                 <div class="mt-2">
                     <button id="btn-abrir-cadastro-itens" class="btn btn-sm btn-outline-info" type="button" disabled>
                         <i class="bi bi-plus-circle-dotted"></i> Cadastrar Itens da NF
@@ -164,7 +165,6 @@
 
                 <div class="sem-pedido-actions border-top mt-3 pt-3">
                     <small class="text-muted d-block mb-2">Ou, se não houver pedido vinculado:</small>
-                    
                     <div class="btn-group">
                         <button id="btn-marcar-sem-pedido" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-arrow-right-circle-fill"></i> Iniciar Rateio Direto

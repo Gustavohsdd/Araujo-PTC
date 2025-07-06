@@ -285,14 +285,16 @@ function onNfListItemClick() {
     const nfInfo = nfItem.data('nf-info');
     const workspaceContent = $('#workspace-content');
     workspaceContent.data('active-nf', nfInfo);
+    
+    // [CORREÇÃO] Reseta o sinalizador de modo de rateio ao selecionar uma nova NF.
+    workspaceContent.data('modo-rateio-direto', false);
+
     $('#workspace-welcome').addClass('d-none');
     const template = $('#template-workspace').prop('content').cloneNode(true);
     workspaceContent.empty().append(template).removeClass('d-none');
     
-    // HABILITE O BOTÃO AQUI
     $('#btn-abrir-modal-fornecedor').prop('disabled', false);
-    $('#btn-abrir-modal-fornecedor').prop('disabled', false);
-    $('#btn-abrir-cadastro-itens').prop('disabled', false); //
+    $('#btn-abrir-cadastro-itens').prop('disabled', false);
 
     const selectCotacao = workspaceContent.find('.select-cotacao-fornecedor');
     const cnpjFornecedor = (nfInfo.cnpjEmitente || '').replace(/[^\d]/g, '');
@@ -991,16 +993,23 @@ function onMarcarBonificacaoClick() {
 }
 
 /**
- * [ALTERADO] Inicia o fluxo de rateio para notas sem pedido de compra.
- * Corrigido para usar a nova estrutura de dados e não criar cards em branco.
+ * [MODIFICADO] Inicia o fluxo de rateio para notas sem pedido de compra.
+ * Agora, oculta apenas os elementos de cotação, mantendo os botões de cadastro visíveis.
  */
 function onMarcarSemPedidoClick() {
     const nfInfo = $('#workspace-content').data('active-nf');
     const dadosGerais = todosOsDadosGeraisNF.find(d => d.chaveAcesso === nfInfo.chaveAcesso);
 
-    if (!confirm(`A NF ${nfInfo.numeroNF} será preparada para o rateio direto. Deseja continuar?`)) return;
+    if (!confirm(`A NF ${nfInfo.numeroNF} será preparada para o rateio direto. Deseja continuar?`)) {
+        return;
+    }
 
-    $('.select-cotacao-fornecedor').closest('.col-md-5').hide();
+    // [CORREÇÃO] Ativa o sinalizador para indicar que estamos em modo de rateio direto.
+    $('#workspace-content').data('modo-rateio-direto', true);
+
+    $('#bloco-vincular-cotacao').hide();
+    $('.sem-pedido-actions').hide();
+    
     $('#cotacao-items-list').closest('.col-md-6').hide();
     $('#nf-items-list').closest('.col-md-6').removeClass('col-md-6').addClass('col-md-12');
     $('.comparison-container').removeClass('d-none');
@@ -1017,18 +1026,17 @@ function onMarcarSemPedidoClick() {
         const cardTemplate = $('#template-matched-item').prop('content').cloneNode(true);
         const card = $(cardTemplate.querySelector('.matched-item-card'));
 
-        // [CORREÇÃO] Criando a estrutura de dados correta para o card
         card.data('conciliacao-info', {
             itemCot: itemCotSintetico,
-            itensNF_Original: [itemNF], // Usa array
-            itemNF_Agregada: { // Usa a nova propriedade agregada
+            itensNF_Original: [itemNF],
+            itemNF_Agregada: {
                 qtdNF: itemNF.qtdNF,
                 precoNF: itemNF.precoNF
             }
         });
 
         $('#matched-items-container').append(card);
-        _atualizarVisualMatchedCard(card); // Agora esta função irá funcionar corretamente
+        _atualizarVisualMatchedCard(card);
         _popularRateioDoCard(card);
     });
 
@@ -1319,19 +1327,30 @@ function onAbrirCadastroItensClick() {
             $('#cadastro-itens-nf-numero').text(nfInfo.numeroNF);
             $('#cadastro-itens-fornecedor-nome').text(fornecedor.Fornecedor).data('fornecedor-id', fornecedor.ID);
 
-            // Filtra apenas os itens da NF que AINDA NÃO foram conciliados
-            const itensConciliadosDescricoes = new Set();
-            $('.matched-item-card').each(function() {
-                const info = $(this).data('conciliacao-info');
-                info.itensNF_Original.forEach(item => itensConciliadosDescricoes.add(item.descricaoNF));
-            });
+            // [CORREÇÃO] Lógica para determinar quais itens mostrar para cadastro.
+            let itensParaCadastrar = [];
+            const isModoRateioDireto = $('#workspace-content').data('modo-rateio-direto') === true;
 
-            const itensNaoConciliados = itensNF.filter(item => !itensConciliadosDescricoes.has(item.descricaoNF));
-
-            if (itensNaoConciliados.length === 0) {
-                 container.html('<div class="alert alert-warning">Todos os itens desta NF já foram conciliados ou estão em processo de rateio direto. Não há itens para cadastrar.</div>');
+            if (isModoRateioDireto) {
+                // Se estamos em modo de rateio direto, todos os itens da NF estão disponíveis para cadastro,
+                // ignorando os "cards falsos" de conciliação na tela.
+                itensParaCadastrar = itensNF;
             } else {
-                itensNaoConciliados.forEach(item => {
+                // Se estamos em modo de conciliação normal, filtramos os itens que já foram conciliados.
+                const itensConciliadosDescricoes = new Set();
+                $('.matched-item-card').each(function() {
+                    const info = $(this).data('conciliacao-info');
+                    if (info && info.itensNF_Original) {
+                        info.itensNF_Original.forEach(item => itensConciliadosDescricoes.add(item.descricaoNF));
+                    }
+                });
+                itensParaCadastrar = itensNF.filter(item => !itensConciliadosDescricoes.has(item.descricaoNF));
+            }
+
+            if (itensParaCadastrar.length === 0) {
+                 container.html('<div class="alert alert-warning">Todos os itens desta NF já foram conciliados. Não há itens para cadastrar.</div>');
+            } else {
+                itensParaCadastrar.forEach(item => {
                     const template = $('#template-item-cadastro-nf').prop('content').cloneNode(true);
                     const itemRow = $(template.children[0]);
                     itemRow.find('.original-nf-description').text(item.descricaoNF);
