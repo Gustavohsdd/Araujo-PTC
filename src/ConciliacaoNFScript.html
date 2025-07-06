@@ -18,16 +18,26 @@ let modalCadastroProdutoViaNFInstance = null;
 let selectQueAbriuModalProduto = null; 
 
 // ===== FUNÇÕES DE INICIALIZAÇÃO E SETUP =====
+// SUBSTITUA A FUNÇÃO 'DOMContentLoaded' INTEIRA POR ESTA VERSÃO CORRIGIDA
+
 document.addEventListener('DOMContentLoaded', function() {
+    // Inicializa todos os modais da página
     ajusteModalInstance = new bootstrap.Modal(document.getElementById('ajusteManualModal'));
     modalFornecedorNFInstance = new bootstrap.Modal(document.getElementById('modalCadastroFornecedorNF'));
+    modalCadastroItensNFInstance = new bootstrap.Modal(document.getElementById('modalCadastroItensNF'));
+    modalCadastroProdutoViaNFInstance = new bootstrap.Modal(document.getElementById('modalCadastroProdutoViaNF'));
+
+    // Mostra o loader e busca os dados iniciais
     toggleLoader(true);
     google.script.run
         .withSuccessHandler(onDadosIniciaisSuccess)
         .withFailureHandler(onFailure)
         .ConciliacaoNFController_obterDadosParaPagina();
+        
+    // Anexa todos os event listeners da página
     addEventListeners();
 });
+
 function addEventListeners() {
     // Header
     $('#btn-upload-xml').on('click', () => $('#xml-upload-input').click());
