@@ -214,17 +214,22 @@ function _verificarEFinalizarCotacaoSeCompleta(idCotacao) {
   }
 }
 
-/**
- * Função de automação para cancelar cotações com mais de 3 meses de abertura
- * e que não possuam nenhum subproduto com status "Cancelado".
- * Esta função foi projetada para ser executada por um acionador de tempo (trigger).
- */
+
+// Função de automação para gerenciar o status das cotações.
+//  1. Atualiza o status para "Finalizado" se 100% dos itens marcados para compra foram recebidos.
+//  2. Atualiza o status para "Recebido Parcialmente" se entre 80% e 99.9% dos itens marcados para compra foram recebidos.
+//  3. Cancela cotações com mais de 3 meses de abertura que não estão finalizadas e não tiveram itens cancelados manualmente.
+//  Esta função foi projetada para ser executada por um acionador de tempo (trigger).
+
 function automatizacao_cancelarCotacoesAntigas() {
-  Logger.log("Iniciando rotina de cancelamento de cotações antigas.");
+  Logger.log("Iniciando rotina de automação de status de cotações.");
   try {
     const abaCotacoes = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_COTACOES);
     const ultimaLinha = abaCotacoes.getLastRow();
-    if (ultimaLinha <= 1) return;
+    if (ultimaLinha <= 1) {
+      Logger.log("Aba de cotações vazia. Rotina encerrada.");
+      return;
+    }
 
     const range = abaCotacoes.getRange(2, 1, ultimaLinha - 1, abaCotacoes.getLastColumn());
     const todosOsValores = range.getValues();
@@ -234,62 +239,108 @@ function automatizacao_cancelarCotacoesAntigas() {
     const indiceDataAbertura = cabecalhos.indexOf("Data Abertura");
     const indiceStatusCotacao = cabecalhos.indexOf("Status da Cotação");
     const indiceStatusSubproduto = cabecalhos.indexOf("Status do SubProduto");
+    const indiceComprar = cabecalhos.indexOf("Comprar");
 
     const hoje = new Date();
     const tresMesesAtras = new Date(hoje.getFullYear(), hoje.getMonth() - 3, hoje.getDate());
-    
+
     // Agrupa todas as linhas por ID de Cotação
-    const cotacoesAgrupadas = todosOsValores.reduce((acc, linha) => {
+    const cotacoesAgrupadas = todosOsValores.reduce((acc, linha, index) => {
       const id = linha[indiceIdCotacao];
       if (!id) return acc;
       if (!acc[id]) {
         acc[id] = {
-          linhas: [],
+          linhasIndices: [],
+          linhasValores: [],
           dataAbertura: new Date(linha[indiceDataAbertura]),
           statusAtual: linha[indiceStatusCotacao]
         };
       }
-      acc[id].linhas.push(linha);
+      acc[id].linhasIndices.push(index); // Armazena o índice original da matriz
+      acc[id].linhasValores.push(linha);
       return acc;
     }, {});
 
-    const idsParaCancelar = [];
+    const atualizacoesDeStatus = {}; // Armazena { idCotacao: "Novo Status" }
 
-    // Itera sobre as cotações agrupadas para identificar quais devem ser canceladas
+    // Itera sobre as cotações agrupadas para aplicar as regras de negócio
     for (const id in cotacoesAgrupadas) {
       const cotacao = cotacoesAgrupadas[id];
 
-      // Pula cotações já finalizadas/canceladas ou que não são antigas o suficiente
-      if (cotacao.statusAtual === "Finalizado" || cotacao.statusAtual === "Cancelado" || cotacao.dataAbertura > tresMesesAtras) {
+      // Pula cotações que já estão em um estado final
+      if (cotacao.statusAtual === "Finalizado" || cotacao.statusAtual === "Cancelado") {
         continue;
       }
-      
-      // Verifica se algum item já foi cancelado manualmente
-      const temItemCancelado = cotacao.linhas.some(linha => linha[indiceStatusSubproduto] === "Cancelado");
-      
-      if (!temItemCancelado) {
-        idsParaCancelar.push(id);
+
+      // --- LÓGICA DE FINALIZAÇÃO E RECEBIMENTO PARCIAL ---
+      const itensParaComprar = cotacao.linhasValores.filter(linha => {
+        const comprarValor = parseFloat(linha[indiceComprar]);
+        return !isNaN(comprarValor) && comprarValor > 0;
+      });
+
+      let statusFoiAtualizado = false;
+      if (itensParaComprar.length > 0) {
+        const itensRecebidos = itensParaComprar.filter(linha => {
+          const statusSub = linha[indiceStatusSubproduto];
+          return statusSub !== "" && statusSub !== null && statusSub !== undefined;
+        });
+
+        const porcentagemRecebida = (itensRecebidos.length / itensParaComprar.length) * 100;
+
+        if (porcentagemRecebida === 100) {
+          atualizacoesDeStatus[id] = "Finalizado";
+          statusFoiAtualizado = true;
+          Logger.log(`Cotação ${id} marcada para 'Finalizado' (100% recebido).`);
+        } else if (porcentagemRecebida >= 80) {
+          atualizacoesDeStatus[id] = "Recebido Parcialmente";
+          statusFoiAtualizado = true;
+          Logger.log(`Cotação ${id} marcada para 'Recebido Parcialmente' (${porcentagemRecebida.toFixed(2)}% recebido).`);
+        }
+      }
+
+      // Se o status já foi atualizado pela lógica acima, não aplica a lógica de cancelamento
+      if (statusFoiAtualizado) {
+        continue;
+      }
+
+      // --- LÓGICA DE CANCELAMENTO POR ANTIGUIDADE ---
+      if (cotacao.dataAbertura <= tresMesesAtras) {
+        // Verifica se algum item já foi cancelado manualmente na cotação
+        const temItemCanceladoManualmente = cotacao.linhasValores.some(linha => linha[indiceStatusSubproduto] === "Cancelado");
+
+        if (!temItemCanceladoManualmente) {
+          atualizacoesDeStatus[id] = "Cancelado";
+          Logger.log(`Cotação ${id} marcada para 'Cancelado' por antiguidade.`);
+        }
       }
     }
 
-    if (idsParaCancelar.length > 0) {
-      Logger.log(`Cotações a serem canceladas: ${idsParaCancelar.join(', ')}`);
-      // Itera sobre a matriz de dados e atualiza o status
+    // Aplica as atualizações de status na matriz de dados principal
+    let mudancasRealizadas = false;
+    if (Object.keys(atualizacoesDeStatus).length > 0) {
       todosOsValores.forEach((linha, index) => {
         const idLinha = linha[indiceIdCotacao].toString();
-        if (idsParaCancelar.includes(idLinha)) {
-          todosOsValores[index][indiceStatusCotacao] = "Cancelado";
+        if (atualizacoesDeStatus[idLinha]) {
+          // Apenas atualiza se o status for diferente, para evitar escritas desnecessárias
+          if (todosOsValores[index][indiceStatusCotacao] !== atualizacoesDeStatus[idLinha]) {
+            todosOsValores[index][indiceStatusCotacao] = atualizacoesDeStatus[idLinha];
+            mudancasRealizadas = true;
+          }
         }
       });
-      
-      // Escreve a matriz atualizada de volta na planilha
+    }
+
+    // Escreve a matriz atualizada de volta na planilha apenas se houveram mudanças
+    if (mudancasRealizadas) {
+      Logger.log("Aplicando atualizações de status na planilha...");
       range.setValues(todosOsValores);
       SpreadsheetApp.flush();
+      Logger.log("Atualizações concluídas.");
     } else {
-      Logger.log("Nenhuma cotação antiga encontrada para cancelar.");
+      Logger.log("Nenhuma atualização de status necessária. Rotina encerrada.");
     }
 
   } catch (e) {
-    Logger.log(`ERRO na rotina automatizacao_cancelarCotacoesAntigas: ${e.toString()}`);
+    Logger.log(`ERRO na rotina automatizacao_cancelarCotacoesAntigas: ${e.toString()}\nStack: ${e.stack}`);
   }
 }
