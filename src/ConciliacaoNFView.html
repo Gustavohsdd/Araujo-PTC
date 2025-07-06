@@ -150,11 +150,27 @@
                     <option selected disabled>Selecione a cotação...</option>
                 </select>
                 
-                <!-- Ações para Notas sem Pedido -->
+                <div class="mt-2">
+                    <button id="btn-abrir-modal-fornecedor" class="btn btn-sm btn-outline-secondary" type="button" disabled>
+                        <i class="bi bi-person-plus-fill"></i> Cadastrar / Editar Fornecedor da NF
+                    </button>
+                </div>
+
+                <div class="mt-2">
+                    <button id="btn-abrir-modal-fornecedor" class="btn btn-sm btn-outline-secondary" type="button" disabled>
+                        <i class="bi bi-person-plus-fill"></i> Cadastrar / Editar Fornecedor da NF
+                    </button>
+                </div>
+
+                <div class="mt-2">
+                    <button id="btn-abrir-cadastro-itens" class="btn btn-sm btn-outline-info" type="button" disabled>
+                        <i class="bi bi-plus-circle-dotted"></i> Cadastrar Itens da NF
+                    </button>
+                </div>
+
                 <div class="sem-pedido-actions border-top mt-3 pt-3">
                     <small class="text-muted d-block mb-2">Ou, se não houver pedido vinculado:</small>
                     
-                    <!-- NOVO: Grupo de Botões (Split Button) -->
                     <div class="btn-group">
                         <button id="btn-marcar-sem-pedido" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-arrow-right-circle-fill"></i> Iniciar Rateio Direto
@@ -363,6 +379,197 @@
     </div>
   </div>
 
+  <div class="modal fade" id="modalCadastroFornecedorNF" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="modalCadastroFornecedorNFLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="form-cadastro-fornecedor-nf">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalCadastroFornecedorNFLabel">Dados do Fornecedor</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="cadastro-fornecedor-id" name="ID">
+          
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label for="cadastro-fornecedor-nome" class="form-label">Nome do Fornecedor*</label>
+              <input type="text" class="form-control" id="cadastro-fornecedor-nome" name="Fornecedor" required>
+            </div>
+            <div class="col-md-4">
+              <label for="cadastro-fornecedor-cnpj" class="form-label">CNPJ</label>
+              <input type="text" class="form-control" id="cadastro-fornecedor-cnpj" name="CNPJ">
+            </div>
+
+            <div class="col-md-6">
+              <label for="cadastro-fornecedor-categoria" class="form-label">Categoria</label>
+              <input type="text" class="form-control" id="cadastro-fornecedor-categoria" name="Categoria">
+            </div>
+            <div class="col-md-6">
+              <label for="cadastro-fornecedor-vendedor" class="form-label">Vendedor</label>
+              <input type="text" class="form-control" id="cadastro-fornecedor-vendedor" name="Vendedor">
+            </div>
+
+            <div class="col-md-6">
+              <label for="cadastro-fornecedor-telefone" class="form-label">Telefone</label>
+              <input type="text" class="form-control" id="cadastro-fornecedor-telefone" name="Telefone">
+            </div>
+            <div class="col-md-6">
+              <label for="cadastro-fornecedor-email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="cadastro-fornecedor-email" name="Email">
+            </div>
+            
+            <div class="col-md-4">
+                <label for="cadastro-fornecedor-dias-pedido" class="form-label">Dias de Pedido</label>
+                <input type="text" class="form-control" id="cadastro-fornecedor-dias-pedido" name="Dias de Pedido">
+            </div>
+            <div class="col-md-4">
+                <label for="cadastro-fornecedor-dias-entrega" class="form-label">Dias de Entrega</label>
+                <input type="text" class="form-control" id="cadastro-fornecedor-dias-entrega" name="Dias de Entrega">
+            </div>
+            <div class="col-md-4">
+                <label for="cadastro-fornecedor-dia-faturamento" class="form-label">Dia de Faturamento</label>
+                <input type="text" class="form-control" id="cadastro-fornecedor-dia-faturamento" name="Dia de Faturamento">
+            </div>
+
+            <div class="col-md-6">
+                <label for="cadastro-fornecedor-condicoes" class="form-label">Condições de Pagamento</label>
+                <input type="text" class="form-control" id="cadastro-fornecedor-condicoes" name="Condições de Pagamento">
+            </div>
+            <div class="col-md-6">
+                <label for="cadastro-fornecedor-pedido-minimo" class="form-label">Pedido Mínimo (R$)</label>
+                <input type="text" class="form-control" id="cadastro-fornecedor-pedido-minimo" name="Pedido Mínimo (R$)">
+            </div>
+
+            <div class="col-md-6">
+              <label for="cadastro-fornecedor-regime" class="form-label">Regime Tributário</label>
+              <input type="text" class="form-control" id="cadastro-fornecedor-regime" name="Regime Tributário">
+            </div>
+            <div class="col-md-6">
+              <label for="cadastro-fornecedor-financeiro" class="form-label">Contato Financeiro</label>
+              <input type="text" class="form-control" id="cadastro-fornecedor-financeiro" name="Contato Financeiro">
+            </div>
+          </div>
+          
+          <div id="modal-fornecedor-nf-feedback" class="alert mt-3 d-none"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btn-salvar-fornecedor-nf">
+              <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+              Salvar Fornecedor
+            </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+    <template id="template-item-cadastro-nf">
+    <div class="row gx-2 gy-2 p-3 border rounded mb-3 bg-light item-cadastro-row">
+        <div class="col-12">
+            <p class="mb-1 fw-bold text-primary border-bottom pb-1">Item Original da NF: <span class="original-nf-description"></span></p>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label form-label-sm">SubProduto*</label>
+            <input type="text" name="SubProduto" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label form-label-sm">Produto Vinculado*</label>
+            <select name="Produto Vinculado" class="form-select form-select-sm select-produto-vinculado" required>
+                <option value="">Carregando...</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label form-label-sm">Categoria</label>
+            <input type="text" name="Categoria" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label form-label-sm">Tamanho</label>
+            <input type="text" name="Tamanho" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label form-label-sm">UN*</label>
+            <input type="text" name="UN" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label form-label-sm">Fator</label>
+            <input type="number" name="Fator" class="form-control form-control-sm" step="any">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label form-label-sm">Status</label>
+            <select name="Status" class="form-select form-select-sm">
+                <option value="Ativo" selected>Ativo</option>
+                <option value="Inativo">Inativo</option>
+            </select>
+        </div>
+    </div>
+</template>
+
+<div class="modal fade" id="modalCadastroItensNF" tabindex="-1" aria-labelledby="modalCadastroItensNFLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalCadastroItensNFLabel">Cadastrar Itens da NF</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info small">
+                    <p class="mb-1"><strong>Instruções:</strong></p>
+                    <ul class="mb-0">
+                        <li>Preencha os dados para cada item que deseja cadastrar como um novo SubProduto.</li>
+                        <li>Vincule cada SubProduto a um Produto Principal. Se o produto não existir, selecione "Cadastrar Novo Produto...".</li>
+                        <li>O Fornecedor será automaticamente vinculado com base na NF selecionada.</li>
+                    </ul>
+                </div>
+                <h6 class="mt-4">NF: <span id="cadastro-itens-nf-numero" class="fw-normal"></span> | Fornecedor: <span id="cadastro-itens-fornecedor-nome" class="fw-normal"></span></h6>
+                <hr>
+                <form id="form-cadastro-itens-nf">
+                    <div id="container-itens-para-cadastro">
+                        </div>
+                </form>
+                <div id="feedback-cadastro-itens-nf" class="alert mt-3 d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btn-salvar-subprodutos-nf">
+                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    Salvar Itens Cadastrados
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalCadastroProdutoViaNF" tabindex="-1" aria-labelledby="modalCadastroProdutoViaNFLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+             <form id="form-cadastro-produto-nf">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalCadastroProdutoViaNFLabel">Cadastrar Novo Produto Principal</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-12"><label class="form-label">Produto*</label><input type="text" name="Produto" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Tamanho</label><input type="text" name="Tamanho" class="form-control"></div>
+                        <div class="col-md-4"><label class="form-label">UN*</label><input type="text" name="UN" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Estoque Mínimo</label><input type="number" name="Estoque Minimo" class="form-control" step="any"></div>
+                        <div class="col-md-6"><label class="form-label">Curva ABC</label><select name="ABC" class="form-select"><option value="">N/A</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select></div>
+                        <div class="col-md-6"><label class="form-label">Status</label><select name="Status" class="form-select"><option value="Ativo" selected>Ativo</option><option value="Inativo">Inativo</option></select></div>
+                    </div>
+                    <div id="feedback-cadastro-produto-nf" class="alert mt-3 d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btn-salvar-produto-nf">
+                         <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                        Salvar Produto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

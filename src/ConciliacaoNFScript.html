@@ -11,11 +11,16 @@ let setoresUnicos = [];
 let stagedPayloads = [];
 let ajusteModalInstance = null;
 let activeItemForAdjustment = null; 
-let selectedCotacaoItem = null; 
+let selectedCotacaoItem = null;
+let modalFornecedorNFInstance = null;
+let modalCadastroItensNFInstance = null;
+let modalCadastroProdutoViaNFInstance = null;
+let selectQueAbriuModalProduto = null; 
 
 // ===== FUNÇÕES DE INICIALIZAÇÃO E SETUP =====
 document.addEventListener('DOMContentLoaded', function() {
     ajusteModalInstance = new bootstrap.Modal(document.getElementById('ajusteManualModal'));
+    modalFornecedorNFInstance = new bootstrap.Modal(document.getElementById('modalCadastroFornecedorNF'));
     toggleLoader(true);
     google.script.run
         .withSuccessHandler(onDadosIniciaisSuccess)
@@ -40,6 +45,20 @@ function addEventListeners() {
     panelDireito.on('click', '#cotacao-items-list .list-group-item:not(.matched)', onCotacaoItemClick);
     panelDireito.on('click', '#nf-items-list .list-group-item:not(.matched)', onNfItemClick);
     panelDireito.on('click', '#btn-concluir-conciliacao', onBtnConcluirConciliacaoClick);
+    panelDireito.on('click', '#btn-abrir-modal-fornecedor', onAbrirModalFornecedorClick);
+    $('#form-cadastro-fornecedor-nf').on('submit', onSalvarFornecedorViaNFSubmit);
+    panelDireito.on('click', '#btn-abrir-cadastro-itens', onAbrirCadastroItensClick);
+    $('#modalCadastroItensNF').on('change', '.select-produto-vinculado', onProdutoVinculadoChange);
+    $('#form-cadastro-produto-nf').on('submit', onSalvarProdutoViaNFSubmit);
+    $('#btn-salvar-subprodutos-nf').on('click', onSalvarSubProdutosViaNFSubmit);
+
+    // Listeners do modal de fornecedor via NF
+    $('#cadastro-fornecedor-cnpj').on('input', function(e) { e.target.value = ConciliacaoNFScript_mascaraCnpj(e.target.value); });
+    $('#cadastro-fornecedor-telefone').on('input', function(e) { e.target.value = ConciliacaoNFScript_mascaraTelefone(e.target.value); });
+    const pedidoMinimoInput = $('#cadastro-fornecedor-pedido-minimo');
+    pedidoMinimoInput.on('input', function(e) { ConciliacaoNFScript_formatarMoedaInput(e.target); });
+    pedidoMinimoInput.on('blur', function(e) { ConciliacaoNFScript_formatarMoedaInput(e.target); });
+
 
     // Adiciona listeners para os novos botões de ação
     panelDireito.on('click', '#btn-marcar-bonificacao', onMarcarBonificacaoClick);
@@ -52,11 +71,11 @@ function addEventListeners() {
     panelDireito.on('input', '.input-porcentagem, .input-setor', onPorcentagemOuSetorChange);
 
     // Ajuste Manual
-    // [CORREÇÃO] A linha abaixo que referenciava a função deletada 'onBtnAjusteManualClick' foi removida.
     panelDireito.on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
     $('#btn-salvar-ajuste-manual').on('click', onBtnSalvarAjusteManualClick);
     $('#ajuste-fator').on('input', calcularVisualizacaoAjuste);
 }
+
 function resetApplication() {
     toggleLoader(true);
     stagedPayloads = [];
@@ -259,6 +278,12 @@ function onNfListItemClick() {
     $('#workspace-welcome').addClass('d-none');
     const template = $('#template-workspace').prop('content').cloneNode(true);
     workspaceContent.empty().append(template).removeClass('d-none');
+    
+    // HABILITE O BOTÃO AQUI
+    $('#btn-abrir-modal-fornecedor').prop('disabled', false);
+    $('#btn-abrir-modal-fornecedor').prop('disabled', false);
+    $('#btn-abrir-cadastro-itens').prop('disabled', false); //
+
     const selectCotacao = workspaceContent.find('.select-cotacao-fornecedor');
     const cnpjFornecedor = (nfInfo.cnpjEmitente || '').replace(/[^\d]/g, '');
     const cotacoesDoFornecedor = todasAsCotacoes.filter(c => (c.fornecedorCnpj || '').replace(/[^\d]/g, '') === cnpjFornecedor);
@@ -1025,9 +1050,12 @@ function onBtnConcluirRateioSemPedidoClick() {
     const totaisPorSetor = {};
     const novasRegras = [];
     const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
+
+    // [CORREÇÃO] Calcula o total bruto com base nos itens na tela e na propriedade correta 'itemNF_Agregada'
     const totalItensBruto = $('.matched-item-card').toArray().reduce((sum, el) => {
         const info = $(el).data('conciliacao-info');
-        return sum + (info.itemNF_Ajustada.qtdNF * info.itemNF_Ajustada.precoNF);
+        // Usa a propriedade correta: 'itemNF_Agregada'
+        return sum + (info.itemNF_Agregada.qtdNF * info.itemNF_Agregada.precoNF);
     }, 0);
     
     const custosAdicionais = totaisNF.valorTotalNf - totalItensBruto;
@@ -1037,7 +1065,9 @@ function onBtnConcluirRateioSemPedidoClick() {
         const card = $(this);
         const concInfo = card.data('conciliacao-info');
         const rateioInfo = card.data('rateio-info');
-        const valorBrutoItem = concInfo.itemNF_Ajustada.qtdNF * concInfo.itemNF_Ajustada.precoNF;
+        
+        // [CORREÇÃO] Usa a propriedade correta: 'itemNF_Agregada'
+        const valorBrutoItem = concInfo.itemNF_Agregada.qtdNF * concInfo.itemNF_Agregada.precoNF;
         const proporcaoItem = totalItensBruto > 0.01 ? valorBrutoItem / totalItensBruto : 0;
         const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
         
@@ -1084,4 +1114,363 @@ function onBtnConcluirRateioSemPedidoClick() {
     $('#workspace-welcome').removeClass('d-none');
     atualizarBotaoSalvarLote();
 }
+
+// SUBSTITUA ESTA FUNÇÃO: onAbrirModalFornecedorClick
+/**
+ * Acionado ao clicar no botão "Cadastrar / Editar Fornecedor".
+ * Busca o fornecedor pelo CNPJ da NF e abre o modal em modo de criação ou edição,
+ * populando todos os campos necessários.
+ */
+function onAbrirModalFornecedorClick() {
+    const nfInfo = $('#workspace-content').data('active-nf');
+    if (!nfInfo || !nfInfo.cnpjEmitente) {
+        alert("Não foi possível obter o CNPJ do fornecedor da nota fiscal selecionada.");
+        return;
+    }
+
+    const btn = $('#btn-abrir-modal-fornecedor');
+    btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Buscando...');
+
+    google.script.run
+        .withSuccessHandler(function(fornecedorExistente) {
+            btn.prop('disabled', false).html('<i class="bi bi-person-plus-fill"></i> Cadastrar / Editar Fornecedor da NF');
+            const form = $('#form-cadastro-fornecedor-nf')[0];
+            form.reset();
+            $('#modal-fornecedor-nf-feedback').addClass('d-none').text('');
+
+            if (fornecedorExistente) {
+                // MODO EDIÇÃO: Preenche o formulário com dados existentes do fornecedor
+                $('#modalCadastroFornecedorNFLabel').text('Editar Fornecedor');
+                $('#cadastro-fornecedor-id').val(fornecedorExistente.ID || '');
+                $('#cadastro-fornecedor-nome').val(fornecedorExistente.Fornecedor || '');
+                $('#cadastro-fornecedor-cnpj').val(ConciliacaoNFScript_mascaraCnpj(fornecedorExistente.CNPJ || ''));
+                $('#cadastro-fornecedor-categoria').val(fornecedorExistente.Categoria || '');
+                $('#cadastro-fornecedor-vendedor').val(fornecedorExistente.Vendedor || '');
+                $('#cadastro-fornecedor-telefone').val(ConciliacaoNFScript_mascaraTelefone(fornecedorExistente.Telefone || ''));
+                $('#cadastro-fornecedor-email').val(fornecedorExistente.Email || '');
+                $('#cadastro-fornecedor-dias-pedido').val(fornecedorExistente['Dias de Pedido'] || '');
+                $('#cadastro-fornecedor-dias-entrega').val(fornecedorExistente['Dias de Entrega'] || '');
+                $('#cadastro-fornecedor-dia-faturamento').val(fornecedorExistente['Dia de Faturamento'] || '');
+                $('#cadastro-fornecedor-condicoes').val(fornecedorExistente['Condições de Pagamento'] || '');
+                
+                const pedidoMinimoInput = document.getElementById('cadastro-fornecedor-pedido-minimo');
+                pedidoMinimoInput.value = fornecedorExistente['Pedido Mínimo (R$)'] || '';
+                ConciliacaoNFScript_formatarMoedaInput(pedidoMinimoInput); // Formata o valor
+
+                $('#cadastro-fornecedor-regime').val(fornecedorExistente['Regime Tributário'] || '');
+                $('#cadastro-fornecedor-financeiro').val(fornecedorExistente['Contato Financeiro'] || '');
+
+            } else {
+                // MODO CRIAÇÃO: Pré-popula apenas nome e CNPJ com dados da NF
+                $('#modalCadastroFornecedorNFLabel').text('Cadastrar Novo Fornecedor');
+                $('#cadastro-fornecedor-id').val(''); // Garante que o ID está vazio
+                $('#cadastro-fornecedor-nome').val(nfInfo.nomeEmitente || '');
+                $('#cadastro-fornecedor-cnpj').val(ConciliacaoNFScript_mascaraCnpj(nfInfo.cnpjEmitente || ''));
+            }
+            modalFornecedorNFInstance.show();
+        })
+        .withFailureHandler(function(error) {
+            btn.prop('disabled', false).html('<i class="bi bi-person-plus-fill"></i> Cadastrar / Editar Fornecedor da NF');
+            alert(`Erro ao buscar dados do fornecedor: ${error.message}`);
+        })
+        .ConciliacaoNFController_buscarFornecedorPorCnpj(nfInfo.cnpjEmitente);
+}
+
+// SUBSTITUA ESTA FUNÇÃO: onSalvarFornecedorViaNFSubmit
+/**
+ * Lida com o submit do formulário de cadastro/edição de fornecedor via NF.
+ * Converte o campo de moeda para um formato numérico antes de enviar ao backend.
+ * @param {Event} event O evento de submit do formulário.
+ */
+function onSalvarFornecedorViaNFSubmit(event) {
+    event.preventDefault();
+    const btnSalvar = $('#btn-salvar-fornecedor-nf');
+    const spinner = btnSalvar.find('.spinner-border');
+    
+    btnSalvar.prop('disabled', true);
+    spinner.removeClass('d-none');
+
+    const feedbackDiv = $('#modal-fornecedor-nf-feedback');
+    feedbackDiv.removeClass('d-none alert-danger alert-success').addClass('alert-info').text('Salvando...');
+
+    const form = $(this);
+    const dadosFornecedor = {};
+    form.serializeArray().forEach(item => {
+        // Trata o campo de Pedido Mínimo para enviar um valor numérico cru
+        if (item.name === 'Pedido Mínimo (R$)') {
+            dadosFornecedor[item.name] = ConciliacaoNFScript_obterValorMoedaCru(item.value);
+        } else {
+            dadosFornecedor[item.name] = item.value;
+        }
+    });
+
+    // A função de backend chamada (ConciliacaoNFController_salvarFornecedorViaNF) já roteia
+    // para as funções corretas de criar/atualizar que fazem a checagem de duplicidade
+    // e propagação de alteração de nome.
+    google.script.run
+        .withSuccessHandler(function(response) {
+            btnSalvar.prop('disabled', false);
+            spinner.addClass('d-none');
+
+            if (response.success) {
+                modalFornecedorNFInstance.hide();
+                alert(response.message || "Fornecedor salvo com sucesso!");
+                resetApplication(); 
+            } else {
+                feedbackDiv.removeClass('alert-info').addClass('alert-danger').text(response.message || "Ocorreu um erro desconhecido.");
+            }
+        })
+        .withFailureHandler(function(error) {
+            btnSalvar.prop('disabled', false);
+            spinner.addClass('d-none');
+            feedbackDiv.removeClass('alert-info').addClass('alert-danger').text(`Erro de comunicação: ${error.message}`);
+        })
+        .ConciliacaoNFController_salvarFornecedorViaNF(dadosFornecedor);
+}
+
+/**
+ * Aplica máscara de CNPJ (00.000.000/0000-00) a um valor.
+ * @param {string} value O valor a ser formatado.
+ * @returns {string} O valor com a máscara aplicada.
+ */
+function ConciliacaoNFScript_mascaraCnpj(value) {
+  if (!value) return "";
+  return value.replace(/\D/g, '')
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+    .slice(0, 18);
+}
+
+/**
+ * Aplica máscara de Telefone ((00) 00000-0000) a um valor.
+ * @param {string} value O valor a ser formatado.
+ * @returns {string} O valor com a máscara aplicada.
+ */
+function ConciliacaoNFScript_mascaraTelefone(value) {
+  if (!value) return "";
+  value = value.replace(/\D/g, '');
+  if (value.length > 11) value = value.slice(0, 11);
+  if (value.length > 10) {
+    value = value.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3');
+  } else if (value.length > 6) {
+    value = value.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3');
+  } else if (value.length > 2) {
+    value = value.replace(/^(\d{2})(\d*)/, '($1) $2');
+  } else if (value.length > 0) {
+    value = value.replace(/^(\d*)/, '($1');
+  }
+  return value;
+}
+
+/**
+ * Formata o valor de um campo de input para o formato de moeda BRL (R$).
+ * @param {HTMLInputElement} inputElement O elemento do input a ser formatado.
+ */
+function ConciliacaoNFScript_formatarMoedaInput(inputElement) {
+    let value = inputElement.value.replace(/\D/g, '');
+    if (value === '') {
+        inputElement.value = '';
+        return;
+    }
+    const numero = parseInt(value, 10) / 100;
+    inputElement.value = numero.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+/**
+ * Converte um valor de moeda formatado (ex: "R$ 1.234,56") para um formato numérico cru (ex: "1234.56").
+ * @param {string} formattedValue O valor formatado a ser convertido.
+ * @returns {string} O valor numérico como string.
+ */
+function ConciliacaoNFScript_obterValorMoedaCru(formattedValue) {
+    if (!formattedValue) return '';
+    return formattedValue.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+}
+
+/**
+ * Acionado ao clicar em "Cadastrar Itens da NF". Busca os dados e abre o modal principal.
+ */
+function onAbrirCadastroItensClick() {
+    const nfInfo = $('#workspace-content').data('active-nf');
+    if (!nfInfo) return;
+
+    toggleLoader(true);
+    google.script.run
+        .withSuccessHandler(function(response) {
+            toggleLoader(false);
+            if (!response.success) {
+                alert("Erro ao buscar dados para cadastro: " + response.message);
+                return;
+            }
+            
+            const { itensNF, fornecedor, produtos } = response.dados;
+            const container = $('#container-itens-para-cadastro').empty();
+            $('#cadastro-itens-nf-numero').text(nfInfo.numeroNF);
+            $('#cadastro-itens-fornecedor-nome').text(fornecedor.Fornecedor).data('fornecedor-id', fornecedor.ID);
+
+            // Filtra apenas os itens da NF que AINDA NÃO foram conciliados
+            const itensConciliadosDescricoes = new Set();
+            $('.matched-item-card').each(function() {
+                const info = $(this).data('conciliacao-info');
+                info.itensNF_Original.forEach(item => itensConciliadosDescricoes.add(item.descricaoNF));
+            });
+
+            const itensNaoConciliados = itensNF.filter(item => !itensConciliadosDescricoes.has(item.descricaoNF));
+
+            if (itensNaoConciliados.length === 0) {
+                 container.html('<div class="alert alert-warning">Todos os itens desta NF já foram conciliados ou estão em processo de rateio direto. Não há itens para cadastrar.</div>');
+            } else {
+                itensNaoConciliados.forEach(item => {
+                    const template = $('#template-item-cadastro-nf').prop('content').cloneNode(true);
+                    const itemRow = $(template.children[0]);
+                    itemRow.find('.original-nf-description').text(item.descricaoNF);
+                    itemRow.find('input[name="SubProduto"]').val(item.descricaoNF);
+                    itemRow.find('input[name="UN"]').val(item.unidadeComercial);
+
+                    const selectProduto = itemRow.find('.select-produto-vinculado');
+                    selectProduto.empty().append('<option value="" selected>Selecione...</option>');
+                    produtos.forEach(p => selectProduto.append(`<option value="${p.ID}">${p.Produto}</option>`));
+                    selectProduto.append('<option value="--CADASTRAR-NOVO--" class="fw-bold text-primary">Cadastrar Novo Produto...</option>');
+                    
+                    container.append(itemRow);
+                });
+            }
+            modalCadastroItensNFInstance.show();
+        })
+        .withFailureHandler(onFailure)
+        .ConciliacaoNFController_obterDadosParaCadastroItens(nfInfo.chaveAcesso);
+}
+
+/**
+ * Controla a seleção no dropdown de "Produto Vinculado".
+ * Se o usuário escolher "Cadastrar Novo...", abre o mini-modal de cadastro de produto.
+ */
+function onProdutoVinculadoChange() {
+    if ($(this).val() === '--CADASTRAR-NOVO--') {
+        selectQueAbriuModalProduto = $(this); // Salva a referência do select que disparou a ação
+        $('#form-cadastro-produto-nf')[0].reset(); // Limpa o formulário do mini-modal
+        $('#feedback-cadastro-produto-nf').addClass('d-none').text('');
+        modalCadastroProdutoViaNFInstance.show();
+    }
+}
+
+/**
+ * Lida com o salvamento de um novo Produto Principal a partir do mini-modal.
+ */
+function onSalvarProdutoViaNFSubmit(event) {
+    event.preventDefault();
+    const btnSalvar = $('#btn-salvar-produto-nf');
+    const spinner = btnSalvar.find('.spinner-border');
+    btnSalvar.prop('disabled', true);
+    spinner.removeClass('d-none');
+
+    const feedbackDiv = $('#feedback-cadastro-produto-nf');
+    feedbackDiv.removeClass('d-none alert-danger alert-success').addClass('alert-info').text('Salvando...');
+
+    const dadosProduto = {};
+    $(this).serializeArray().forEach(item => { dadosProduto[item.name] = item.value; });
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            btnSalvar.prop('disabled', false);
+            spinner.addClass('d-none');
+            if (response.success) {
+                const novoProduto = response.produto; // Assumindo que o backend retorna o obj do produto
+                const novaOpcao = `<option value="${novoProduto.ID}">${novoProduto.Produto}</option>`;
+                // Adiciona a nova opção a TODOS os selects de produto no modal principal
+                $('.select-produto-vinculado').each(function() {
+                    $(this).find('option[value="--CADASTRAR-NOVO--"]').before(novaOpcao);
+                });
+                // Seleciona a nova opção no select que originou a ação
+                if (selectQueAbriuModalProduto) {
+                    selectQueAbriuModalProduto.val(novoProduto.ID);
+                    selectQueAbriuModalProduto = null; // Limpa a referência
+                }
+                modalCadastroProdutoViaNFInstance.hide();
+            } else {
+                feedbackDiv.removeClass('alert-info').addClass('alert-danger').text(response.message);
+            }
+        })
+        .withFailureHandler(function(err) {
+            btnSalvar.prop('disabled', false);
+            spinner.addClass('d-none');
+            feedbackDiv.removeClass('alert-info').addClass('alert-danger').text(err.message);
+        })
+        .ConciliacaoNFController_salvarProdutoViaNF(dadosProduto);
+}
+
+/**
+ * Lida com o salvamento em lote de todos os novos subprodutos definidos no modal.
+ */
+function onSalvarSubProdutosViaNFSubmit() {
+    const btnSalvar = $('#btn-salvar-subprodutos-nf');
+    const spinner = btnSalvar.find('.spinner-border');
+    btnSalvar.prop('disabled', true);
+    spinner.removeClass('d-none');
+
+    const feedbackDiv = $('#feedback-cadastro-itens-nf');
+    feedbackDiv.removeClass('d-none alert-danger alert-success').addClass('alert-info').text('Salvando...');
+
+    const dadosLote = {
+        fornecedorId: $('#cadastro-itens-fornecedor-nome').data('fornecedor-id'),
+        subProdutos: []
+    };
+    
+    let formValido = true;
+    $('.item-cadastro-row').each(function() {
+        const row = $(this);
+        const subProdutoNome = row.find('input[name="SubProduto"]').val();
+        const produtoVinculadoId = row.find('select[name="Produto Vinculado"]').val();
+        
+        // Processa apenas linhas onde o usuário de fato preencheu os campos chave
+        if (subProdutoNome && produtoVinculadoId && produtoVinculadoId !== '--CADASTRAR-NOVO--') {
+            const subProdutoData = {};
+            row.find('input, select').each(function() {
+                if ($(this).attr('name')) {
+                    subProdutoData[$(this).attr('name')] = $(this).val();
+                }
+            });
+            dadosLote.subProdutos.push(subProdutoData);
+        } else if (subProdutoNome || (produtoVinculadoId && produtoVinculadoId !== '--CADASTRAR-NOVO--')) {
+            // Se um campo chave foi preenchido mas o outro não, marca como erro
+            formValido = false;
+        }
+    });
+
+    if (!formValido) {
+        btnSalvar.prop('disabled', false);
+        spinner.addClass('d-none');
+        feedbackDiv.removeClass('alert-info').addClass('alert-danger').text('Erro: Para cada item a ser cadastrado, tanto o nome do SubProduto quanto o Produto Vinculado são obrigatórios.');
+        return;
+    }
+    
+    if (dadosLote.subProdutos.length === 0) {
+        btnSalvar.prop('disabled', false);
+        spinner.addClass('d-none');
+        feedbackDiv.removeClass('alert-info').addClass('alert-warning').text('Nenhum item foi preenchido para cadastro.');
+        return;
+    }
+
+    google.script.run
+        .withSuccessHandler(function(response) {
+            btnSalvar.prop('disabled', false);
+            spinner.addClass('d-none');
+            if (response.success) {
+                alert(response.message);
+                modalCadastroItensNFInstance.hide();
+                // Não há necessidade de recarregar a página, conforme solicitado.
+                // O usuário pode continuar seu trabalho de conciliação.
+            } else {
+                feedbackDiv.removeClass('alert-info').addClass('alert-danger').text('Falha ao salvar: ' + response.message);
+            }
+        })
+        .withFailureHandler(function(err) {
+            btnSalvar.prop('disabled', false);
+            spinner.addClass('d-none');
+            feedbackDiv.removeClass('alert-info').addClass('alert-danger').text('Erro de comunicação: ' + err.message);
+        })
+        .ConciliacaoNFController_salvarSubProdutosViaNF(dadosLote);
+}
+
 </script>

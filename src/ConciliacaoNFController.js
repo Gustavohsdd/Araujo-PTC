@@ -278,3 +278,228 @@ function ConciliacaoNFController_obterDadosParaRelatorioSintetico(termosDeBusca)
     return { success: false, message: e.message };
   }
 }
+
+/**
+ * [VERSÃO DE DIAGNÓSTICO] Busca os dados de um fornecedor específico na aba 'Fornecedores'
+ * usando o CNPJ, com logs detalhados para depuração.
+ * @param {string} cnpj O CNPJ do fornecedor a ser buscado.
+ * @returns {object|null} Um objeto com os dados do fornecedor se encontrado, ou null caso contrário.
+ */
+function ConciliacaoNFController_buscarFornecedorPorCnpj(cnpj) {
+  Logger.log('--- INICIANDO BUSCA DE FORNECEDOR POR CNPJ ---');
+  if (!cnpj) {
+    Logger.log('AVISO: A função foi chamada com um CNPJ nulo ou vazio. Retornando null.');
+    return null;
+  }
+
+  try {
+    const cnpjNormalizado = String(cnpj).replace(/\D/g, '');
+    Logger.log(`CNPJ recebido da NF: "${cnpj}" | Normalizado para busca: "${cnpjNormalizado}"`);
+
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const abaFornecedores = planilha.getSheetByName(ABA_FORNECEDORES);
+    if (!abaFornecedores) {
+      throw new Error(`Aba de fornecedores '${ABA_FORNECEDORES}' não encontrada.`);
+    }
+
+    const dados = abaFornecedores.getDataRange().getValues();
+    const cabecalhos = dados[0];
+    const indiceCnpj = cabecalhos.indexOf("CNPJ");
+
+    if (indiceCnpj === -1) {
+      throw new Error("A coluna 'CNPJ' não foi encontrada na aba de Fornecedores.");
+    }
+
+    Logger.log('Iniciando varredura na planilha de Fornecedores...');
+    for (let i = 1; i < dados.length; i++) {
+      const linha = dados[i];
+      const cnpjLinhaOriginal = linha[indiceCnpj];
+      
+      // Pula linhas em branco para não poluir o log
+      if (!cnpjLinhaOriginal || String(cnpjLinhaOriginal).trim() === '') {
+        continue;
+      }
+
+      const cnpjLinhaNormalizado = String(cnpjLinhaOriginal).replace(/\D/g, '');
+      
+      // Log para cada linha sendo verificada
+      Logger.log(`Linha ${i + 1}: Lendo CNPJ da planilha: "${cnpjLinhaOriginal}" | Normalizado: "${cnpjLinhaNormalizado}"`);
+
+      if (cnpjLinhaNormalizado === cnpjNormalizado) {
+        Logger.log(`>>> SUCESSO! Fornecedor encontrado na linha ${i + 1}. Preparando objeto de retorno.`);
+        const fornecedorObj = {};
+        cabecalhos.forEach((cabecalho, index) => {
+          // Tratamento para datas, para evitar erros de serialização
+          if (linha[index] instanceof Date) {
+             fornecedorObj[cabecalho] = linha[index].toLocaleDateString('pt-BR');
+          } else {
+             fornecedorObj[cabecalho] = linha[index];
+          }
+        });
+        Logger.log('--- FIM DA BUSCA (ENCONTRADO) ---');
+        return fornecedorObj;
+      }
+    }
+
+    Logger.log('AVISO: Nenhum fornecedor correspondente encontrado após varrer toda a planilha.');
+    Logger.log('--- FIM DA BUSCA (NÃO ENCONTRADO) ---');
+    return null; // Retorna null se não encontrar o fornecedor
+
+  } catch (e) {
+    Logger.log(`ERRO CRÍTICO em ConciliacaoNFController_buscarFornecedorPorCnpj: ${e.message}\nStack: ${e.stack}`);
+    throw new Error(`Falha ao buscar fornecedor por CNPJ: ${e.message}`);
+  }
+}
+
+
+/**
+ * [CORRIGIDO] Recebe os dados do fornecedor do modal da NF, e chama o controller de Fornecedores
+ * para criar um novo ou atualizar um existente. Garante que um fornecedor existente seja sempre
+ * atualizado, mesmo que o ID não venha do frontend.
+ * @param {object} dadosFornecedor Objeto com os dados do fornecedor vindos do formulário.
+ * @returns {object} O resultado da operação de criação ou atualização.
+ */
+function ConciliacaoNFController_salvarFornecedorViaNF(dadosFornecedor) {
+  try {
+    if (!dadosFornecedor) {
+      throw new Error("Nenhum dado de fornecedor foi recebido.");
+    }
+
+    // --- LÓGICA DE DECISÃO MELHORADA ---
+
+    // 1. Se um ID for fornecido explicitamente, é uma atualização.
+    if (dadosFornecedor.ID && String(dadosFornecedor.ID).trim().length > 0) {
+      Logger.log(`ID ${dadosFornecedor.ID} fornecido. Redirecionando para ATUALIZAR fornecedor.`);
+      // A função FornecedoresController_atualizarFornecedor já propaga a mudança de nome.
+      return FornecedoresController_atualizarFornecedor(dadosFornecedor);
+    } 
+    
+    // 2. Se não houver ID, faz uma verificação defensiva no backend usando o CNPJ.
+    if (dadosFornecedor.CNPJ) {
+      const fornecedorExistente = ConciliacaoNFController_buscarFornecedorPorCnpj(dadosFornecedor.CNPJ);
+      
+      // Se encontrou um fornecedor com o mesmo CNPJ, deve ser uma ATUALIZAÇÃO.
+      if (fornecedorExistente && fornecedorExistente.ID) {
+        Logger.log(`ID não fornecido, mas CNPJ ${dadosFornecedor.CNPJ} já existe com ID ${fornecedorExistente.ID}. Redirecionando para ATUALIZAR.`);
+        // Adiciona o ID encontrado ao objeto de dados para garantir que a função de atualização seja chamada corretamente.
+        dadosFornecedor.ID = fornecedorExistente.ID;
+        // A função FornecedoresController_atualizarFornecedor já propaga a mudança de nome.
+        return FornecedoresController_atualizarFornecedor(dadosFornecedor);
+      }
+    }
+
+    // 3. Se não encontrou ID nem CNPJ existente, então é uma CRIAÇÃO.
+    Logger.log(`Nenhum ID ou CNPJ existente encontrado. Redirecionando para CRIAR novo fornecedor: ${dadosFornecedor.Fornecedor}`);
+    // A função FornecedoresController_criarNovoFornecedor já previne duplicatas por nome ou CNPJ.
+    return FornecedoresController_criarNovoFornecedor(dadosFornecedor);
+    
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_salvarFornecedorViaNF: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: `Erro no servidor ao salvar fornecedor: ${e.message}` };
+  }
+}
+
+/**
+ * Busca os dados necessários para popular o modal de cadastro de itens via NF.
+ * Retorna os itens da NF que não possuem conciliação, o fornecedor da NF e a lista de todos os Produtos Principais.
+ * @param {string} chaveAcesso A chave de acesso da NF selecionada.
+ * @returns {object} Objeto com { success: boolean, dados?: { itensNF: Array, fornecedor: object, produtos: Array } }
+ */
+function ConciliacaoNFController_obterDadosParaCadastroItens(chaveAcesso) {
+  try {
+    if (!chaveAcesso) {
+      throw new Error("A chave de acesso da NF é necessária.");
+    }
+
+    // 1. Obter todos os itens da NF
+    const todosItensDaNF = ConciliacaoNFCrud_obterItensDasNFs([chaveAcesso]);
+
+    // 2. Obter o Fornecedor (ID e Nome)
+    const nfGeral = ConciliacaoNFCrud_obterNFsNaoConciliadas().find(nf => nf.chaveAcesso === chaveAcesso);
+    if (!nfGeral) {
+        throw new Error("Não foi possível encontrar os dados gerais da NF selecionada.");
+    }
+    const fornecedorDaNF = ConciliacaoNFController_buscarFornecedorPorCnpj(nfGeral.cnpjEmitente);
+    if (!fornecedorDaNF || !fornecedorDaNF.ID) {
+      throw new Error(`O fornecedor com CNPJ '${nfGeral.cnpjEmitente}' não está cadastrado. Cadastre o fornecedor primeiro.`);
+    }
+
+    // 3. Obter todos os Produtos principais para o dropdown
+    const todosOsProdutos = SubProdutosCRUD_obterTodosProdutosParaDropdown();
+
+    // NOTA: No futuro, podemos otimizar para retornar apenas os itens não conciliados.
+    // Por enquanto, retornaremos todos para o frontend filtrar.
+    return {
+      success: true,
+      dados: {
+        itensNF: todosItensDaNF,
+        fornecedor: {
+          ID: fornecedorDaNF.ID,
+          Fornecedor: fornecedorDaNF.Fornecedor
+        },
+        produtos: todosOsProdutos
+      }
+    };
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_obterDadosParaCadastroItens: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: e.message };
+  }
+}
+
+/**
+ * Cria um novo Produto Principal a partir do mini-modal na tela de conciliação.
+ * Reutiliza a função CRUD existente do módulo de Produtos.
+ * @param {object} dadosProduto Objeto com os dados do novo produto (Nome, UN, etc.).
+ * @returns {object} Objeto com o resultado da operação e os dados do produto criado.
+ */
+function ConciliacaoNFController_salvarProdutoViaNF(dadosProduto) {
+  try {
+    Logger.log("ConciliacaoNFController: redirecionando para criar novo Produto com dados:", JSON.stringify(dadosProduto));
+    // A função ProdutosCRUD_criarNovoProduto já faz a validação de duplicidade.
+    const resultado = ProdutosCRUD_criarNovoProduto(dadosProduto);
+    
+    // Retorna o resultado para o frontend, que pode incluir o ID do novo produto.
+    return resultado;
+
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_salvarProdutoViaNF: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: "Erro no servidor ao criar produto: " + e.message };
+  }
+}
+
+/**
+ * Cadastra múltiplos SubProdutos em lote a partir do modal da tela de conciliação.
+ * Reutiliza a função CRUD existente do módulo de SubProdutos.
+ * @param {object} dadosLote Objeto contendo { fornecedorId, subProdutos: [...] }.
+ * @returns {object} Objeto com o resultado da operação em lote.
+ */
+function ConciliacaoNFController_salvarSubProdutosViaNF(dadosLote) {
+  try {
+    Logger.log("ConciliacaoNFController: redirecionando para cadastrar múltiplos SubProdutos.");
+    
+    // A função SubProdutosCRUD_cadastrarMultiplosSubProdutos é ideal, pois já lida com a busca
+    // de nomes a partir de IDs e validações de duplicidade.
+    // Apenas ajustamos o payload para corresponder ao que a função espera.
+    const payloadParaCRUD = {
+      fornecedorGlobal: dadosLote.fornecedorId,
+      subProdutos: dadosLote.subProdutos.map(sp => ({
+        "ProdutoVinculadoID": sp["Produto Vinculado"], // Passa o ID do produto
+        "SubProduto": sp.SubProduto,
+        "UN": sp.UN,
+        "Categoria": sp.Categoria,
+        "Tamanho": sp.Tamanho,
+        "Fator": sp.Fator,
+        "NCM": sp.NCM,
+        "CST": sp.CST,
+        "CFOP": sp.CFOP,
+        "Status": sp.Status || "Ativo"
+      }))
+    };
+    
+    return SubProdutosCRUD_cadastrarMultiplosSubProdutos(payloadParaCRUD);
+
+  } catch (e) {
+    Logger.log(`ERRO em ConciliacaoNFController_salvarSubProdutosViaNF: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: "Erro no servidor ao salvar subprodutos: " + e.message };
+  }
+}
