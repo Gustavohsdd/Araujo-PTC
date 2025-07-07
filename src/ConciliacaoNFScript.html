@@ -34,8 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .withFailureHandler(onFailure)
         .ConciliacaoNFController_obterDadosParaPagina();
         
-    // Anexa todos os event listeners da página
-    addEventListeners();
+
 });
 
 function addEventListeners() {
@@ -99,10 +98,12 @@ function resetApplication() {
 }
 
 /**
- * [NOVO] Adiciona um payload para marcar a NF como 'NF Tipo B'.
- * Este é um estado final sem rateio.
+ * [VERSÃO FINALMENTE CORRIGIDA] Marca a NF como 'NF Tipo B'.
+ * Adicionado event.preventDefault() para impedir o comportamento padrão do link.
  */
-function onMarcarTipoBClick() {
+function onMarcarTipoBClick(event) { // 1. Adicionar "event" como parâmetro
+    event.preventDefault(); // 2. Adicionar esta linha
+
     const nfInfo = $('#workspace-content').data('active-nf');
     if (!nfInfo || !confirm(`Tem certeza que deseja marcar a NF ${nfInfo.numeroNF} como 'NF Tipo B'? Esta ação não poderá ser desfeita após salvar.`)) {
         return;
@@ -112,9 +113,10 @@ function onMarcarTipoBClick() {
         statusUpdates: [{ chaveAcesso: nfInfo.chaveAcesso, novoStatus: 'NF Tipo B' }]
     });
 
-    $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso)
-        .addClass('staged').removeClass('active').find('.status-icon').removeClass('d-none')
-        .find('.staged-status-badge').text('Tipo B').removeClass('d-none'); // Atualiza o badge
+    const nfListItem = $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso);
+    nfListItem.addClass('staged').removeClass('active');
+    nfListItem.find('.status-icon').removeClass('d-none');
+    nfListItem.find('.staged-status-badge').text('Tipo B').removeClass('d-none');
         
     $('#workspace-content').addClass('d-none').empty();
     $('#workspace-welcome').removeClass('d-none');
@@ -122,23 +124,30 @@ function onMarcarTipoBClick() {
 }
 
 // ===== CALLBACKS DO SERVIDOR E PROCESSAMENTO DE DADOS =====
+/**
+ * [CORREÇÃO DEFINITIVA] Callback de sucesso para a busca de dados iniciais.
+ * Garante que todas as variáveis de dados sejam inicializadas como arrays vazios
+ * caso não venham na resposta do servidor, prevenindo erros fatais.
+ */
 function onDadosIniciaisSuccess(response) {
     toggleLoader(false);
-    if (!response.success) {
-        alert('Erro ao carregar dados: ' + response.message);
+    if (!response || !response.success || !response.dados) {
+        onFailure({ message: (response && response.message) || 'Resposta do servidor inválida ou vazia.' });
         return;
     }
-    todasAsNFs = response.dados.notasFiscais;
-    todosOsItensNF = response.dados.itensNF;
-    todosOsDadosGeraisNF = response.dados.dadosGeraisNF;
-    todasAsCotacoes = response.dados.cotacoes;
-    todosOsItensCotacao = response.dados.itensCotacao;
+
+    // A adição de '|| []' torna o código robusto contra dados ausentes.
+    todasAsNFs = response.dados.notasFiscais || [];
+    todosOsItensNF = response.dados.itensNF || [];
+    todosOsDadosGeraisNF = response.dados.dadosGeraisNF || [];
+    todasAsCotacoes = response.dados.cotacoes || [];
+    todosOsItensCotacao = response.dados.itensCotacao || [];
     mapaConciliacao = response.dados.mapeamentoConciliacao || [];
     regrasRateio = response.dados.regrasRateio || [];
-    setoresUnicos = response.dados.setoresUnicos || []; // ADICIONADO
+    setoresUnicos = response.dados.setoresUnicos || [];
 
     // Cria a datalist de setores dinamicamente no body
-    if ($('#datalist-setores').length === 0) {
+    if ($('#datalist-setores').length === 0 && setoresUnicos.length > 0) {
         const datalist = $('<datalist id="datalist-setores"></datalist>');
         setoresUnicos.forEach(setor => {
             datalist.append(`<option value="${setor}">`);
@@ -147,6 +156,7 @@ function onDadosIniciaisSuccess(response) {
     }
     
     renderizarListaDeTrabalho();
+    addEventListeners();
 }
 function onFailure(error) {
     console.error('Erro na chamada ao servidor:', error);
@@ -185,6 +195,10 @@ function onUploadSuccess(response) {
 }
 
 // ===== PAINEL ESQUERDO (LISTA DE NFS) =====
+/**
+ * [VERSÃO CORRIGIDA] Renderiza a lista de NFs em um accordion por fornecedor.
+ * Inclui uma função de ordenação robusta para prevenir erros com dados não numéricos.
+ */
 function renderizarListaDeTrabalho() {
     const container = $('#accordion-fornecedores').empty();
     if (todasAsNFs.length === 0) {
@@ -192,7 +206,6 @@ function renderizarListaDeTrabalho() {
         return;
     }
 
-    // 1. Agrupar NFs por fornecedor
     const nfsPorFornecedor = todasAsNFs.reduce((acc, nf) => {
         const fornecedor = nf.nomeEmitente || 'Fornecedor Desconhecido';
         if (!acc[fornecedor]) {
@@ -202,10 +215,8 @@ function renderizarListaDeTrabalho() {
         return acc;
     }, {});
 
-    // 2. Ordenar fornecedores alfabeticamente
     const fornecedoresOrdenados = Object.keys(nfsPorFornecedor).sort();
 
-    // 3. Renderizar o accordion
     for (const fornecedor of fornecedoresOrdenados) {
         const nfsDoFornecedor = nfsPorFornecedor[fornecedor];
         const idAccordion = 'fornecedor-' + fornecedor.replace(/[^a-zA-Z0-9]/g, '');
@@ -226,19 +237,26 @@ function renderizarListaDeTrabalho() {
         `);
 
         const bodyAccordion = accordionItem.find('.accordion-body');
-        nfsDoFornecedor.sort((a,b) => a.numeroNF - b.numeroNF);
+        
+        // --- INÍCIO DA CORREÇÃO ---
+        // Função de ordenação robusta que trata valores não numéricos.
+        nfsDoFornecedor.sort((a, b) => {
+            const numA = parseInt(a.numeroNF, 10) || 0;
+            const numB = parseInt(b.numeroNF, 10) || 0;
+            return numA - numB;
+        });
+        // --- FIM DA CORREÇÃO ---
 
         nfsDoFornecedor.forEach(nf => {
             const template = $('#template-nf-list-item').prop('content').cloneNode(true);
             const nfItem = $(template.querySelector('.nf-list-item'));
             nfItem.data('nf-info', nf);
             nfItem.find('.nf-title').text(`NF ${nf.numeroNF}`);
-            nfItem.find('.nf-fornecedor').text(nf.nomeEmitente); // Mantido para dados internos
+            nfItem.find('.nf-fornecedor').text(nf.nomeEmitente);
             nfItem.find('.nf-data').text(nf.dataEmissao);
             const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nf.chaveAcesso);
             nfItem.find('.nf-total').text(totaisNF ? formatarMoeda(totaisNF.valorTotalNf) : 'N/A');
 
-            // Remove a classe de borda para um visual mais limpo dentro do accordion
             nfItem.removeClass('border-bottom');
             bodyAccordion.append(nfItem);
         });
@@ -246,6 +264,7 @@ function renderizarListaDeTrabalho() {
         container.append(accordionItem);
     }
 }
+
 function onSearchInputChange() {
     const searchTerm = $(this).val().toLowerCase().trim();
 
@@ -972,10 +991,12 @@ function onAbrirRelatorioRateioClick() {
 }
 
 /**
- * Adiciona um payload para marcar a NF como 'Bonificação' e atualiza a UI.
- * Este é um estado final sem rateio.
+ * [VERSÃO FINALMENTE CORRIGIDA] Marca a NF como 'Bonificação'.
+ * Adicionado event.preventDefault() para impedir o comportamento padrão do link.
  */
-function onMarcarBonificacaoClick() {
+function onMarcarBonificacaoClick(event) { // 1. Adicionar "event" como parâmetro
+    event.preventDefault(); // 2. Adicionar esta linha
+
     const nfInfo = $('#workspace-content').data('active-nf');
     if (!nfInfo || !confirm(`Tem certeza que deseja marcar a NF ${nfInfo.numeroNF} como 'Bonificação'? Esta ação não poderá ser desfeita após salvar.`)) {
         return;
@@ -985,8 +1006,11 @@ function onMarcarBonificacaoClick() {
         statusUpdates: [{ chaveAcesso: nfInfo.chaveAcesso, novoStatus: 'Bonificação' }]
     });
 
-    $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso)
-        .addClass('staged').removeClass('active').find('.status-icon').removeClass('d-none');
+    const nfListItem = $(`.nf-list-item`).filter((i, el) => $(el).data('nf-info').chaveAcesso === nfInfo.chaveAcesso);
+    nfListItem.addClass('staged').removeClass('active');
+    nfListItem.find('.status-icon').removeClass('d-none');
+    nfListItem.find('.staged-status-badge').text('Bonificação').removeClass('d-none');
+
     $('#workspace-content').addClass('d-none').empty();
     $('#workspace-welcome').removeClass('d-none');
     atualizarBotaoSalvarLote();
