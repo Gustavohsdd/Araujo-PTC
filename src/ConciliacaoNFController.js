@@ -447,23 +447,44 @@ function ConciliacaoNFController_obterDadosParaCadastroItens(chaveAcesso) {
 }
 
 /**
- * Cria um novo Produto Principal a partir do mini-modal na tela de conciliação.
- * Reutiliza a função CRUD existente do módulo de Produtos.
+ * [VERSÃO FINAL E CORRIGIDA] Cria um novo Produto Principal.
+ * Esta função chama a função CRUD compartilhada e, em caso de sucesso,
+ * TRANSFORMA a resposta { success: true, novoId: '...' } no formato que a
+ * interface espera { success: true, produto: { ID: '...', Produto: '...' } },
+ * resolvendo o problema de atualização da tela sem modificar a função CRUD.
  * @param {object} dadosProduto Objeto com os dados do novo produto (Nome, UN, etc.).
- * @returns {object} Objeto com o resultado da operação e os dados do produto criado.
+ * @returns {object} Objeto com o resultado da operação formatado para a tela de conciliação.
  */
 function ConciliacaoNFController_salvarProdutoViaNF(dadosProduto) {
   try {
     Logger.log("ConciliacaoNFController: redirecionando para criar novo Produto com dados:", JSON.stringify(dadosProduto));
-    // A função ProdutosCRUD_criarNovoProduto já faz a validação de duplicidade.
-    const resultado = ProdutosCRUD_criarNovoProduto(dadosProduto);
     
-    // Retorna o resultado para o frontend, que pode incluir o ID do novo produto.
-    return resultado;
+    // 1. Chama a sua função CRUD, que não será modificada.
+    const resultadoCRUD = ProdutosCRUD_criarNovoProduto(dadosProduto);
+    
+    // 2. Se a função CRUD teve sucesso...
+    if (resultadoCRUD && resultadoCRUD.success) {
+      Logger.log("CRUD retornou sucesso. Transformando a resposta para a interface.");
+
+      // 3. Montamos o objeto 'produto' que a interface precisa,
+      // pegando o ID da resposta do CRUD e o Nome dos dados que já tínhamos.
+      const produtoParaCliente = {
+        ID: resultadoCRUD.novoId,
+        Produto: dadosProduto.Produto 
+      };
+
+      // 4. Retornamos o objeto completo no formato correto.
+      return { success: true, produto: produtoParaCliente };
+
+    } else {
+       // Se o CRUD falhou, apenas repassamos a mensagem de erro.
+       Logger.log("ERRO: O CRUD retornou uma falha.");
+       return resultadoCRUD;
+    }
 
   } catch (e) {
-    Logger.log(`ERRO em ConciliacaoNFController_salvarProdutoViaNF: ${e.toString()}\n${e.stack}`);
-    return { success: false, message: "Erro no servidor ao criar produto: " + e.message };
+    Logger.log(`ERRO CRÍTICO em ConciliacaoNFController_salvarProdutoViaNF: ${e.toString()}\n${e.stack}`);
+    return { success: false, message: "Erro crítico no servidor ao criar produto: " + e.message };
   }
 }
 

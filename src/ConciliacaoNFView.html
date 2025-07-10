@@ -63,6 +63,30 @@
     flex-grow: 1;     /* Faz com que o container ocupe o espaço disponível */
     }
 
+    .accordion-button-sm {
+      padding: 0.6rem 1rem;
+      font-size: 0.875rem;
+    }
+
+
+    .comparison-container {
+        height: 38vh; /* Define uma altura para a área de comparação */
+        display: flex;
+        flex-wrap: nowrap;
+    }
+    .comparison-column {
+        height: 100%; /* Faz a coluna ocupar a altura do container */
+        display: flex;
+        flex-direction: column;
+    }
+    .comparison-column h5 {
+        flex-shrink: 0; /* Impede que o título da coluna encolha */
+    }
+    .comparison-column .list-group {
+        flex-grow: 1; /* Faz a lista de itens crescer para ocupar o espaço */
+        overflow-y: auto; /* Adiciona a barra de rolagem vertical */
+        min-height: 0; /* Correção essencial para rolagem em flexbox */
+    }
   </style>
 </head>
 <body>
@@ -271,7 +295,11 @@
         <div class="card-body pb-0">
             <div class="row">
                 <div class="col-7">
-                    <strong>Item Cotação:</strong> <span class="item-cot-descricao"></span><br>
+                    <strong>
+                        Item Cotação:
+                        <span class="badge bg-warning text-dark no-rate-rule-badge d-none" title="Este item não possui regra de rateio automática. O rateio deverá ser informado manualmente."><i class="bi bi-exclamation-triangle-fill"></i> Sem Regra</span>
+                    </strong>
+                    <span class="item-cot-descricao"></span><br>
                     <small class="text-muted"><strong>Item NF:</strong> <span class="item-nf-descricao"></span></small>
                 </div>
                 <div class="col-5 d-flex justify-content-end align-items-center">
@@ -463,38 +491,51 @@
         <div class="col-12">
             <p class="mb-1 fw-bold text-primary border-bottom pb-1">Item Original da NF: <span class="original-nf-description"></span></p>
         </div>
-        <div class="col-md-6">
-            <label class="form-label form-label-sm">SubProduto*</label>
-            <input type="text" name="SubProduto" class="form-control form-control-sm" required>
+
+        <div class="col-12">
+            <div class="row gx-2 gy-2">
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">SubProduto*</label>
+                    <input type="text" name="SubProduto" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label form-label-sm">Produto Vinculado*</label>
+                    <select name="Produto Vinculado" class="form-select form-select-sm select-produto-vinculado" required>
+                        <option value="">Carregando...</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">Categoria</label>
+                    <input type="text" name="Categoria" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm">Tamanho</label>
+                    <input type="text" name="Tamanho" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm">UN*</label>
+                    <input type="text" name="UN" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm">Fator</label>
+                    <input type="number" name="Fator" class="form-control form-control-sm" step="any">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm">Status</label>
+                    <select name="Status" class="form-select form-select-sm">
+                        <option value="Ativo" selected>Ativo</option>
+                        <option value="Inativo">Inativo</option>
+                    </select>
+                </div>
+            </div>
         </div>
-        <div class="col-md-6">
-            <label class="form-label form-label-sm">Produto Vinculado*</label>
-            <select name="Produto Vinculado" class="form-select form-select-sm select-produto-vinculado" required>
-                <option value="">Carregando...</option>
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label form-label-sm">Categoria</label>
-            <input type="text" name="Categoria" class="form-control form-control-sm">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label form-label-sm">Tamanho</label>
-            <input type="text" name="Tamanho" class="form-control form-control-sm">
-        </div>
-        <div class="col-md-2">
-            <label class="form-label form-label-sm">UN*</label>
-            <input type="text" name="UN" class="form-control form-control-sm" required>
-        </div>
-        <div class="col-md-2">
-            <label class="form-label form-label-sm">Fator</label>
-            <input type="number" name="Fator" class="form-control form-control-sm" step="any">
-        </div>
-        <div class="col-md-2">
-            <label class="form-label form-label-sm">Status</label>
-            <select name="Status" class="form-select form-select-sm">
-                <option value="Ativo" selected>Ativo</option>
-                <option value="Inativo">Inativo</option>
-            </select>
+
+        <div class="col-12 mt-3 text-end">
+            <small class="form-text feedback-salvar-individual me-3"></small>
+            <button type="button" class="btn btn-success btn-sm btn-salvar-subproduto-individual" style="min-width: 100px;">
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                <i class="bi bi-check-circle-fill"></i> Salvar
+            </button>
         </div>
     </div>
 </template>
@@ -524,15 +565,9 @@
                 <div id="feedback-cadastro-itens-nf" class="alert mt-3 d-none"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="btn-salvar-subprodutos-nf">
-                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                    Salvar Itens Cadastrados
-                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
-        </div>
-    </div>
-</div>
+
 
 <div class="modal fade" id="modalCadastroProdutoViaNF" tabindex="-1" aria-labelledby="modalCadastroProdutoViaNFLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -544,13 +579,43 @@
                 </div>
                 <div class="modal-body">
                     <div class="row g-3">
-                        <div class="col-md-12"><label class="form-label">Produto*</label><input type="text" name="Produto" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">Tamanho</label><input type="text" name="Tamanho" class="form-control"></div>
-                        <div class="col-md-4"><label class="form-label">UN*</label><input type="text" name="UN" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">Estoque Mínimo</label><input type="number" name="Estoque Minimo" class="form-control" step="any"></div>
-                        <div class="col-md-6"><label class="form-label">Curva ABC</label><select name="ABC" class="form-select"><option value="">N/A</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select></div>
-                        <div class="col-md-6"><label class="form-label">Status</label><select name="Status" class="form-select"><option value="Ativo" selected>Ativo</option><option value="Inativo">Inativo</option></select></div>
-                    </div>
+    <div class="col-md-8">
+        <label class="form-label">Produto*</label>
+        <input type="text" name="Produto" class="form-control" required>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Categoria</label>
+        <input type="text" name="Categoria" class="form-control">
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Tamanho</label>
+        <input type="text" name="Tamanho" class="form-control">
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">UN*</label>
+        <input type="text" name="UN" class="form-control" required>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Estoque Mínimo</label>
+        <input type="number" name="Estoque Minimo" class="form-control" step="any">
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Curva ABC</label>
+        <select name="ABC" class="form-select">
+            <option value="">N/A</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+        </select>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Status</label>
+        <select name="Status" class="form-select">
+            <option value="Ativo" selected>Ativo</option>
+            <option value="Inativo">Inativo</option>
+        </select>
+    </div>
+</div>
                     <div id="feedback-cadastro-produto-nf" class="alert mt-3 d-none"></div>
                 </div>
                 <div class="modal-footer">

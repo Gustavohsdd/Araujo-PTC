@@ -52,14 +52,18 @@ function addEventListeners() {
     const panelDireito = $('#panel-direito');
     panelDireito.on('change', '.select-cotacao-fornecedor', onSelectCotacaoChange);
     panelDireito.on('click', '#cotacao-items-list .list-group-item:not(.matched)', onCotacaoItemClick);
-    panelDireito.on('click', '#nf-items-list .list-group-item:not(.matched)', onNfItemClick);
+    panelDireito.on('click', '#nf-items-list .list-group-item', onNfItemClick);
     panelDireito.on('click', '#btn-concluir-conciliacao', onBtnConcluirConciliacaoClick);
     panelDireito.on('click', '#btn-abrir-modal-fornecedor', onAbrirModalFornecedorClick);
     $('#form-cadastro-fornecedor-nf').on('submit', onSalvarFornecedorViaNFSubmit);
     panelDireito.on('click', '#btn-abrir-cadastro-itens', onAbrirCadastroItensClick);
-    $('#modalCadastroItensNF').on('change', '.select-produto-vinculado', onProdutoVinculadoChange);
+    
+    // Listeners do Modal de Cadastro de Itens/Produtos
+    const modalCadastroItens = $('#modalCadastroItensNF');
+    modalCadastroItens.on('change', '.select-produto-vinculado', onProdutoVinculadoChange);
+    modalCadastroItens.on('click', '.btn-salvar-subproduto-individual', ConciliacaoNFScript_salvarSubProdutoIndividual); // NOVO LISTENER
     $('#form-cadastro-produto-nf').on('submit', onSalvarProdutoViaNFSubmit);
-    $('#btn-salvar-subprodutos-nf').on('click', onSalvarSubProdutosViaNFSubmit);
+    // REMOVIDO: $('#btn-salvar-subprodutos-nf').on('click', onSalvarSubProdutosViaNFSubmit);
 
     // Listeners do modal de fornecedor via NF
     $('#cadastro-fornecedor-cnpj').on('input', function(e) { e.target.value = ConciliacaoNFScript_mascaraCnpj(e.target.value); });
@@ -224,9 +228,8 @@ function renderizarListaDeTrabalho() {
         const accordionItem = $(`
             <div class="accordion-item">
                 <h2 class="accordion-header" id="heading-${idAccordion}">
-                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${idAccordion}" aria-expanded="true" aria-controls="collapse-${idAccordion}">
+                    <button class="accordion-button accordion-button-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${idAccordion}" aria-expanded="true" aria-controls="collapse-${idAccordion}">
                         ${fornecedor}
-                        <span class="badge bg-primary rounded-pill ms-2">${nfsDoFornecedor.length}</span>
                     </button>
                 </h2>
                 <div id="collapse-${idAccordion}" class="accordion-collapse collapse show" aria-labelledby="heading-${idAccordion}">
@@ -364,37 +367,45 @@ function construirListasDeComparacao(itensCotacao, itensNF) {
 function onCotacaoItemClick(e) {
     e.preventDefault();
     const itemEl = $(this);
+
+    // Se o item clicado já é o selecionado, não faz nada.
+    // Isso impede que um clique acidental no mesmo item o desmarque.
     if (selectedCotacaoItem && selectedCotacaoItem[0] === itemEl[0]) {
-        itemEl.removeClass('selected-for-match');
-        selectedCotacaoItem = null;
-    } else {
-        $('#cotacao-items-list .list-group-item').removeClass('selected-for-match');
-        itemEl.addClass('selected-for-match');
-        selectedCotacaoItem = itemEl;
+        return;
     }
+
+    // Desmarca qualquer outro item que possa estar selecionado
+    $('#cotacao-items-list .list-group-item').removeClass('selected-for-match');
+    
+    // Marca o novo item como selecionado
+    itemEl.addClass('selected-for-match');
+    selectedCotacaoItem = itemEl;
 }
 
 /**
- * [ALTERADO] Ponto de entrada quando um item da NF é clicado manualmente.
+ * [CORRIGIDO] Ponto de entrada quando um item da NF é clicado manualmente.
+ * Agora, a função previne o recarregamento da página ao clicar em um item já combinado.
  */
 function onNfItemClick(e) {
-    e.preventDefault();
-    // Impede a ação se o clique foi no botão de ajuste manual
+    e.preventDefault(); // Impede a ação padrão do link em todos os casos.
+    const itemEl = $(this);
+
+    // [NOVO] Se o item já foi combinado, simplesmente ignora o clique.
+    // Isso corrige o bug da "página em branco", pois o preventDefault() acima
+    // já foi chamado e o 'return' impede que qualquer outra lógica execute.
+    if (itemEl.hasClass('matched')) {
+        return;
+    }
+
+    // A lógica original para combinar itens permanece inalterada.
     if ($(e.target).closest('.btn-ajuste-manual').length > 0) return;
 
-    // Verifica se o usuário já selecionou um item da cotação
     if (!selectedCotacaoItem) {
         alert("Selecione primeiro um item da Cotação para ligar.");
         return;
     }
 
-    // Chama a nova função de vinculação, passando o item de cotação selecionado
-    // globalmente e o item da NF que foi clicado.
-    _ConciliacaoNFScript_vincularItemNF(selectedCotacaoItem, $(this));
-
-    // Propositalmente NÃO limpamos 'selectedCotacaoItem' aqui.
-    // Isso permite que o usuário clique em múltiplos itens da NF para vincular
-    // ao mesmo item de cotação que permanece selecionado.
+    _ConciliacaoNFScript_vincularItemNF(selectedCotacaoItem, itemEl);
 }
 
 /**
@@ -565,13 +576,19 @@ function _popularRateioDoCard(card) {
     card.find('[data-bs-target^="#rateio-item-"]').attr('data-bs-target', '#' + uniqueId);
     const regrasDoItem = regrasRateio.filter(r => r.itemCotacao === info.itemCot.subProduto);
     const autoInfoContainer = card.find('.rateio-automatico-info');
+
+    // Lógica para mostrar o marcador de ausência de regra
+    const noRuleBadge = card.find('.no-rate-rule-badge');
+
     if (regrasDoItem.length > 0) {
+        noRuleBadge.addClass('d-none'); // Esconde o marcador se há regras
         card.find('.btn-add-setor').hide();
         let infoText = '<strong>Rateio Automático:</strong> ';
         regrasDoItem.forEach(regra => { infoText += `${regra.porcentagem}% ${regra.setor}; `; });
         autoInfoContainer.html(infoText);
         card.data('rateio-info', { isAutomatico: true, regras: regrasDoItem });
     } else {
+        noRuleBadge.removeClass('d-none'); // Mostra o marcador se não há regras
         card.data('rateio-info', { isAutomatico: false, regras: [] });
         onAdicionarSetorManualClick({ target: card.find('.btn-add-setor')[0] });
     }
@@ -1218,10 +1235,9 @@ function onAbrirModalFornecedorClick() {
         .ConciliacaoNFController_buscarFornecedorPorCnpj(nfInfo.cnpjEmitente);
 }
 
-// SUBSTITUA ESTA FUNÇÃO: onSalvarFornecedorViaNFSubmit
 /**
- * Lida com o submit do formulário de cadastro/edição de fornecedor via NF.
- * Converte o campo de moeda para um formato numérico antes de enviar ao backend.
+ * [CORRIGIDO] Lida com o submit do formulário de cadastro/edição de fornecedor via NF.
+ * Não recarrega mais a página, preservando o trabalho de conciliação em andamento.
  * @param {Event} event O evento de submit do formulário.
  */
 function onSalvarFornecedorViaNFSubmit(event) {
@@ -1238,7 +1254,6 @@ function onSalvarFornecedorViaNFSubmit(event) {
     const form = $(this);
     const dadosFornecedor = {};
     form.serializeArray().forEach(item => {
-        // Trata o campo de Pedido Mínimo para enviar um valor numérico cru
         if (item.name === 'Pedido Mínimo (R$)') {
             dadosFornecedor[item.name] = ConciliacaoNFScript_obterValorMoedaCru(item.value);
         } else {
@@ -1246,18 +1261,18 @@ function onSalvarFornecedorViaNFSubmit(event) {
         }
     });
 
-    // A função de backend chamada (ConciliacaoNFController_salvarFornecedorViaNF) já roteia
-    // para as funções corretas de criar/atualizar que fazem a checagem de duplicidade
-    // e propagação de alteração de nome.
     google.script.run
         .withSuccessHandler(function(response) {
             btnSalvar.prop('disabled', false);
             spinner.addClass('d-none');
 
             if (response.success) {
+                // --- PONTO DA CORREÇÃO ---
+                // Em vez de recarregar tudo, apenas fechamos o modal.
                 modalFornecedorNFInstance.hide();
                 alert(response.message || "Fornecedor salvo com sucesso!");
-                resetApplication(); 
+                // A linha 'resetApplication();' foi REMOVIDA.
+                // O usuário pode agora continuar sua conciliação sem interrupções.
             } else {
                 feedbackDiv.removeClass('alert-info').addClass('alert-danger').text(response.message || "Ocorreu um erro desconhecido.");
             }
@@ -1331,7 +1346,8 @@ function ConciliacaoNFScript_obterValorMoedaCru(formattedValue) {
 }
 
 /**
- * Acionado ao clicar em "Cadastrar Itens da NF". Busca os dados e abre o modal principal.
+ * [VERSÃO DEFINITIVA] Acionado ao clicar em "Cadastrar Itens da NF".
+ * Agora inicializa o Select2 nos dropdowns criados dinamicamente.
  */
 function onAbrirCadastroItensClick() {
     const nfInfo = $('#workspace-content').data('active-nf');
@@ -1351,28 +1367,17 @@ function onAbrirCadastroItensClick() {
             $('#cadastro-itens-nf-numero').text(nfInfo.numeroNF);
             $('#cadastro-itens-fornecedor-nome').text(fornecedor.Fornecedor).data('fornecedor-id', fornecedor.ID);
 
-            // [CORREÇÃO] Lógica para determinar quais itens mostrar para cadastro.
-            let itensParaCadastrar = [];
-            const isModoRateioDireto = $('#workspace-content').data('modo-rateio-direto') === true;
-
-            if (isModoRateioDireto) {
-                // Se estamos em modo de rateio direto, todos os itens da NF estão disponíveis para cadastro,
-                // ignorando os "cards falsos" de conciliação na tela.
-                itensParaCadastrar = itensNF;
-            } else {
-                // Se estamos em modo de conciliação normal, filtramos os itens que já foram conciliados.
-                const itensConciliadosDescricoes = new Set();
-                $('.matched-item-card').each(function() {
-                    const info = $(this).data('conciliacao-info');
-                    if (info && info.itensNF_Original) {
-                        info.itensNF_Original.forEach(item => itensConciliadosDescricoes.add(item.descricaoNF));
-                    }
-                });
-                itensParaCadastrar = itensNF.filter(item => !itensConciliadosDescricoes.has(item.descricaoNF));
-            }
+            const itensConciliadosDescricoes = new Set();
+            $('.matched-item-card').each(function() {
+                const info = $(this).data('conciliacao-info');
+                if (info && info.itensNF_Original) {
+                    info.itensNF_Original.forEach(item => itensConciliadosDescricoes.add(item.descricaoNF));
+                }
+            });
+            const itensParaCadastrar = itensNF.filter(item => !itensConciliadosDescricoes.has(item.descricaoNF));
 
             if (itensParaCadastrar.length === 0) {
-                 container.html('<div class="alert alert-warning">Todos os itens desta NF já foram conciliados. Não há itens para cadastrar.</div>');
+                 container.html('<div class="alert alert-warning">Todos os itens desta NF já foram conciliados ou estão em processo de conciliação. Não há novos itens para cadastrar.</div>');
             } else {
                 itensParaCadastrar.forEach(item => {
                     const template = $('#template-item-cadastro-nf').prop('content').cloneNode(true);
@@ -1387,6 +1392,14 @@ function onAbrirCadastroItensClick() {
                     selectProduto.append('<option value="--CADASTRAR-NOVO--" class="fw-bold text-primary">Cadastrar Novo Produto...</option>');
                     
                     container.append(itemRow);
+                });
+                
+                // --- PONTO DA CORREÇÃO ---
+                // Inicializa o Select2 em todos os dropdowns que acabamos de criar.
+                // O 'dropdownParent' é essencial para que o menu de busca funcione dentro de um modal.
+                $('.select-produto-vinculado').select2({
+                    theme: "bootstrap-5",
+                    dropdownParent: $("#modalCadastroItensNF")
                 });
             }
             modalCadastroItensNFInstance.show();
@@ -1408,53 +1421,59 @@ function onProdutoVinculadoChange() {
     }
 }
 
-/**
- * Lida com o salvamento de um novo Produto Principal a partir do mini-modal.
- */
 function onSalvarProdutoViaNFSubmit(event) {
     event.preventDefault();
     const btnSalvar = $('#btn-salvar-produto-nf');
     const spinner = btnSalvar.find('.spinner-border');
     btnSalvar.prop('disabled', true);
     spinner.removeClass('d-none');
-
-    const feedbackDiv = $('#feedback-cadastro-produto-nf');
-    feedbackDiv.removeClass('d-none alert-danger alert-success').addClass('alert-info').text('Salvando...');
-
-    const dadosProduto = {};
-    $(this).serializeArray().forEach(item => { dadosProduto[item.name] = item.value; });
+    const feedbackDiv = $('#feedback-cadastro-produto-nf').addClass('d-none');
 
     google.script.run
         .withSuccessHandler(function(response) {
             btnSalvar.prop('disabled', false);
             spinner.addClass('d-none');
-            if (response.success) {
-                const novoProduto = response.produto; // Assumindo que o backend retorna o obj do produto
-                const novaOpcao = `<option value="${novoProduto.ID}">${novoProduto.Produto}</option>`;
-                // Adiciona a nova opção a TODOS os selects de produto no modal principal
-                $('.select-produto-vinculado').each(function() {
-                    $(this).find('option[value="--CADASTRAR-NOVO--"]').before(novaOpcao);
-                });
-                // Seleciona a nova opção no select que originou a ação
-                if (selectQueAbriuModalProduto) {
-                    selectQueAbriuModalProduto.val(novoProduto.ID);
-                    selectQueAbriuModalProduto = null; // Limpa a referência
-                }
+
+            // A condição principal que estava falhando
+            if (response && response.success && response.produto) {
                 modalCadastroProdutoViaNFInstance.hide();
+                const novaOpcao = new Option(response.produto.Produto, response.produto.ID, false, false);
+                
+                $('.select-produto-vinculado').each(function() {
+                    $(this).find('option[value="--CADASTRAR-NOVO--"]').before(novaOpcao.cloneNode(true));
+                });
+                
+                if (selectQueAbriuModalProduto) {
+                    selectQueAbriuModalProduto.select2('destroy');
+                    selectQueAbriuModalProduto.val(response.produto.ID);
+                    selectQueAbriuModalProduto.select2({
+                        theme: "bootstrap-5",
+                        dropdownParent: $("#modalCadastroItensNF")
+                    });
+                    selectQueAbriuModalProduto = null; 
+                }
             } else {
-                feedbackDiv.removeClass('alert-info').addClass('alert-danger').text(response.message);
+                // Se a condição falhar, agora damos um feedback claro ao invés de não fazer nada.
+                alert("Falha ao atualizar a tela!\n\n" + (response.message || "O servidor não retornou os dados completos do produto. O modal permanecerá aberto."));
+                feedbackDiv.removeClass('d-none').addClass('alert-danger').text(response.message || "Ocorreu um erro inesperado.");
             }
         })
         .withFailureHandler(function(err) {
             btnSalvar.prop('disabled', false);
             spinner.addClass('d-none');
-            feedbackDiv.removeClass('alert-info').addClass('alert-danger').text(err.message);
+
+            alert("Erro de comunicação com o servidor:\n\n" + err.message);
+            feedbackDiv.removeClass('d-none').addClass('alert-danger').text(err.message);
         })
-        .ConciliacaoNFController_salvarProdutoViaNF(dadosProduto);
+        .ConciliacaoNFController_salvarProdutoViaNF(
+            Object.fromEntries(new FormData(event.target))
+        );
 }
 
 /**
- * Lida com o salvamento em lote de todos os novos subprodutos definidos no modal.
+ * [VERSÃO DEFINITIVA] Lida com o salvamento em lote de subprodutos.
+ * A lógica agora apenas coleta as linhas que foram 100% preenchidas e ignora as demais,
+ * corrigindo o erro de validação que forçava o cadastro de todos os itens.
  */
 function onSalvarSubProdutosViaNFSubmit() {
     const btnSalvar = $('#btn-salvar-subprodutos-nf');
@@ -1463,20 +1482,22 @@ function onSalvarSubProdutosViaNFSubmit() {
     spinner.removeClass('d-none');
 
     const feedbackDiv = $('#feedback-cadastro-itens-nf');
-    feedbackDiv.removeClass('d-none alert-danger alert-success').addClass('alert-info').text('Salvando...');
+    feedbackDiv.removeClass('d-none alert-danger alert-success').addClass('alert-info').text('Coletando e salvando dados...');
 
     const dadosLote = {
         fornecedorId: $('#cadastro-itens-fornecedor-nome').data('fornecedor-id'),
         subProdutos: []
     };
     
-    let formValido = true;
+    // --- LÓGICA DE COLETA SIMPLIFICADA ---
+    // Itera por todas as linhas candidatas.
     $('.item-cadastro-row').each(function() {
         const row = $(this);
-        const subProdutoNome = row.find('input[name="SubProduto"]').val();
+        const subProdutoNome = row.find('input[name="SubProduto"]').val().trim();
         const produtoVinculadoId = row.find('select[name="Produto Vinculado"]').val();
-        
-        // Processa apenas linhas onde o usuário de fato preencheu os campos chave
+
+        // Adiciona ao lote APENAS se os dois campos essenciais estiverem preenchidos.
+        // Ignora todas as outras linhas (sejam vazias ou parcialmente preenchidas).
         if (subProdutoNome && produtoVinculadoId && produtoVinculadoId !== '--CADASTRAR-NOVO--') {
             const subProdutoData = {};
             row.find('input, select').each(function() {
@@ -1485,26 +1506,18 @@ function onSalvarSubProdutosViaNFSubmit() {
                 }
             });
             dadosLote.subProdutos.push(subProdutoData);
-        } else if (subProdutoNome || (produtoVinculadoId && produtoVinculadoId !== '--CADASTRAR-NOVO--')) {
-            // Se um campo chave foi preenchido mas o outro não, marca como erro
-            formValido = false;
         }
     });
-
-    if (!formValido) {
-        btnSalvar.prop('disabled', false);
-        spinner.addClass('d-none');
-        feedbackDiv.removeClass('alert-info').addClass('alert-danger').text('Erro: Para cada item a ser cadastrado, tanto o nome do SubProduto quanto o Produto Vinculado são obrigatórios.');
-        return;
-    }
+    // --- FIM DA LÓGICA DE COLETA ---
     
     if (dadosLote.subProdutos.length === 0) {
         btnSalvar.prop('disabled', false);
         spinner.addClass('d-none');
-        feedbackDiv.removeClass('alert-info').addClass('alert-warning').text('Nenhum item foi preenchido para cadastro.');
+        feedbackDiv.removeClass('alert-info').addClass('alert-warning').text('Nenhum item foi preenchido corretamente para cadastro. Verifique se selecionou um Produto Vinculado para os itens desejados.');
         return;
     }
 
+    // O restante da função permanece o mesmo
     google.script.run
         .withSuccessHandler(function(response) {
             btnSalvar.prop('disabled', false);
@@ -1512,8 +1525,6 @@ function onSalvarSubProdutosViaNFSubmit() {
             if (response.success) {
                 alert(response.message);
                 modalCadastroItensNFInstance.hide();
-                // Não há necessidade de recarregar a página, conforme solicitado.
-                // O usuário pode continuar seu trabalho de conciliação.
             } else {
                 feedbackDiv.removeClass('alert-info').addClass('alert-danger').text('Falha ao salvar: ' + response.message);
             }
@@ -1522,6 +1533,71 @@ function onSalvarSubProdutosViaNFSubmit() {
             btnSalvar.prop('disabled', false);
             spinner.addClass('d-none');
             feedbackDiv.removeClass('alert-info').addClass('alert-danger').text('Erro de comunicação: ' + err.message);
+        })
+        .ConciliacaoNFController_salvarSubProdutosViaNF(dadosLote);
+}
+
+/**
+ * Salva um único SubProduto a partir do card individual no modal de cadastro.
+ * @param {Event} event O evento do clique no botão de salvar.
+ */
+function ConciliacaoNFScript_salvarSubProdutoIndividual(event) {
+    const btnSalvar = $(event.currentTarget);
+    const card = btnSalvar.closest('.item-cadastro-row');
+    const spinner = btnSalvar.find('.spinner-border');
+    const feedbackEl = card.find('.feedback-salvar-individual');
+
+    // Resetar feedback e desabilitar botão
+    btnSalvar.prop('disabled', true);
+    spinner.removeClass('d-none');
+    feedbackEl.text('').removeClass('text-danger text-success');
+
+    // 1. Validar campos obrigatórios do card específico
+    const subProdutoNome = card.find('input[name="SubProduto"]').val().trim();
+    const produtoVinculadoId = card.find('select[name="Produto Vinculado"]').val();
+    const un = card.find('input[name="UN"]').val().trim();
+
+    if (!subProdutoNome || !produtoVinculadoId || !un || produtoVinculadoId === '--CADASTRAR-NOVO--') {
+        spinner.addClass('d-none');
+        btnSalvar.prop('disabled', false);
+        feedbackEl.text('Preencha os campos *').addClass('text-danger');
+        return;
+    }
+
+    // 2. Coletar dados do card específico
+    const subProdutoData = {};
+    card.find('input, select').each(function() {
+        if ($(this).attr('name')) {
+            subProdutoData[$(this).attr('name')] = $(this).val();
+        }
+    });
+
+    // 3. Montar o payload para a função de backend (que espera um lote)
+    const dadosLote = {
+        fornecedorId: $('#cadastro-itens-fornecedor-nome').data('fornecedor-id'),
+        subProdutos: [subProdutoData] // Envia um array com apenas um item
+    };
+
+    // 4. Chamar o backend
+    google.script.run
+        .withSuccessHandler(function(response) {
+            spinner.addClass('d-none');
+            if (response.success) {
+                feedbackEl.text('Salvo!').addClass('text-success');
+                // Mantém o botão desabilitado para evitar duplo-clique
+                // Apenas muda o ícone para feedback visual
+                btnSalvar.find('i').removeClass('bi-check-circle-fill').addClass('bi-check-all');
+                // Desabilita todos os campos do card salvo
+                card.find('input, select').prop('disabled', true);
+            } else {
+                feedbackEl.text(response.message).addClass('text-danger');
+                btnSalvar.prop('disabled', false); // Habilita o botão para tentar de novo
+            }
+        })
+        .withFailureHandler(function(err) {
+            spinner.addClass('d-none');
+            btnSalvar.prop('disabled', false);
+            feedbackEl.text(err.message).addClass('text-danger');
         })
         .ConciliacaoNFController_salvarSubProdutosViaNF(dadosLote);
 }
