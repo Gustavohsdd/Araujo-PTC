@@ -45,11 +45,10 @@ let CABECALHOS_COTACOES_TODOS = []; // Será populado pelo servidor
 let CotacaoIndividualScript_dadosOriginaisCotacao = [];
 let CotacaoIndividualScript_modoEtapaAtual = null;
 
-const CotacaoIndividualScript_COLUNAS_A_OCULTAR_DEFAULT = [
-  "ID da Cotação", "Data Abertura", "Produto", "Status da Cotação",
-  "Estoque Mínimo", "Estoque Atual", "NCM", "CST", "CFOP", "Categoria", "Status do SubProduto", "Quantidade Recebida"
+const CotacaoIndividualScript_COLUNAS_A_EXIBIR_PADRAO = [
+  "SubProduto", "Fornecedor", "Tamanho", "UN", "Fator", 
+  "Preço", "Preço por Fator", "Comprar", "Valor Total"
 ];
-let CotacaoIndividualScript_colunasAOcultar = CotacaoIndividualScript_COLUNAS_A_OCULTAR_DEFAULT;
 
 let CotacaoIndividualScript_COLUNAS_PARA_ABA_SUBPRODUTOS_CLIENTE = [];
 
@@ -610,18 +609,8 @@ function initCotacaoIndividualScript() {
   console.log("initCotacaoIndividualScript: Iniciando configuração da página.");
 
   function definirCabecalhosVisiveisInterno() {
-    if (typeof COLUNAS_A_OCULTAR !== 'undefined' && Array.isArray(COLUNAS_A_OCULTAR)) {
-        CotacaoIndividualScript_colunasAOcultar = COLUNAS_A_OCULTAR;
-    } else {
-        CotacaoIndividualScript_colunasAOcultar = CotacaoIndividualScript_COLUNAS_A_OCULTAR_DEFAULT;
-    }
-    if (CABECALHOS_COTACOES_TODOS && CABECALHOS_COTACOES_TODOS.length > 0) {
-        CotacaoIndividualScript_cabecalhosVisiveis = CABECALHOS_COTACOES_TODOS.filter(
-            header => !CotacaoIndividualScript_colunasAOcultar.includes(header)
-        );
-    } else {
-        CotacaoIndividualScript_cabecalhosVisiveis = [];
-    }
+    // A lógica agora é mais direta. Apenas define as colunas visíveis com base na nova constante.
+    CotacaoIndividualScript_cabecalhosVisiveis = CotacaoIndividualScript_COLUNAS_A_EXIBIR_PADRAO;
   }
   
   function agruparEClassificarProdutosInterno(todosOsProdutosDaCotacao) {
@@ -667,6 +656,8 @@ function initCotacaoIndividualScript() {
     CotacaoIndividualScript_modoEtapaAtual = null;
 
     // 1. CHAMA A FUNÇÃO PARA RENDERIZAR O CABEÇALHO PADRÃO (ESSA É A CORREÇÃO PRINCIPAL)
+    // Define os cabeçalhos visíveis para o modo padrão ANTES de renderizar.
+    CotacaoIndividualScript_cabecalhosVisiveis = CotacaoIndividualScript_COLUNAS_A_EXIBIR_PADRAO;
     renderizarCabecalhoTabelaPrincipalInterno();
 
     // 2. MOSTRA/ESCONDE OS CONTAINERS CORRETOS

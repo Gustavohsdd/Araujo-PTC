@@ -11,6 +11,13 @@ console.log("CONFIRMADO: Arquivo EtapasScript.html carregado com sucesso - Vers�
  * @description Lógica client-side para as funcionalidades do menu "Etapas".
  */
 
+// ADIÇÃO DE NOVA CONSTANTE DE EXIBIÇÃO PARA A ETAPA 5
+const EtapasScript_COLUNAS_A_EXIBIR_FATURAMENTO = [
+  "SubProduto", "Fornecedor", "Tamanho", "UN", "Fator", 
+  "Preço", "Preço por Fator", "Comprar", "Valor Total", "Empresa Faturada"
+];
+
+
 //----------------------------------------------------------------------------------------------------
 // ETAPA 1: CONTAGEM DE ESTOQUE
 //----------------------------------------------------------------------------------------------------
@@ -786,14 +793,9 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
     controlsContainer.appendChild(globalDashboard);
     tableContainer.prepend(controlsContainer);
 
-    const colunasOcultasVisualmente = [
-        "ID da Cotação", "Data Abertura", "Status da Cotação", "Estoque Mínimo", 
-        "Estoque Atual", "NCM", "CST", "CFOP", "Categoria", "Fornecedor", "Fator", 
-        "Preço por Fator", "Produto", "Tamanho", "Economia em Cotação", 
-        "Condição de Pagamento"
-    ];
-    const colunasInvisiveisParaCalculo = ["Fator", "Preço por Fator", "Economia em Cotação"];
-    const cabecalhosVisiveis = CABECALHOS_COTACOES_TODOS.filter(h => !colunasOcultasVisualmente.includes(h));
+    // **LÓGICA MODIFICADA AQUI**
+    // Usa diretamente a nova constante para definir os cabeçalhos visíveis.
+    const cabecalhosVisiveis = EtapasScript_COLUNAS_A_EXIBIR_FATURAMENTO;
     const colunasEditaveis = ["SubProduto", "UN", "Preço", "Comprar"];
 
     const trHeader = thead.insertRow();
@@ -810,14 +812,11 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
         const fornecedorRow = tbody.insertRow();
         fornecedorRow.className = 'categoria-accordion-header-row';
         fornecedorRow.id = `fornecedor-row-${fornecedorClass}`;
-        // **INÍCIO DA CORREÇÃO 1: Adicionar o dataset para identificar o alvo do clique**
         fornecedorRow.dataset.targetClass = fornecedorClass;
-        // **FIM DA CORREÇÃO 1**
 
         const fornecedorCell = fornecedorRow.insertCell();
         fornecedorCell.colSpan = cabecalhosVisiveis.length;
         
-        // Conteúdo do cabeçalho
         const headerContent = document.createElement('div');
         headerContent.className = 'categoria-header-content';
         headerContent.style.cssText = 'display: flex; justify-content: space-between; width: 100%; align-items: center;';
@@ -837,7 +836,6 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
         headerContent.appendChild(rightSide);
         fornecedorCell.appendChild(headerContent);
 
-
         const dashboardRow = tbody.insertRow();
         dashboardRow.className = `etapa5-content-row ${fornecedorClass}`;
         const dashboardCell = dashboardRow.insertCell();
@@ -845,6 +843,8 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
         dashboardCell.style.cssText = 'padding: 8px 25px; background-color: #f0f9ff;';
         dashboardCell.innerHTML = `<div class="mini-dashboard" data-fornecedor="${fornecedor}"></div>`;
 
+        // **LÓGICA MODIFICADA AQUI**
+        // Itera sobre os produtos e depois sobre os cabeçalhos visíveis para criar as células.
         subProdutos.forEach(subProduto => {
             const subRow = tbody.insertRow();
             subRow.className = `sub-produto-row etapa5-content-row ${fornecedorClass}`;
@@ -852,22 +852,21 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
             subRow.dataset.fornecedor = subProduto['Fornecedor'];
             subRow.dataset.subprodutoOriginalPersistido = subProduto['_subProdutoOriginalPersistido'];
 
-            CABECALHOS_COTACOES_TODOS.forEach(cabecalho => {
-                if (colunasOcultasVisualmente.includes(cabecalho) && !colunasInvisiveisParaCalculo.includes(cabecalho)) return;
-
+            // Loop simplificado: itera diretamente sobre as colunas que devem ser exibidas.
+            cabecalhosVisiveis.forEach(cabecalho => {
                 const td = subRow.insertCell();
                 let valor = subProduto[cabecalho];
                 if (typeof valor === 'number') {
                      if (['Valor Total', 'Preço', 'Preço por Fator', 'Economia em Cotação'].includes(cabecalho)) {
                          valor = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                     }
+                     } else if (cabecalho === 'Fator') {
+                        valor = valor.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                    }
                 }
                 td.textContent = (valor === null || valor === undefined) ? "" : valor;
                 td.dataset.coluna = cabecalho;
                 td.dataset.valorOriginal = subProduto[cabecalho] || "";
                 
-                if (!cabecalhosVisiveis.includes(cabecalho)) td.style.display = 'none';
-
                 const classeCor = window.CotacaoIndividualScript_getClasseCorColuna(cabecalho);
                 if (classeCor) td.classList.add(classeCor);
 
@@ -884,38 +883,29 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
         EtapasScript_atualizarDashboardFornecedor(fornecedor);
         document.querySelectorAll(`tr.${fornecedorClass}`).forEach(row => row.classList.add('hidden'));
     
-        // **INÍCIO DA CORREÇÃO 2: Lógica de clique corrigida e simplificada**
         fornecedorRow.addEventListener('click', function(e) {
             e.stopPropagation();
-
-            // Alterna a classe 'expanded' no cabeçalho clicado
             this.classList.toggle('expanded');
             const isExpandedNow = this.classList.contains('expanded');
-            
-            // Pega o nome da classe alvo do atributo 'data-target-class'
             const targetClass = this.dataset.targetClass;
             const contentRows = document.querySelectorAll(`tr.${targetClass}`);
             const icon = this.querySelector('.categoria-accordion-icon');
 
-            // Gira o ícone
             if (icon) {
                 icon.style.transform = isExpandedNow ? 'rotate(90deg)' : 'rotate(0deg)';
             }
             
-            // Mostra ou esconde as linhas de conteúdo
             contentRows.forEach(row => {
                 row.classList.toggle('hidden', !isExpandedNow);
             });
             
-            // Atualiza o dashboard do fornecedor se estiver expandindo
             if (isExpandedNow) {
                 EtapasScript_atualizarDashboardFornecedor(fornecedor);
             }
         });
-        // **FIM DA CORREÇÃO 2**
     }
 
-      EtapasScript_atualizarDashboardGlobal();
+    EtapasScript_atualizarDashboardGlobal();
 }
 
 function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
