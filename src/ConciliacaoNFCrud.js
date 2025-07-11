@@ -163,7 +163,9 @@ function ConciliacaoNFCrud_obterCotacoesAbertas() {
       const status = linha[colStatus];
       const id = linha[colId];
       const fornecedor = linha[colForn];
-      if (id && fornecedor && status === 'Aguardando Faturamento') {
+
+      // [ALTERAÇÃO APLICADA AQUI] A condição agora aceita ambos os status.
+      if (id && fornecedor && (status === 'Aguardando Faturamento' || status === 'Recebido Parcialmente')) {
         const compositeKey = `${id}-${fornecedor}`; 
         if (!cotacoesUnicas[compositeKey]) { 
           const nomeFornecedorTrim = fornecedor.toString().trim();
