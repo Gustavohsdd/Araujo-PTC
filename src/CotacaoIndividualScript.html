@@ -165,7 +165,7 @@ function CotacaoIndividualScript_removerAcentos(text) {
 }
 
 /**
- * Transforma uma célula (td) em um campo de select para edição.
+ * Transforma uma célula (td) em um campo de select para edição, com navegação por teclado aprimorada e definitiva.
  * @param {Event} event - O evento de clique.
  * @param {string[]} opcoes - Um array de strings com as opções para o select.
  */
@@ -175,15 +175,13 @@ function CotacaoIndividualScript_transformarCelulaEmSelect(event, opcoes) {
 
     const valorOriginal = td.dataset.valorOriginal || '';
     const select = document.createElement('select');
-    select.className = 'inline-edit-input'; // Reusa a classe do input
+    select.className = 'inline-edit-input';
 
-    // Adiciona uma opção vazia no início
     const optionVazia = document.createElement('option');
     optionVazia.value = "";
     optionVazia.textContent = "Selecione...";
     select.appendChild(optionVazia);
 
-    // Adiciona as empresas da lista
     opcoes.forEach(opt => {
         const option = document.createElement('option');
         option.value = opt;
@@ -201,24 +199,51 @@ function CotacaoIndividualScript_transformarCelulaEmSelect(event, opcoes) {
     select.focus();
 
     const salvarAlteracao = () => {
-         const novoValor = select.value;
-         const tr = td.closest('tr');
-         const coluna = td.dataset.coluna;
-
-         // Se o valor não mudou, apenas restaura
-         if (novoValor === valorOriginal) {
-             td.textContent = valorOriginal;
-             return;
-         }
-         // Lógica de salvar (chama a mesma função que o input)
+         if (!document.body.contains(select)) return;
          CotacaoIndividualScript_salvarEdicaoInline(select);
     };
 
     select.addEventListener('blur', salvarAlteracao);
-    select.addEventListener('change', salvarAlteracao); // Salva ao mudar a opção
+
     select.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            td.textContent = valorOriginal; // Restaura
+            e.preventDefault();
+            select.removeEventListener('blur', salvarAlteracao);
+            td.textContent = valorOriginal;
+            td.focus();
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            
+            // Guarda a referência da célula pai antes que o blur a modifique
+            const parentTd = select.closest('td'); 
+            
+            // Dispara o blur para salvar e redesenhar a célula
+            select.blur();
+
+            // Usa um pequeno delay para garantir que o DOM foi atualizado
+            setTimeout(() => {
+                if (e.key === 'Tab') {
+                    // Usa a função de navegação de Tab existente
+                    CotacaoIndividualScript_focusNextCell(parentTd, e.shiftKey);
+                } else { // Lógica para a tecla 'Enter'
+                    const currentRow = parentTd.parentElement;
+                    const cellIndex = Array.from(currentRow.children).indexOf(parentTd);
+                    let nextRow = currentRow.nextElementSibling;
+                    
+                    // Pula linhas que não são de dados (como cabeçalhos de grupo)
+                    while (nextRow && !nextRow.matches('.sub-produto-row, .etapa5-content-row')) {
+                        nextRow = nextRow.nextElementSibling;
+                    }
+                    
+                    if (nextRow) {
+                        const nextCell = nextRow.children[cellIndex];
+                        // Foca na próxima célula da mesma coluna, se ela existir e for editável
+                        if (nextCell && nextCell.matches('.editable-price-cell, .editable-select-cell')) {
+                            nextCell.focus();
+                        }
+                    }
+                }
+            }, 50); // 50ms é suficiente para a atualização do DOM
         }
     });
 }
@@ -248,9 +273,11 @@ function CotacaoIndividualScript_transformarCelulaEmInput(event) {
 
     input.addEventListener('blur', () => CotacaoIndividualScript_salvarEdicaoInline(input));
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') input.blur();
+        // A lógica de Enter e Tab agora é gerenciada pelo handler principal 'CotacaoIndividualScript_handleTableNavigation'
+        // A verificação de Escape permanece como um cancelamento rápido
         if (e.key === 'Escape') {
-            td.textContent = valorOriginal; // Restaura o valor original sem salvar
+            const tdCell = input.parentElement;
+            tdCell.textContent = tdCell.dataset.valorOriginal || ''; // Restaura o valor original sem salvar
         }
     });
 }
@@ -820,6 +847,7 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
 
                     if (colunasEditaveis.includes(header)) {
                         td.classList.add('editable-price-cell');
+                        td.tabIndex = 0; // <<< ADICIONADO PARA NAVEGAÇÃO
                         td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
                     }
                 });
@@ -827,6 +855,7 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
         }
     });
 }
+
 
   
   window.CotacaoIndividualScript_carregarDadosCotacao = async function(idCotacao) {
@@ -1027,6 +1056,15 @@ function initDropdownsInterno() {
         btnRecalcular.addEventListener('click', CotacaoIndividualScript_forcarRecalculoTotalUI);
     }
 
+    // ADICIONA O EVENT LISTENER DE NAVEGAÇÃO À TABELA
+    const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
+    if(tabela) {
+        const tbody = tabela.querySelector('tbody');
+        if (tbody) {
+            tbody.addEventListener('keydown', CotacaoIndividualScript_handleTableNavigation);
+        }
+    }
+
     let paramsUrl;
     try {
         paramsUrl = await CotacaoIndividualScript_obterParametrosUrl();
@@ -1113,7 +1151,7 @@ function initDropdownsInterno() {
     }
    
     initDropdownsInterno();
-  } 
+  }
 
   google.script.run.withSuccessHandler(function(constantes) {
       if (constantes && constantes.CABECALHOS_COTACOES) {
@@ -1133,4 +1171,149 @@ function initDropdownsInterno() {
   }).App_obterConstantes();
 
 } 
+
+/**
+ * Retorna uma lista de todas as células editáveis e visíveis na tabela.
+ * @returns {HTMLElement[]}
+ */
+function CotacaoIndividualScript_getNavegaveis() {
+    return Array.from(document.querySelectorAll('#' + CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO + ' .editable-price-cell, #' + CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO + ' .editable-select-cell'))
+                .filter(cell => cell.offsetParent !== null); // 'offsetParent' nulo significa que a célula está oculta
+}
+
+/**
+ * Foca na próxima célula navegável com base na direção.
+ * @param {HTMLElement} currentCell - A célula atualmente focada.
+ * @param {boolean} isPrevious - Se deve navegar para a célula anterior (Shift+Tab).
+ */
+function CotacaoIndividualScript_focusNextCell(currentCell, isPrevious = false) {
+    const navegaveis = CotacaoIndividualScript_getNavegaveis();
+    if (navegaveis.length === 0) return;
+
+    const currentIndex = navegaveis.indexOf(currentCell);
+    if (currentIndex === -1) {
+        navegaveis[0].focus();
+        return;
+    }
+
+    let nextIndex;
+    if (isPrevious) {
+        nextIndex = (currentIndex - 1 + navegaveis.length) % navegaveis.length;
+    } else {
+        nextIndex = (currentIndex + 1) % navegaveis.length;
+    }
+
+    navegaveis[nextIndex].focus();
+}
+
+/**
+ * Manipula os eventos de teclado (Setas, Tab, Enter) para navegação na tabela.
+ * @param {KeyboardEvent} e - O evento do teclado.
+ */
+function CotacaoIndividualScript_handleTableNavigation(e) {
+    const activeElement = document.activeElement;
+    if (!activeElement || !activeElement.matches('td, input, select')) return;
+
+    const currentCell = activeElement.closest('td');
+    if (!currentCell) return;
+
+    const isInEditMode = activeElement.tagName === 'INPUT' || activeElement.tagName === 'SELECT';
+
+    // Se estiver em modo de edição
+    if (isInEditMode) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            activeElement.blur(); // Salva a célula atual
+
+            // A lógica de mover para baixo é a mesma do 'ArrowDown'
+            setTimeout(() => {
+                const currentRow = currentCell.parentElement;
+                const cellIndex = Array.from(currentRow.children).indexOf(currentCell);
+                let nextRow = currentRow.nextElementSibling;
+                while (nextRow && !nextRow.matches('.sub-produto-row, .etapa5-content-row')) {
+                    nextRow = nextRow.nextElementSibling;
+                }
+                if (nextRow) {
+                    const nextCell = nextRow.children[cellIndex];
+                    if (nextCell) nextCell.focus();
+                }
+            }, 50); // Delay para garantir que o DOM foi atualizado
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            activeElement.blur(); // Salva a célula atual
+            setTimeout(() => CotacaoIndividualScript_focusNextCell(currentCell, e.shiftKey), 50);
+        }
+        return;
+    }
+
+    // Se NÃO estiver em modo de edição
+    if (!isInEditMode) {
+        switch (e.key) {
+            case 'Enter':
+                e.preventDefault();
+                // Simula um clique para entrar em modo de edição.
+                // Como a Etapa 5 agora usará 'click', isso funcionará para ambos.
+                const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+                currentCell.dispatchEvent(clickEvent);
+                break;
+
+            case 'Tab':
+                e.preventDefault();
+                CotacaoIndividualScript_focusNextCell(currentCell, e.shiftKey);
+                break;
+
+            case 'ArrowRight': {
+                e.preventDefault();
+                let next = currentCell.nextElementSibling;
+                while (next && !next.matches('.editable-price-cell, .editable-select-cell')) {
+                    next = next.nextElementSibling;
+                }
+                if (next) next.focus();
+                break;
+            }
+
+            case 'ArrowLeft': {
+                e.preventDefault();
+                let prev = currentCell.previousElementSibling;
+                while (prev && !prev.matches('.editable-price-cell, .editable-select-cell')) {
+                    prev = prev.previousElementSibling;
+                }
+                if (prev) prev.focus();
+                break;
+            }
+
+            case 'ArrowDown': {
+                e.preventDefault();
+                const currentRow = currentCell.parentElement;
+                const cellIndex = Array.from(currentRow.children).indexOf(currentCell);
+                let nextRow = currentRow.nextElementSibling;
+                // Pula linhas que não são de dados (cabeçalhos de grupo, etc.)
+                while (nextRow && !nextRow.matches('.sub-produto-row, .etapa5-content-row')) {
+                    nextRow = nextRow.nextElementSibling;
+                }
+                if (nextRow) {
+                    const nextCell = nextRow.children[cellIndex];
+                    if (nextCell) nextCell.focus();
+                }
+                break;
+            }
+
+            case 'ArrowUp': {
+                e.preventDefault();
+                const currentRow = currentCell.parentElement;
+                const cellIndex = Array.from(currentRow.children).indexOf(currentCell);
+                let prevRow = currentRow.previousElementSibling;
+                while (prevRow && !prevRow.matches('.sub-produto-row, .etapa5-content-row')) {
+                    prevRow = prevRow.previousElementSibling;
+                }
+                if (prevRow) {
+                    const prevCell = prevRow.children[cellIndex];
+                    if (prevCell) prevCell.focus();
+                }
+                break;
+            }
+        }
+    }
+}
+
 </script>

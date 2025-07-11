@@ -840,10 +840,6 @@ function recalcularErenderizarResumoRateio() {
     }
 }
 
-/**
- * [ALTERADO] Coleta os dados da tela para preparar o payload para o salvamento em lote.
- * Contém a correção de um erro de digitação ('conciliaacao-info').
- */
 function onBtnConcluirConciliacaoClick() {
     let erroValidacao = false;
     $('.matched-item-card').each(function() {
@@ -857,6 +853,12 @@ function onBtnConcluirConciliacaoClick() {
     const workspace = $('#workspace-content');
     const nfInfo = workspace.data('active-nf');
     const compositeKey = workspace.find('.select-cotacao-fornecedor').val();
+
+    // ===== CORREÇÃO DE VALIDAÇÃO APLICADA AQUI =====
+    if (!compositeKey) {
+        alert('Erro: Nenhuma cotação foi selecionada. Por favor, vincule a NF a uma cotação antes de concluir.');
+        return; 
+    }
     const [idCotacao, ...nomeFornecedorParts] = compositeKey.split('-');
     const nomeFornecedor = nomeFornecedorParts.join('-');
 
@@ -1110,10 +1112,8 @@ function onBtnConcluirRateioSemPedidoClick() {
     const novasRegras = [];
     const totaisNF = todosOsDadosGeraisNF.find(t => t.chaveAcesso === nfInfo.chaveAcesso);
 
-    // [CORREÇÃO] Calcula o total bruto com base nos itens na tela e na propriedade correta 'itemNF_Agregada'
     const totalItensBruto = $('.matched-item-card').toArray().reduce((sum, el) => {
         const info = $(el).data('conciliacao-info');
-        // Usa a propriedade correta: 'itemNF_Agregada'
         return sum + (info.itemNF_Agregada.qtdNF * info.itemNF_Agregada.precoNF);
     }, 0);
     
@@ -1125,7 +1125,6 @@ function onBtnConcluirRateioSemPedidoClick() {
         const concInfo = card.data('conciliacao-info');
         const rateioInfo = card.data('rateio-info');
         
-        // [CORREÇÃO] Usa a propriedade correta: 'itemNF_Agregada'
         const valorBrutoItem = concInfo.itemNF_Agregada.qtdNF * concInfo.itemNF_Agregada.precoNF;
         const proporcaoItem = totalItensBruto > 0.01 ? valorBrutoItem / totalItensBruto : 0;
         const custoEfetivoItem = valorBrutoItem + (custosAdicionais * proporcaoItem);
@@ -1135,7 +1134,10 @@ function onBtnConcluirRateioSemPedidoClick() {
             setor = setor.trim();
             totaisPorSetor[setor] = (totaisPorSetor[setor] || 0) + (custoEfetivoItem * (porcentagem / 100));
             if (!mapaSetorParaItens[setor]) mapaSetorParaItens[setor] = new Set();
-            mapaSetorParaItens[setor].add(concInfo.itemNF_Original.descricaoNF); // Usa a descrição da NF
+            
+            // ===== CORREÇÃO APLICADA AQUI =====
+            // Acessa o primeiro elemento do array antes de pegar a descrição.
+            mapaSetorParaItens[setor].add(concInfo.itensNF_Original[0].descricaoNF); 
         };
 
         if (rateioInfo.isAutomatico) {
@@ -1145,7 +1147,9 @@ function onBtnConcluirRateioSemPedidoClick() {
                 const setor = $(this).find('.input-setor').val().trim();
                 const porcentagem = parseFloat($(this).find('.input-porcentagem').val()) || 0;
                 aplicarRateio(setor, porcentagem);
-                if(setor && porcentagem > 0) novasRegras.push({ itemCotacao: concInfo.itemNF_Original.descricaoNF, setor, porcentagem });
+
+                // Corrigido para usar a descrição do item da NF, não da cotação
+                if(setor && porcentagem > 0) novasRegras.push({ itemCotacao: concInfo.itensNF_Original[0].descricaoNF, setor, porcentagem });
             });
         }
     });
