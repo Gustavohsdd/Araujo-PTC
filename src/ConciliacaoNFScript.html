@@ -15,7 +15,8 @@ let selectedCotacaoItem = null;
 let modalFornecedorNFInstance = null;
 let modalCadastroItensNFInstance = null;
 let modalCadastroProdutoViaNFInstance = null;
-let selectQueAbriuModalProduto = null; 
+let selectQueAbriuModalProduto = null;
+let ConciliacaoNFScript_listenersAnexados = false; 
 
 // ===== FUNÇÕES DE INICIALIZAÇÃO E SETUP =====
 // SUBSTITUA A FUNÇÃO 'DOMContentLoaded' INTEIRA POR ESTA VERSÃO CORRIGIDA
@@ -27,17 +28,23 @@ document.addEventListener('DOMContentLoaded', function() {
     modalCadastroItensNFInstance = new bootstrap.Modal(document.getElementById('modalCadastroItensNF'));
     modalCadastroProdutoViaNFInstance = new bootstrap.Modal(document.getElementById('modalCadastroProdutoViaNF'));
 
+    // Anexa todos os event listeners da aplicação UMA ÚNICA VEZ.
+    addEventListeners();
+
     // Mostra o loader e busca os dados iniciais
     toggleLoader(true);
     google.script.run
         .withSuccessHandler(onDadosIniciaisSuccess)
         .withFailureHandler(onFailure)
         .ConciliacaoNFController_obterDadosParaPagina();
-        
-
 });
 
 function addEventListeners() {
+    // Se os listeners já foram anexados, interrompe a execução para evitar duplicidade.
+    if (ConciliacaoNFScript_listenersAnexados) {
+      return;
+    }
+
     // Header
     $('#btn-upload-xml').on('click', () => $('#xml-upload-input').click());
     $('#xml-upload-input').on('change', onFileUpload);
@@ -87,6 +94,9 @@ function addEventListeners() {
     panelDireito.on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
     $('#btn-salvar-ajuste-manual').on('click', onBtnSalvarAjusteManualClick);
     $('#ajuste-fator').on('input', calcularVisualizacaoAjuste);
+
+    // Marca que os listeners foram anexados com sucesso.
+    ConciliacaoNFScript_listenersAnexados = true;
 }
 
 function resetApplication() {
@@ -160,8 +170,9 @@ function onDadosIniciaisSuccess(response) {
     }
     
     renderizarListaDeTrabalho();
-    addEventListeners();
+    
 }
+
 function onFailure(error) {
     console.error('Erro na chamada ao servidor:', error);
     alert('Ocorreu um erro no servidor: ' + (error.message || 'Erro desconhecido.'));
