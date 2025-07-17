@@ -19,232 +19,241 @@ const EtapasScript_COLUNAS_A_EXIBIR_FATURAMENTO = [
 
 
 //----------------------------------------------------------------------------------------------------
-// ETAPA 1: CONTAGEM DE ESTOQUE
+// ETAPA 1: CONTAGEM DE ESTOQUE (NOVA VERSÃO COM MODAL)
 //----------------------------------------------------------------------------------------------------
 
 /**
- * Prepara e ativa a visualização para a etapa de Contagem de Estoque.
- */
+ * Ponto de entrada para a Etapa 1. Prepara e exibe o modal de Contagem de Estoque.
+ * Esta função substitui a antiga que modificava a tabela principal.
+ */
 function EtapasScript_ativarModoContagemEstoque() {
-    console.log("EtapasScript: Ativando modo Contagem de Estoque.");
-    CotacaoIndividualScript_modoEtapaAtual = 'contagem_estoque';
+    console.log("EtapasScript: Ativando modo Contagem de Estoque (Modal).");
+    CotacaoIndividualScript_modoEtapaAtual = 'contagem_estoque';
 
-    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
-    
-    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
-    if (btnSalvarContagem) {
-        btnSalvarContagem.classList.remove('hidden');
-        btnSalvarContagem.removeEventListener('click', EtapasScript_salvarContagemEstoqueEtapa);
-        btnSalvarContagem.addEventListener('click', EtapasScript_salvarContagemEstoqueEtapa);
-    }
+    // Garante que os dados da cotação já foram carregados
+    if (CotacaoIndividualScript_dadosOriginaisCotacao.length === 0) {
+        CotacaoIndividualScript_exibirFeedback("Dados da cotação ainda não carregados. Tente novamente.", true, 5000);
+        CotacaoIndividualScript_modoEtapaAtual = null; // Reseta o modo
+        return;
+    }
 
+    // Renderiza o conteúdo do modal com os dados atuais
+    EtapasScript_renderizarConteudoModalContagem();
 
-    if (CotacaoIndividualScript_dadosOriginaisCotacao.length === 0) {
-        CotacaoIndividualScript_mostrarLoadingOverlay(false);
-        CotacaoIndividualScript_exibirFeedback("Dados da cotação ainda não carregados. Tente novamente em instantes.", true, 5000);
-        CotacaoIndividualScript_modoEtapaAtual = null;
-        if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
-        return;
-    }
+    // Abre o modal
+    const modalOverlay = document.getElementById('EtapasScript_modalContagemEstoqueOverlay');
+    if (modalOverlay) {
+        modalOverlay.classList.add('active');
+    }
 
-    const tbody = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO)?.querySelector('tbody');
-    if (!tbody) {
-        console.error("EtapasScript_ativarModoContagemEstoque: Tbody não encontrado.");
-        CotacaoIndividualScript_mostrarLoadingOverlay(false);
-        if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
-        return;
-    }
+    // Configura os botões do modal
+    const btnSalvar = document.getElementById('EtapasScript_btnSalvarModalContagem');
+    const btnCancelar = document.getElementById('EtapasScript_btnCancelarModalContagem');
+    const btnFechar = document.getElementById('EtapasScript_btnFecharModalContagemEstoque');
 
-    tbody.querySelectorAll('.sub-produto-row').forEach(row => {
-        row.classList.add('hidden-by-etapa');
-    });
+    // Remove event listeners antigos para evitar duplicação
+    btnSalvar.removeEventListener('click', EtapasScript_salvarContagemEstoqueEtapa);
+    btnCancelar.removeEventListener('click', EtapasScript_fecharModalContagemEstoque);
+    btnFechar.removeEventListener('click', EtapasScript_fecharModalContagemEstoque);
 
-    tbody.querySelectorAll('.produto-group-separator-row').forEach(row => {
-        const produtoNome = row.dataset.produtoNome;
-        const primeiroItemDoProdutoPrincipal = CotacaoIndividualScript_dadosOriginaisCotacao.find(item => item.Produto === produtoNome);
-
-        if (!primeiroItemDoProdutoPrincipal) {
-            console.warn("EtapasScript_ativarModoContagemEstoque: Dados originais não encontrados para produto:", produtoNome);
-            return;
-        }
-
-        const cell = row.cells[0];
-        if (!cell) return;
-        cell.innerHTML = ''; 
-
-        const containerPrincipal = document.createElement('div');
-        containerPrincipal.className = 'contagem-container-principal';
-
-        const produtoInfoSpan = document.createElement('span');
-        produtoInfoSpan.className = 'produto-principal-info';
-        const estMinOriginal = (primeiroItemDoProdutoPrincipal.EstoqueMinimoProdutoPrincipal !== null && primeiroItemDoProdutoPrincipal.EstoqueMinimoProdutoPrincipal !== undefined)
-            ? primeiroItemDoProdutoPrincipal.EstoqueMinimoProdutoPrincipal
-            : 'N/A';
-        produtoInfoSpan.textContent = `Produto: ${primeiroItemDoProdutoPrincipal.Produto} (Est. Mín. Atual: ${estMinOriginal})`;
-        containerPrincipal.appendChild(produtoInfoSpan);
-
-        const camposEdicaoContainer = document.createElement('div');
-        camposEdicaoContainer.className = 'contagem-fields-container';
-
-        const blocoEstMin = document.createElement('div');
-        blocoEstMin.className = 'contagem-field-block';
-        const labelEstMin = document.createElement('label');
-        labelEstMin.textContent = "Novo Est. Mínimo (Prod.):";
-        labelEstMin.className = 'campo-contagem-label';
-        const inputEstMin = document.createElement('input');
-        inputEstMin.type = 'number';
-        inputEstMin.className = 'input-contagem input-estoque-min-prod-principal';
-        inputEstMin.dataset.produtoNome = primeiroItemDoProdutoPrincipal.Produto;
-        inputEstMin.value = estMinOriginal !== 'N/A' ? estMinOriginal : '';
-        blocoEstMin.appendChild(labelEstMin);
-        blocoEstMin.appendChild(inputEstMin);
-        camposEdicaoContainer.appendChild(blocoEstMin);
-
-        const dadosEstoqueCompraSalvos = CotacaoIndividualScript_parsearStringEstoqueComprar(primeiroItemDoProdutoPrincipal["Estoque Atual"]);
-
-        const blocoEstContado = document.createElement('div');
-        blocoEstContado.className = 'contagem-field-block';
-        const labelEstAtual = document.createElement('label');
-        labelEstAtual.textContent = "Estoque Contado:";
-        labelEstAtual.className = 'campo-contagem-label';
-        const inputEstAtual = document.createElement('input');
-        inputEstAtual.type = 'number';
-        inputEstAtual.className = 'input-contagem input-estoque-contado-prod-principal';
-        inputEstAtual.dataset.produtoNome = primeiroItemDoProdutoPrincipal.Produto;
-        inputEstAtual.value = dadosEstoqueCompraSalvos.estoqueAtual !== null ? dadosEstoqueCompraSalvos.estoqueAtual : '';
-        blocoEstContado.appendChild(labelEstAtual);
-        blocoEstContado.appendChild(inputEstAtual);
-        camposEdicaoContainer.appendChild(blocoEstContado);
-
-        const blocoComprar = document.createElement('div');
-        blocoComprar.className = 'contagem-field-block';
-        const labelComprar = document.createElement('label');
-        labelComprar.textContent = "Comprar (Sugestão):";
-        labelComprar.className = 'campo-contagem-label';
-        const inputComprar = document.createElement('input');
-        inputComprar.type = 'number';
-        inputComprar.className = 'input-contagem input-comprar-sugestao-prod-principal';
-        inputComprar.dataset.produtoNome = primeiroItemDoProdutoPrincipal.Produto;
-        inputComprar.value = dadosEstoqueCompraSalvos.comprar !== null ? dadosEstoqueCompraSalvos.comprar : '';
-        blocoComprar.appendChild(labelComprar);
-        blocoComprar.appendChild(inputComprar);
-        camposEdicaoContainer.appendChild(blocoComprar);
-
-        containerPrincipal.appendChild(camposEdicaoContainer);
-        cell.appendChild(containerPrincipal);
-    });
-
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Atualizando status para Contagem...");
-    google.script.run
-        .withSuccessHandler(function(statusResponse) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (statusResponse && statusResponse.success) {
-                CotacaoIndividualScript_exibirFeedback("Status atualizado. Modo 'Contagem de Estoque' ativado. Preencha os campos e clique em Salvar.", false, 7000);
-            } else {
-                CotacaoIndividualScript_exibirFeedback(statusResponse.message || "Falha ao atualizar status da cotação.", true, 7000);
-                CotacaoIndividualScript_modoEtapaAtual = null;
-                if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
-                CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
-            }
-        })
-        .withFailureHandler(function(err) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao atualizar status: " + err.message, true, 7000);
-            console.error("Erro ao atualizar status para Contagem:", err);
-            CotacaoIndividualScript_modoEtapaAtual = null;
-            if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
-            CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
-        })
-        .EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Contagem de Estoque");
+    // Adiciona os novos event listeners
+    btnSalvar.addEventListener('click', EtapasScript_salvarContagemEstoqueEtapa);
+    btnCancelar.addEventListener('click', EtapasScript_fecharModalContagemEstoque);
+    btnFechar.addEventListener('click', EtapasScript_fecharModalContagemEstoque);
 }
 
 /**
- * Desativa o modo de Contagem de Estoque e restaura a visualização padrão da tabela.
- */
-function EtapasScript_desativarModoContagemEstoque() {
-    console.log("EtapasScript: Desativando modo Contagem de Estoque.");
-    CotacaoIndividualScript_modoEtapaAtual = null;
-    
-    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
-    if (btnSalvarContagem) {
-        btnSalvarContagem.classList.add('hidden');
-    }
-    
-    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
-    CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
+ * Fecha o modal de contagem de estoque e restaura o estado da aplicação.
+ */
+function EtapasScript_fecharModalContagemEstoque() {
+    console.log("EtapasScript: Fechando modal de Contagem de Estoque.");
+    const modalOverlay = document.getElementById('EtapasScript_modalContagemEstoqueOverlay');
+    if (modalOverlay) {
+        modalOverlay.classList.remove('active');
+    }
+    CotacaoIndividualScript_modoEtapaAtual = null; // Limpa o modo de etapa
+    
+    // Limpa feedback dentro do modal para a próxima vez que for aberto
+    const feedbackDiv = document.getElementById('EtapasScript_feedbackModalContagem');
+    if(feedbackDiv) feedbackDiv.innerHTML = '';
 }
 
 /**
- * Coleta os dados dos campos de contagem de estoque e os envia para o servidor.
- */
+ * Renderiza o corpo da tabela dentro do modal de contagem de estoque.
+ */
+function EtapasScript_renderizarConteudoModalContagem() {
+    const tbody = document.getElementById('EtapasScript_tbodyModalContagemEstoque');
+    if (!tbody) {
+        console.error("EtapasScript_renderizarConteudoModalContagem: Tbody do modal não encontrado.");
+        return;
+    }
+    tbody.innerHTML = ''; // Limpa o conteúdo anterior
+
+    // Agrupa os dados por Produto Principal para evitar duplicatas
+    const produtosPrincipais = {};
+    CotacaoIndividualScript_dadosOriginaisCotacao.forEach(item => {
+        const nomeProduto = item.Produto;
+        if (!produtosPrincipais[nomeProduto]) {
+            produtosPrincipais[nomeProduto] = {
+                nome: nomeProduto,
+                estoqueMinimo: (item.EstoqueMinimoProdutoPrincipal !== null && item.EstoqueMinimoProdutoPrincipal !== undefined)
+                    ? item.EstoqueMinimoProdutoPrincipal : '',
+                dadosEstoqueCompra: CotacaoIndividualScript_parsearStringEstoqueComprar(item["Estoque Atual"])
+            };
+        }
+    });
+
+    const listaProdutos = Object.values(produtosPrincipais).sort((a, b) => a.nome.localeCompare(b.nome));
+
+    if (listaProdutos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-gray-500">Nenhum produto na cotação.</td></tr>';
+        return;
+    }
+
+    listaProdutos.forEach(produto => {
+        const tr = tbody.insertRow();
+        tr.dataset.produtoNome = produto.nome;
+
+        // Célula 1: Nome do Produto
+        const tdProduto = tr.insertCell();
+        tdProduto.textContent = produto.nome;
+
+        // Célula 2: Input para Novo Estoque Mínimo
+        const tdEstMin = tr.insertCell();
+        const inputEstMin = document.createElement('input');
+        inputEstMin.type = 'number';
+        inputEstMin.className = 'input-contagem input-estoque-min-prod-principal';
+        inputEstMin.placeholder = 'Ex: 10';
+        inputEstMin.value = produto.estoqueMinimo;
+        tdEstMin.appendChild(inputEstMin);
+
+        // Célula 3: Input para Estoque Contado
+        const tdEstContado = tr.insertCell();
+        const inputEstContado = document.createElement('input');
+        inputEstContado.type = 'number';
+        inputEstContado.className = 'input-contagem input-estoque-contado-prod-principal';
+        inputEstContado.placeholder = 'Ex: 15';
+        inputEstContado.value = produto.dadosEstoqueCompra.estoqueAtual !== null ? produto.dadosEstoqueCompra.estoqueAtual : '';
+        tdEstContado.appendChild(inputEstContado);
+
+        // Célula 4: Input para Comprar (Sugestão)
+        const tdComprar = tr.insertCell();
+        const inputComprar = document.createElement('input');
+        inputComprar.type = 'number';
+        inputComprar.className = 'input-contagem input-comprar-sugestao-prod-principal';
+        inputComprar.placeholder = 'Ex: 5';
+        inputComprar.value = produto.dadosEstoqueCompra.comprar !== null ? produto.dadosEstoqueCompra.comprar : '';
+        tdComprar.appendChild(inputComprar);
+    });
+}
+
+/**
+ * Coleta os dados dos inputs do modal e os envia para o servidor.
+ * Esta função é chamada pelo botão "Salvar" do modal.
+ */
 function EtapasScript_salvarContagemEstoqueEtapa() {
-    console.log("EtapasScript_salvarContagemEstoqueEtapa: Salvando dados da contagem de estoque...");
-    CotacaoIndividualScript_ocultarFeedback();
-    const dadosParaSalvar = [];
-    const todasLinhasProdutoPrincipal = document.querySelectorAll('.produto-group-separator-row');
+    console.log("EtapasScript_salvarContagemEstoqueEtapa: Coletando dados do modal para salvar.");
+    
+    const dadosParaSalvar = [];
+    const todasLinhasDoModal = document.querySelectorAll('#EtapasScript_tbodyModalContagemEstoque tr');
 
-    todasLinhasProdutoPrincipal.forEach(row => {
-        const produtoNome = row.dataset.produtoNome;
-        if (!produtoNome) return;
+    todasLinhasDoModal.forEach(row => {
+        const produtoNome = row.dataset.produtoNome;
+        if (!produtoNome) return;
 
-        const inputEstMinElem = row.querySelector(`.input-estoque-min-prod-principal[data-produto-nome="${produtoNome}"]`);
-        const inputEstContadoElem = row.querySelector(`.input-estoque-contado-prod-principal[data-produto-nome="${produtoNome}"]`);
-        const inputComprarSugElem = row.querySelector(`.input-comprar-sugestao-prod-principal[data-produto-nome="${produtoNome}"]`);
+        const inputEstMinElem = row.querySelector('.input-estoque-min-prod-principal');
+        const inputEstContadoElem = row.querySelector('.input-estoque-contado-prod-principal');
+        const inputComprarSugElem = row.querySelector('.input-comprar-sugestao-prod-principal');
 
-        const novoEstoqueMinimo = inputEstMinElem && inputEstMinElem.value !== '' ? parseFloat(inputEstMinElem.value) : null;
-        const estoqueContado = inputEstContadoElem && inputEstContadoElem.value !== '' ? parseFloat(inputEstContadoElem.value) : null;
-        const comprarSugestao = inputComprarSugElem && inputComprarSugElem.value !== '' ? parseFloat(inputComprarSugElem.value) : null;
+        const novoEstoqueMinimo = inputEstMinElem && inputEstMinElem.value !== '' ? parseFloat(inputEstMinElem.value.replace(',', '.')) : null;
+        const estoqueContado = inputEstContadoElem && inputEstContadoElem.value !== '' ? parseFloat(inputEstContadoElem.value.replace(',', '.')) : null;
+        const comprarSugestao = inputComprarSugElem && inputComprarSugElem.value !== '' ? parseFloat(inputComprarSugElem.value.replace(',', '.')) : null;
 
-        dadosParaSalvar.push({
-            nomeProdutoPrincipal: produtoNome,
-            novoEstoqueMinimoProdutoPrincipal: novoEstoqueMinimo,
-            estoqueAtualContagem: estoqueContado,
-            comprarSugestao: comprarSugestao
-        });
-    });
+        // Adiciona à lista apenas se algum valor foi de fato inserido ou alterado
+        if (novoEstoqueMinimo !== null || estoqueContado !== null || comprarSugestao !== null) {
+            dadosParaSalvar.push({
+                nomeProdutoPrincipal: produtoNome,
+                novoEstoqueMinimoProdutoPrincipal: novoEstoqueMinimo,
+                estoqueAtualContagem: estoqueContado,
+                comprarSugestao: comprarSugestao
+            });
+        }
+    });
 
-    if (dadosParaSalvar.length > 0) {
-        CotacaoIndividualScript_exibirFeedback("Salvando contagem de estoque...", false, 0);
-        CotacaoIndividualScript_mostrarLoadingOverlay(true, "Salvando Contagem...");
-        console.log("EtapasScript_salvarContagemEstoqueEtapa: Dados da contagem para salvar:", dadosParaSalvar);
+    if (dadosParaSalvar.length === 0) {
+        EtapasScript_exibirFeedbackModalContagem("Nenhum dado foi inserido ou alterado para salvar.", false, 4000);
+        return;
+    }
 
-        google.script.run
-            .withSuccessHandler(function(response) {
-                CotacaoIndividualScript_mostrarLoadingOverlay(false);
-                if (response && response.success) {
-                    CotacaoIndividualScript_exibirFeedback(response.message || "Contagem de estoque salva com sucesso!", false, 5000);
-                    
-                    dadosParaSalvar.forEach(itemSalvo => {
-                        CotacaoIndividualScript_dadosOriginaisCotacao.forEach(itemOriginal => {
-                            if (itemOriginal.Produto === itemSalvo.nomeProdutoPrincipal &&
-                                itemSalvo.novoEstoqueMinimoProdutoPrincipal !== null &&
-                                itemSalvo.novoEstoqueMinimoProdutoPrincipal !== undefined) {
-                                itemOriginal.EstoqueMinimoProdutoPrincipal = itemSalvo.novoEstoqueMinimoProdutoPrincipal;
-                            }
-                            if (itemOriginal.Produto === itemSalvo.nomeProdutoPrincipal) {
-                                const estContado = itemSalvo.estoqueAtualContagem;
-                                const comprSug = itemSalvo.comprarSugestao;
-                                itemOriginal["Estoque Atual"] = `Estoque Atual: ${estContado !== null ? estContado : 'N/A'} / Comprar: ${comprSug !== null ? comprSug : 'N/A'}`;
-                            }
-                        });
-                    });
-                    EtapasScript_desativarModoContagemEstoque(); 
-                } else {
-                    CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao salvar contagem de estoque.", true, 7000);
-                }
-            })
-            .withFailureHandler(function(error) {
-                CotacaoIndividualScript_mostrarLoadingOverlay(false);
-                CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao salvar contagem: " + error.message, true, 7000);
-                console.error("EtapasScript_salvarContagemEstoqueEtapa: Erro ao salvar contagem:", error);
-            })
-            .EtapasController_salvarContagemEstoque(CotacaoIndividualScript_cotacaoIdAtual, dadosParaSalvar);
-    } else {
-        CotacaoIndividualScript_exibirFeedback("Nenhum dado de contagem para salvar.", false, 3000);
-        CotacaoIndividualScript_mostrarLoadingOverlay(false);
-    }
+    console.log("EtapasScript_salvarContagemEstoqueEtapa: Dados da contagem para salvar:", dadosParaSalvar);
+    const btnSalvar = document.getElementById('EtapasScript_btnSalvarModalContagem');
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = 'Salvando...';
+
+    EtapasScript_exibirFeedbackModalContagem("Salvando contagem de estoque...", false, 0);
+
+    // Primeiro, atualiza o status da cotação
+    google.script.run
+        .withSuccessHandler(statusResponse => {
+            if (!statusResponse.success) {
+                console.warn("Falha ao atualizar o status da cotação, mas prosseguindo com o salvamento dos dados.");
+            }
+            
+            // Agora, salva os dados da contagem
+            google.script.run
+                .withSuccessHandler(function(response) {
+                    btnSalvar.disabled = false;
+                    btnSalvar.textContent = 'Salvar Contagem';
+
+                    if (response && response.success) {
+                        EtapasScript_fecharModalContagemEstoque();
+                        CotacaoIndividualScript_exibirFeedback(response.message || "Contagem de estoque salva com sucesso! Atualizando dados...", false, 5000);
+
+                        // Recarrega os dados da cotação principal para refletir as mudanças
+                        CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual);
+                    } else {
+                        EtapasScript_exibirFeedbackModalContagem(response.message || "Falha ao salvar contagem de estoque.", true, 7000);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    btnSalvar.disabled = false;
+                    btnSalvar.textContent = 'Salvar Contagem';
+                    EtapasScript_exibirFeedbackModalContagem("Erro de comunicação ao salvar contagem: " + error.message, true, 7000);
+                    console.error("EtapasScript_salvarContagemEstoqueEtapa: Erro ao salvar contagem:", error);
+                })
+                .EtapasController_salvarContagemEstoque(CotacaoIndividualScript_cotacaoIdAtual, dadosParaSalvar);
+        })
+        .withFailureHandler(err => {
+            btnSalvar.disabled = false;
+            btnSalvar.textContent = 'Salvar Contagem';
+            EtapasScript_exibirFeedbackModalContagem("Erro de comunicação ao atualizar status: " + err.message, true, 7000);
+        })
+        .EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Contagem de Estoque");
+}
+
+/**
+ * Exibe feedback dentro do modal de Contagem de Estoque.
+ * @param {string} mensagem O texto a ser exibido.
+ * @param {boolean} isError Se a mensagem é um erro.
+ * @param {number} duracao Duração em milissegundos para a mensagem desaparecer.
+ */
+function EtapasScript_exibirFeedbackModalContagem(mensagem, isError = false, duracao = 5000) {
+    const feedbackDiv = document.getElementById('EtapasScript_feedbackModalContagem');
+    if (feedbackDiv) {
+        const innerDiv = document.createElement('div');
+        innerDiv.className = `p-3 rounded-md text-sm ${isError ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`;
+        innerDiv.textContent = mensagem;
+        feedbackDiv.innerHTML = ''; // Limpa mensagens antigas
+        feedbackDiv.appendChild(innerDiv);
+        
+        if (duracao > 0) {
+            setTimeout(() => {
+                if (feedbackDiv.contains(innerDiv)) {
+                    feedbackDiv.innerHTML = '';
+                }
+            }, duracao);
+        }
+    }
 }
 
 
@@ -304,127 +313,120 @@ function EtapasScript_identificarProdutosParaRetirada() {
 }
 
 function EtapasScript_renderizarAcordeaoRetirarProdutos(containerId, titulo, produtosPrincipais, idSufixo) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.innerHTML = '';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    // Limpa o conteúdo anterior para garantir que a renderização seja sempre nova
+    container.innerHTML = '';
 
-    const headerId = `header-retirar-${idSufixo}`;
-    const contentId = `content-retirar-${idSufixo}`;
+    const headerId = `header-retirar-${idSufixo}`;
+    const contentId = `content-retirar-${idSufixo}`;
 
-    const header = document.createElement('div');
-    header.className = 'retirar-accordion-header';
-    header.id = headerId;
-    header.innerHTML = `<span>${titulo} (${produtosPrincipais.length} Produtos Principais)</span>
-                            <svg class="retirar-accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                            </svg>`;
+    const header = document.createElement('div');
+    header.className = 'retirar-accordion-header';
+    header.id = headerId;
+    header.innerHTML = `<span>${titulo} (${produtosPrincipais.length} Produtos Principais)</span>
+                            <svg class="retirar-accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                            </svg>`;
 
-    const content = document.createElement('div');
-    content.className = 'retirar-accordion-content';
-    content.id = contentId;
+    const content = document.createElement('div');
+    content.className = 'retirar-accordion-content';
+    content.id = contentId;
 
-    if (produtosPrincipais.length === 0) {
-        content.innerHTML = `<div class="p-2 text-sm text-gray-500">Nenhum produto encontrado para este critério.</div>`;
-    } else {
-        const divSelecionarTodos = document.createElement('div');
-        divSelecionarTodos.className = 'flex items-center p-2 border-b border-gray-200 mb-2';
-        const checkboxTodos = document.createElement('input');
-        checkboxTodos.type = 'checkbox';
-        checkboxTodos.id = `select-all-retirar-${idSufixo}`;
-        checkboxTodos.className = 'mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500';
-        checkboxTodos.addEventListener('change', function() {
-            content.querySelectorAll('.checkbox-retirar-item-principal').forEach(cb => cb.checked = this.checked);
-        });
-        const labelTodos = document.createElement('label');
-        labelTodos.htmlFor = `select-all-retirar-${idSufixo}`;
-        labelTodos.textContent = 'Selecionar Todos os Produtos Principais neste Grupo';
-        labelTodos.className = 'font-medium text-sm text-gray-700';
-        divSelecionarTodos.appendChild(checkboxTodos);
-        divSelecionarTodos.appendChild(labelTodos);
-        content.appendChild(divSelecionarTodos);
+    if (produtosPrincipais.length === 0) {
+        content.innerHTML = `<div class="p-2 text-sm text-gray-500">Nenhum produto encontrado para este critério.</div>`;
+    } else {
+        const divSelecionarTodos = document.createElement('div');
+        divSelecionarTodos.className = 'flex items-center p-2 border-b border-gray-200 mb-2';
+        const checkboxTodos = document.createElement('input');
+        checkboxTodos.type = 'checkbox';
+        checkboxTodos.id = `select-all-retirar-${idSufixo}`;
+        checkboxTodos.className = 'mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500';
+        checkboxTodos.addEventListener('change', function() {
+            content.querySelectorAll('.checkbox-retirar-item-principal').forEach(cb => cb.checked = this.checked);
+        });
+        const labelTodos = document.createElement('label');
+        labelTodos.htmlFor = `select-all-retirar-${idSufixo}`;
+        labelTodos.textContent = 'Selecionar Todos os Produtos Principais neste Grupo';
+        labelTodos.className = 'font-medium text-sm text-gray-700';
+        divSelecionarTodos.appendChild(checkboxTodos);
+        divSelecionarTodos.appendChild(labelTodos);
+        content.appendChild(divSelecionarTodos);
 
-        produtosPrincipais.forEach((produtoPrincipalInfo) => {
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'retirar-subproduto-item py-1';
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'checkbox-retirar-item-principal';
-            checkbox.dataset.produtoPrincipal = produtoPrincipalInfo.nomeProdutoPrincipal;
+        produtosPrincipais.forEach((produtoPrincipalInfo) => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'retirar-subproduto-item py-1';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'checkbox-retirar-item-principal';
+            checkbox.dataset.produtoPrincipal = produtoPrincipalInfo.nomeProdutoPrincipal;
 
-            const label = document.createElement('label');
-            label.textContent = `${produtoPrincipalInfo.nomeProdutoPrincipal} - Motivo: ${produtoPrincipalInfo.motivo}`;
+            const label = document.createElement('label');
+            label.textContent = `${produtoPrincipalInfo.nomeProdutoPrincipal} - Motivo: ${produtoPrincipalInfo.motivo}`;
 
-            itemDiv.appendChild(checkbox);
-            itemDiv.appendChild(label);
-            content.appendChild(itemDiv);
-        });
-    }
+            itemDiv.appendChild(checkbox);
+            itemDiv.appendChild(label);
+            content.appendChild(itemDiv);
+        });
+    }
 
-    container.appendChild(header);
-    container.appendChild(content);
+    container.appendChild(header);
+    container.appendChild(content);
 
-    header.addEventListener('click', () => {
-        header.classList.toggle('expanded');
-        content.classList.toggle('expanded');
-        const icon = header.querySelector('.retirar-accordion-icon');
-        if (icon) {
-            icon.style.transform = header.classList.contains('expanded') ? 'rotate(90deg)' : 'rotate(0deg)';
-        }
-    });
-}
-
-function EtapasScript_renderizarSecaoRetirarProdutosCompleta() {
-    const { crit1, crit2, crit3 } = EtapasScript_identificarProdutosParaRetirada();
-
-    EtapasScript_renderizarAcordeaoRetirarProdutos(CotacaoIndividualScript_ID_ACORDEAO_CRIT1, "Quantidade maior que o necessário.", crit1, "crit1");
-    EtapasScript_renderizarAcordeaoRetirarProdutos(CotacaoIndividualScript_ID_ACORDEAO_CRIT2, "Não foi marcado para comprar.", crit2, "crit2");
-    EtapasScript_renderizarAcordeaoRetirarProdutos(CotacaoIndividualScript_ID_ACORDEAO_CRIT3, "Produtos inativos ou sem dados.", crit3, "crit3");
-
-    const btnExcluir = document.getElementById(CotacaoIndividualScript_ID_BTN_EXCLUIR_SELECIONADOS_RETIRAR);
-    if (btnExcluir) {
-        btnExcluir.removeEventListener('click', EtapasScript_manipularExclusaoProdutosRetirar);
-        btnExcluir.addEventListener('click', EtapasScript_manipularExclusaoProdutosRetirar);
-    }
+    header.addEventListener('click', () => {
+        header.classList.toggle('expanded');
+        content.classList.toggle('expanded');
+        const icon = header.querySelector('.retirar-accordion-icon');
+        if (icon) {
+            icon.style.transform = header.classList.contains('expanded') ? 'rotate(90deg)' : 'rotate(0deg)';
+        }
+    });
 }
 
 function EtapasScript_manipularExclusaoProdutosRetirar() {
-    const produtosPrincipaisParaExcluir = [];
-    document.querySelectorAll('#' + CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER + ' .checkbox-retirar-item-principal:checked').forEach(cb => {
-        if (!produtosPrincipaisParaExcluir.includes(cb.dataset.produtoPrincipal)) {
-            produtosPrincipaisParaExcluir.push(cb.dataset.produtoPrincipal);
-        }
-    });
+    const produtosPrincipaisParaExcluir = [];
+    // Busca os checkboxes dentro do novo modal
+    document.querySelectorAll('#EtapasScript_modalRetirarProdutosOverlay .checkbox-retirar-item-principal:checked').forEach(cb => {
+        if (!produtosPrincipaisParaExcluir.includes(cb.dataset.produtoPrincipal)) {
+            produtosPrincipaisParaExcluir.push(cb.dataset.produtoPrincipal);
+        }
+    });
 
-    if (produtosPrincipaisParaExcluir.length === 0) {
-        CotacaoIndividualScript_exibirFeedback("Nenhum produto principal selecionado para exclusão.", true, 3000);
-        return;
-    }
+    if (produtosPrincipaisParaExcluir.length === 0) {
+        EtapasScript_exibirFeedbackModalRetirarProdutos("Nenhum produto principal selecionado para exclusão.", true, 4000);
+        return;
+    }
 
-    console.log("EtapasScript_manipularExclusaoProdutosRetirar: Produtos Principais para excluir:", produtosPrincipaisParaExcluir);
-    CotacaoIndividualScript_exibirFeedback(`Excluindo ${produtosPrincipaisParaExcluir.length} produto(s) principal(is)...`, false, 0);
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Excluindo produtos...");
+    console.log("EtapasScript_manipularExclusaoProdutosRetirar: Produtos Principais para excluir:", produtosPrincipaisParaExcluir);
+    
+    const btnConfirmar = document.getElementById('EtapasScript_btnConfirmarRemocaoModal');
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = 'Excluindo...';
+    EtapasScript_exibirFeedbackModalRetirarProdutos(`Excluindo ${produtosPrincipaisParaExcluir.length} produto(s) principal(is)...`, false, 0);
 
-    google.script.run
-        .withSuccessHandler(function(response) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (response && response.success) {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Produtos selecionados foram retirados da cotação.", false, 5000);
-                CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual).then(() => {
-                    EtapasScript_desativarModoRetirarProdutos();
-                }).catch(err => {
-                    console.error("Falha ao recarregar dados após exclusão:", err);
-                    EtapasScript_desativarModoRetirarProdutos();
-                });
-            } else {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao retirar produtos da cotação.", true, 7000);
-            }
-        })
-        .withFailureHandler(function(error) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao excluir produtos: " + error.message, true, 7000);
-            console.error("EtapasScript_manipularExclusaoProdutosRetirar: Erro:", error);
-        })
-        .EtapasController_retirarProdutosCotacao(CotacaoIndividualScript_cotacaoIdAtual, produtosPrincipaisParaExcluir);
+    google.script.run
+        .withSuccessHandler(function(response) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.textContent = 'Confirmar Remoção';
+
+            if (response && response.success) {
+                // Fecha o modal e exibe o feedback na página principal
+                EtapasScript_fecharModalRetirarProdutos();
+                CotacaoIndividualScript_exibirFeedback(response.message || "Produtos selecionados foram retirados com sucesso!", false, 5000);
+                
+                // Recarrega os dados da cotação para refletir as mudanças
+                CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual);
+            } else {
+                EtapasScript_exibirFeedbackModalRetirarProdutos(response.message || "Falha ao retirar produtos da cotação.", true, 7000);
+            }
+        })
+        .withFailureHandler(function(error) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.textContent = 'Confirmar Remoção';
+            EtapasScript_exibirFeedbackModalRetirarProdutos("Erro de comunicação ao excluir produtos: " + error.message, true, 7000);
+            console.error("EtapasScript_manipularExclusaoProdutosRetirar: Erro:", error);
+        })
+        .EtapasController_retirarProdutosCotacao(CotacaoIndividualScript_cotacaoIdAtual, produtosPrincipaisParaExcluir);
 }
 
 
@@ -445,13 +447,6 @@ function EtapasScript_ativarModoRetirarProdutos() {
     EtapasScript_renderizarSecaoRetirarProdutosCompleta();
     CotacaoIndividualScript_exibirFeedback("Modo 'Retirar Produtos Desnecessários' ativado. Selecione os produtos e clique em 'Confirmar Remoção e Voltar'.", false, 6000);
 }
-
-function EtapasScript_desativarModoRetirarProdutos() {
-    console.log("EtapasScript: Desativando modo Retirar Produtos.");
-    CotacaoIndividualScript_modoEtapaAtual = null;
-    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true); 
-}
-
 
 //----------------------------------------------------------------------------------------------------
 // ETAPA 3: ENVIAR PARA FORNECEDORES
@@ -649,345 +644,334 @@ function EtapasScript_formatarMoeda(numero) {
     return `R$ ${formatado}`;
 }
 
+/**
+ * Ponto de entrada para a Etapa 5 (versão Modal). Prepara e exibe o modal.
+ * SUBSTITUI a implementação antiga.
+ * VERSÃO CORRIGIDA com tratamento de erro que fecha o modal.
+ */
 function EtapasScript_ativarModoDefinirEmpresa() {
-    console.log("EtapasScript: Ativando modo Definir Empresa para Faturamento.");
-    CotacaoIndividualScript_modoEtapaAtual = 'definir_empresa';
+    console.log("EtapasScript: Ativando modo Definir Empresa para Faturamento (Modal).");
+    CotacaoIndividualScript_modoEtapaAtual = 'definir_empresa';
 
-    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
-    document.getElementById('EtapasScript_realizarCotacaoContainer').classList.add('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
-    
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Carregando dados para faturamento...");
+    const modalOverlay = document.getElementById('EtapasScript_modalDefinirEmpresaOverlay');
+    if (!modalOverlay) {
+        console.error("EtapasScript: Overlay do modal da Etapa 5 não encontrado.");
+        CotacaoIndividualScript_exibirFeedback("Erro crítico: Componente do modal não encontrado.", true, 0);
+        return;
+    }
+    
+    // Abre o modal ANTES da chamada de servidor para que o usuário veja o feedback de carregamento
+    modalOverlay.classList.add('active'); 
+    EtapasScript_exibirFeedbackModalDefinirEmpresa("Carregando dados para faturamento...", false, 0);
 
-    google.script.run.EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Definindo Empresa para Faturamento");
+    // Chama o servidor para obter a lista de empresas e pedidos mínimos
+    google.script.run
+        .withSuccessHandler(response => {
+            if (response && response.success) {
+                EtapasScript_empresasParaFaturamento = response.empresas || [];
+                EtapasScript_pedidosMinimosFornecedores = response.pedidosMinimos || {};
 
-    google.script.run
-        .withSuccessHandler(response => {
-            if (response && response.success) {
-                EtapasScript_empresasParaFaturamento = response.empresas || [];
-                EtapasScript_pedidosMinimosFornecedores = response.pedidosMinimos || {};
+                const itensParaComprar = CotacaoIndividualScript_dadosOriginaisCotacao.filter(item => {
+                    const comprarValor = parseFloat(String(item['Comprar'] || '0').replace(',', '.'));
+                    return comprarValor > 0;
+                });
+                
+                const dadosAgrupadosPorFornecedor = agruparPorChave(itensParaComprar, 'Fornecedor');
+                
+                EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupadosPorFornecedor, 'EtapasScript_controlsContainer_Modal', 'EtapasScript_tabelaContainer_Modal');
+                
+                EtapasScript_exibirFeedbackModalDefinirEmpresa("Selecione a empresa para faturamento de cada item.", false, 8000);
+            } else {
+                // Em caso de falha, exibe o erro e FECHA o modal
+                EtapasScript_exibirFeedbackModalDefinirEmpresa(response.message || "Falha ao carregar dados da Etapa 5.", true, 5000);
+                setTimeout(() => {
+                    EtapasScript_fecharModalDefinirEmpresa(); // <-- SUBSTITUIÇÃO CORRETA
+                }, 5000); // Dá tempo para o usuário ler o erro antes de fechar
+            }
+        })
+        .withFailureHandler(err => {
+            // Em caso de erro de comunicação, também exibe o erro e FECHA o modal
+            EtapasScript_exibirFeedbackModalDefinirEmpresa("Erro de comunicação com o servidor: " + err.message, true, 5000);
+            setTimeout(() => {
+                EtapasScript_fecharModalDefinirEmpresa(); // <-- SUBSTITUIÇÃO CORRETA
+            }, 5000);
+        })
+        .EtapasController_obterDadosParaEtapaFaturamento();
+    
+    // Atualiza o status da cotação em paralelo
+    google.script.run.EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Definindo Empresa para Faturamento");
 
-                const itensParaComprar = CotacaoIndividualScript_dadosOriginaisCotacao.filter(item => {
-                    const comprarValor = parseFloat(String(item['Comprar'] || '0').replace(',', '.'));
-                    return comprarValor > 0;
-                });
-                
-                const dadosAgrupadosPorFornecedor = agruparPorChave(itensParaComprar, 'Fornecedor');
-                
-                EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupadosPorFornecedor);
-
-                CotacaoIndividualScript_mostrarLoadingOverlay(false);
-                CotacaoIndividualScript_exibirFeedback("Selecione a empresa para faturamento de cada item.", false, 5000);
-            } else {
-                CotacaoIndividualScript_mostrarLoadingOverlay(false);
-                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao carregar dados da Etapa 5.", true);
-                EtapasScript_desativarModoDefinirEmpresa();
-            }
-        })
-        .withFailureHandler(err => {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação: " + err.message, true);
-            EtapasScript_desativarModoDefinirEmpresa();
-        })
-        .EtapasController_obterDadosParaEtapaFaturamento();
+    // Configura os botões do modal
+    const btnFechar = document.getElementById('EtapasScript_btnFecharModalDefinirEmpresa');
+    const btnConcluir = document.getElementById('EtapasScript_btnConcluirModalDefinirEmpresa');
+    
+    btnFechar.removeEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
+    btnConcluir.removeEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
+    
+    btnFechar.addEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
+    btnConcluir.addEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
 }
 
-function EtapasScript_desativarModoDefinirEmpresa() {
-    console.log("EtapasScript: Desativando modo Definir Empresa.");
-    
-    const tableContainer = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER);
-    const controlsContainer = tableContainer.querySelector('.etapa5-controls');
-    if (controlsContainer) {
-        controlsContainer.remove();
-    }
 
-    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
-    CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
-}
-
+/**
+ * Atualiza o painel de totais global DENTRO DO MODAL.
+ * SUBSTITUI a implementação antiga.
+ */
 function EtapasScript_atualizarDashboardGlobal() {
-    const dashboardContainer = document.getElementById('etapa5-global-dashboard');
-    if (!dashboardContainer) return;
+    // Escopo da busca é o modal da Etapa 5
+    const modalOverlay = document.getElementById('EtapasScript_modalDefinirEmpresaOverlay');
+    if (!modalOverlay) return;
 
-    const totaisGlobais = {};
-    let grandeTotal = 0; // Variável para o total geral
-    const todasLinhasDeProduto = document.querySelectorAll('tbody .sub-produto-row');
+    // Busca o dashboard global com o ID correto do modal
+    const dashboardContainer = modalOverlay.querySelector('#etapa5-global-dashboard-modal');
+    if (!dashboardContainer) return;
 
-    todasLinhasDeProduto.forEach(row => {
-        // Pula linhas que não estão visíveis ou que não pertencem à etapa de faturamento
+    const totaisGlobais = {};
+    let grandeTotal = 0;
+    const todasLinhasDeProduto = modalOverlay.querySelectorAll('tbody .sub-produto-row');
+
+    todasLinhasDeProduto.forEach(row => {
         if (row.offsetParent === null || !row.closest('.etapa5-content-row')) return;
 
-        const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
-        const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
+        const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
+        const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
 
-        if (empresaCell && valorTotalCell) {
-            const empresa = empresaCell.textContent.trim();
-            // Apenas considera itens que têm uma empresa de faturamento definida
+        if (empresaCell && valorTotalCell) {
+            const empresa = empresaCell.textContent.trim();
             if (empresa) {
-                const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
-
-                if (!totaisGlobais[empresa]) {
-                    totaisGlobais[empresa] = 0;
-                }
-                totaisGlobais[empresa] += valor;
-                grandeTotal += valor; // Adiciona ao total geral
+                const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+                if (!totaisGlobais[empresa]) totaisGlobais[empresa] = 0;
+                totaisGlobais[empresa] += valor;
+                grandeTotal += valor;
             }
-        }
-    });
+        }
+    });
 
-    // Início da construção do novo HTML
     let dashboardHTML = '<div class="global-dashboard-container">';
-    dashboardHTML += '<h4 class="dashboard-title">Totais Globais por Empresa</h4>';
+    dashboardHTML += '<h4 class="dashboard-title">Totais Gerais por Empresa</h4>';
     dashboardHTML += '<div class="dashboard-items-container">';
 
-    if (Object.keys(totaisGlobais).length === 0) {
-        dashboardHTML += '<div class="dashboard-empty-state">Nenhum item a ser faturado.</div>';
-    } else {
-        for (const empresa in totaisGlobais) {
-            dashboardHTML += `<div class="global-total-item">
-                                <span>${empresa}:</span>
-                                <strong>${EtapasScript_formatarMoeda(totaisGlobais[empresa])}</strong>
-                            </div>`;
-        }
-    }
+    if (Object.keys(totaisGlobais).length === 0) {
+        dashboardHTML += '<div class="dashboard-empty-state">Nenhum item a ser faturado.</div>';
+    } else {
+        for (const empresa in totaisGlobais) {
+            dashboardHTML += `<div class="global-total-item">
+                                  <span>${empresa}:</span>
+                                  <strong>${EtapasScript_formatarMoeda(totaisGlobais[empresa])}</strong>
+                              </div>`;
+        }
+    }
 
-    dashboardHTML += '</div>'; // Fecha o dashboard-items-container
-
-    // Adiciona a seção do Total Geral
+    dashboardHTML += '</div>';
     if (grandeTotal > 0) {
         dashboardHTML += `<div class="dashboard-grand-total">
-                            <span>Total Geral:</span>
+                            <span>Total Geral dos Pedidos:</span>
                             <strong>${EtapasScript_formatarMoeda(grandeTotal)}</strong>
                           </div>`;
     }
-
-    dashboardHTML += '</div>'; // Fecha o global-dashboard-container
-    dashboardContainer.innerHTML = dashboardHTML;
+    dashboardHTML += '</div>';
+    dashboardContainer.innerHTML = dashboardHTML;
 }
 
-function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados) {
-    const tableContainer = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER);
-    const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
-    const thead = tabela.querySelector('thead');
-    const tbody = tabela.querySelector('tbody');
-    tbody.innerHTML = '';
-    thead.innerHTML = '';
+/**
+ * Renderiza a tabela e os controles do modo Faturamento DENTRO dos containers do modal.
+ * SUBSTITUI a implementação antiga.
+ * @param {object} dadosAgrupados - Dados agrupados por fornecedor.
+ * @param {string} controlsContainerId - ID do container para o painel de controle global.
+ * @param {string} tableContainerId - ID do container para a tabela.
+ */
+function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados, controlsContainerId, tableContainerId) {
+    const controlsContainer = document.getElementById(controlsContainerId);
+    const tableContainer = document.getElementById(tableContainerId);
 
-    tableContainer.querySelectorAll('.etapa5-controls').forEach(el => el.remove());
-    
-    const controlsContainer = document.createElement('div');
-    controlsContainer.className = 'etapa5-controls';
-    controlsContainer.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;';
-    
-    const backButton = document.createElement('button');
-    backButton.innerHTML = '&#8592; Voltar para Visualização Padrão';
-    backButton.className = 'btn-menu-superior dropdown-menu-button btn-voltar-etapa5';
-    backButton.addEventListener('click', EtapasScript_desativarModoDefinirEmpresa);
-    
-    const globalDashboard = document.createElement('div');
-    globalDashboard.id = 'etapa5-global-dashboard';
-    globalDashboard.style.cssText = 'border: 1px solid #e2e8f0; padding: 0.5rem 1rem; border-radius: 0.375rem; min-width: 300px;';
+    if (!controlsContainer || !tableContainer) {
+        console.error("Containers do modal para a Etapa 5 não encontrados.");
+        return;
+    }
 
-    controlsContainer.appendChild(backButton);
-    controlsContainer.appendChild(globalDashboard);
-    tableContainer.prepend(controlsContainer);
+    controlsContainer.innerHTML = '';
+    tableContainer.innerHTML = '';
+
+    const globalDashboard = document.createElement('div');
+    globalDashboard.id = 'etapa5-global-dashboard-modal';
+    globalDashboard.style.cssText = 'border: 1px solid #e2e8f0; padding: 0.5rem 1rem; border-radius: 0.375rem; min-width: 300px; float: right;';
+    controlsContainer.appendChild(globalDashboard);
+
+    const tabela = document.createElement('table');
+    tabela.className = 'sticky-header-table';
+    const thead = tabela.createTHead();
+    const tbody = tabela.createTBody();
+
+    // Conecta o manipulador de navegação do teclado ao tbody do modal.
+    if (typeof CotacaoIndividualScript_handleTableNavigation === 'function') {
+        tbody.addEventListener('keydown', CotacaoIndividualScript_handleTableNavigation);
+    } else {
+        console.error("Função 'CotacaoIndividualScript_handleTableNavigation' não encontrada. A navegação por teclado no modal não funcionará.");
+    }
+
+    tableContainer.appendChild(tabela);
 
     const cabecalhosVisiveis = EtapasScript_COLUNAS_A_EXIBIR_FATURAMENTO;
-    const colunasEditaveisInput = ["SubProduto", "UN", "Preço", "Comprar"];
+    const colunasEditaveisInput = ["SubProduto", "Tamanho", "UN", "Fator", "Preço", "Comprar"];
     const colunasEditaveisSelect = ["Empresa Faturada"];
 
-    const trHeader = thead.insertRow();
-    cabecalhosVisiveis.forEach(texto => {
-        const th = document.createElement('th');
-        th.textContent = texto;
-        trHeader.appendChild(th);
-    });
+    const trHeader = thead.insertRow();
+    cabecalhosVisiveis.forEach(texto => {
+        const th = document.createElement('th');
+        th.textContent = texto;
+        trHeader.appendChild(th);
+    });
 
-    // Armazena todos os cabeçalhos de fornecedor para expandi-los no final
     const todosOsCabecalhosDeFornecedor = [];
 
-    for (const fornecedor in dadosAgrupados) {
-        const subProdutos = dadosAgrupados[fornecedor];
-        const fornecedorClass = `for-${fornecedor.replace(/[^a-zA-Z0-9]/g, '')}`;
-        
-        const fornecedorRow = tbody.insertRow();
-        fornecedorRow.className = 'categoria-accordion-header-row';
-        fornecedorRow.id = `fornecedor-row-${fornecedorClass}`;
+    for (const fornecedor in dadosAgrupados) {
+        const subProdutos = dadosAgrupados[fornecedor];
+        const fornecedorClass = `for-modal-${fornecedor.replace(/[^a-zA-Z0-9]/g, '')}`;
+        
+        const fornecedorRow = tbody.insertRow();
+        fornecedorRow.className = 'categoria-accordion-header-row';
+        fornecedorRow.id = `fornecedor-row-${fornecedorClass}`;
         fornecedorRow.dataset.targetClass = fornecedorClass;
-
-        // Adiciona à lista para expansão automática
         todosOsCabecalhosDeFornecedor.push(fornecedorRow);
 
-        const fornecedorCell = fornecedorRow.insertCell();
-        fornecedorCell.colSpan = cabecalhosVisiveis.length;
-        
-        const headerContent = document.createElement('div');
-        headerContent.className = 'categoria-header-content';
-        headerContent.style.cssText = 'display: flex; justify-content: space-between; width: 100%; align-items: center;';
+        const fornecedorCell = fornecedorRow.insertCell();
+        fornecedorCell.colSpan = cabecalhosVisiveis.length;
         
-        const leftSide = document.createElement('div');
-        leftSide.style.display = 'flex';
-        leftSide.style.alignItems = 'center';
-        leftSide.innerHTML = `
-            <svg class="categoria-accordion-icon" viewBox="0 0 20 20" fill="currentColor" style="width: 1.25rem; height: 1.25rem; transition: transform 0.2s; transform: rotate(0deg);"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
-            <span style="margin-left: 8px;">Fornecedor: <strong>${fornecedor}</strong></span>
-        `;
-        
-        const rightSide = document.createElement('div');
-        rightSide.id = `total-header-${fornecedorClass}`;
-        
-        headerContent.appendChild(leftSide);
-        headerContent.appendChild(rightSide);
-        fornecedorCell.appendChild(headerContent);
+        fornecedorCell.innerHTML = `
+            <div class="categoria-header-content" style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                <div style="display: flex; align-items: center;">
+                    <svg class="categoria-accordion-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+                    <span style="margin-left: 8px;">Fornecedor: <strong>${fornecedor}</strong></span>
+                </div>
+                <div id="total-header-${fornecedorClass}"></div>
+            </div>`;
 
-        const dashboardRow = tbody.insertRow();
-        // A classe 'etapa5-content-row' é importante para a navegação
-        dashboardRow.className = `etapa5-content-row ${fornecedorClass}`;
-        const dashboardCell = dashboardRow.insertCell();
-        dashboardCell.colSpan = cabecalhosVisiveis.length;
-        dashboardCell.style.cssText = 'padding: 8px 25px; background-color: #f0f9ff;';
-        dashboardCell.innerHTML = `<div class="mini-dashboard" data-fornecedor="${fornecedor}"></div>`;
+        const dashboardRow = tbody.insertRow();
+        dashboardRow.className = `etapa5-content-row ${fornecedorClass} hidden`;
+        const dashboardCell = dashboardRow.insertCell();
+        dashboardCell.colSpan = cabecalhosVisiveis.length;
+        dashboardCell.style.cssText = 'padding: 8px 25px; background-color: #f0f9ff;';
+        dashboardCell.innerHTML = `<div class="mini-dashboard" data-fornecedor="${fornecedor}"></div>`;
 
-        subProdutos.forEach(subProduto => {
-            const subRow = tbody.insertRow();
-            // A classe 'etapa5-content-row' AQUI é a mais crítica para a navegação vertical
-            subRow.className = `sub-produto-row etapa5-content-row ${fornecedorClass}`;
-            subRow.dataset.produto = subProduto['Produto'];
-            subRow.dataset.fornecedor = subProduto['Fornecedor'];
-            subRow.dataset.subprodutoOriginalPersistido = subProduto['_subProdutoOriginalPersistido'];
+        subProdutos.forEach(subProduto => {
+            const subRow = tbody.insertRow();
+            subRow.className = `sub-produto-row etapa5-content-row ${fornecedorClass} hidden`;
+            subRow.dataset.produto = subProduto['Produto'];
+            subRow.dataset.fornecedor = subProduto['Fornecedor'];
+            subRow.dataset.subprodutoOriginalPersistido = subProduto['_subProdutoOriginalPersistido'];
 
-            cabecalhosVisiveis.forEach(cabecalho => {
-                const td = subRow.insertCell();
-                let valor = subProduto[cabecalho];
+            cabecalhosVisiveis.forEach(cabecalho => {
+                const td = subRow.insertCell();
+                let valor = subProduto[cabecalho];
+                let fmt;
                 if (typeof valor === 'number') {
-                    if (['Valor Total', 'Preço', 'Preço por Fator'].includes(cabecalho)) {
-                        valor = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    } else if (cabecalho === 'Fator') {
-                        valor = valor.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-                    }
+                    const fractionDigits = { 'Fator': 4, 'Preço por Fator': 4, 'Preço': 2, 'Comprar': 2, 'Valor Total': 2, 'Economia em Cotação': 2 };
+                    fmt = valor.toLocaleString('pt-BR', { minimumFractionDigits: fractionDigits[cabecalho] || 2, maximumFractionDigits: fractionDigits[cabecalho] || 2 });
+                } else {
+                    fmt = valor == null ? "" : String(valor);
                 }
-                td.textContent = (valor === null || valor === undefined) ? "" : valor;
-                td.dataset.coluna = cabecalho;
-                td.dataset.valorOriginal = subProduto[cabecalho] || "";
-                
-                const classeCor = window.CotacaoIndividualScript_getClasseCorColuna(cabecalho);
-                if (classeCor) td.classList.add(classeCor);
+                
+                td.textContent = fmt;
+                td.dataset.coluna = cabecalho;
+                td.dataset.valorOriginal = fmt;
+
+                const classeCor = window.CotacaoIndividualScript_getClasseCorColuna(cabecalho);
+                if (classeCor) td.classList.add(classeCor);
 
                 if (colunasEditaveisSelect.includes(cabecalho)) {
-                    td.classList.add('editable-select-cell');
+                    td.classList.add('editable-select-cell', 'editable-price-cell');
+                    td.tabIndex = 0;
+                    td.addEventListener('click', (e) => CotacaoIndividualScript_transformarCelulaEmSelect(e, EtapasScript_empresasParaFaturamento));
+                } else if (colunasEditaveisInput.includes(cabecalho)) {
                     td.classList.add('editable-price-cell');
                     td.tabIndex = 0;
-                    // Usando 'click' para consistência
-                    td.addEventListener('click', (e) => CotacaoIndividualScript_transformarCelulaEmSelect(e, EtapasScript_empresasParaFaturamento));
-                } else if (colunasEditaveisInput.includes(cabecalho)) {
-                    td.classList.add('editable-price-cell');
-                    td.tabIndex = 0;
-                    // Usando 'click' para consistência
-                    td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
-                }
-            });
-        });
+                    td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
+                }
+            });
+        });
 
-        EtapasScript_atualizarDashboardFornecedor(fornecedor);
-        
-        fornecedorRow.addEventListener('click', function(e) {
-            e.stopPropagation();
+        fornecedorRow.addEventListener('click', function() {
             this.classList.toggle('expanded');
             const isExpandedNow = this.classList.contains('expanded');
-            const targetClass = this.dataset.targetClass;
-            const contentRows = document.querySelectorAll(`tr.${targetClass}`);
-            const icon = this.querySelector('.categoria-accordion-icon');
-            if (icon) {
-                icon.style.transform = isExpandedNow ? 'rotate(90deg)' : 'rotate(0deg)';
-            }
-            contentRows.forEach(row => {
-                row.classList.toggle('hidden', !isExpandedNow);
-            });
-            if (isExpandedNow) {
-                EtapasScript_atualizarDashboardFornecedor(fornecedor);
-            }
+            this.closest('tbody').querySelectorAll(`tr.${this.dataset.targetClass}`).forEach(r => r.classList.toggle('hidden', !isExpandedNow));
+            this.querySelector('.categoria-accordion-icon').style.transform = isExpandedNow ? 'rotate(90deg)' : 'rotate(0deg)';
+            if (isExpandedNow) EtapasScript_atualizarDashboardFornecedor(fornecedor);
         });
-    }
-
-    EtapasScript_atualizarDashboardGlobal();
-
-    // =================================================================================
-    // NOVA ADIÇÃO: Expande todas as seções de fornecedor automaticamente ao carregar
-    // =================================================================================
-    todosOsCabecalhosDeFornecedor.forEach(headerRow => {
-        if (!headerRow.classList.contains('expanded')) {
-            headerRow.click();
-        }
-    });
+    }
+    
+    EtapasScript_atualizarDashboardGlobal();
+    todosOsCabecalhosDeFornecedor.forEach(headerRow => headerRow.click());
 }
 
+/**
+ * Atualiza o painel de totais de um fornecedor específico DENTRO DO MODAL.
+ * SUBSTITUI a implementação antiga.
+ * @param {string} fornecedor - O nome do fornecedor.
+ */
 function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
-    const fornecedorClass = `for-${fornecedor.replace(/[^a-zA-Z0-9]/g, '')}`;
-    const dashboardDiv = document.querySelector(`.mini-dashboard[data-fornecedor="${fornecedor}"]`);
-    const totalHeaderDiv = document.getElementById(`total-header-${fornecedorClass}`);
-    const fornecedorRow = document.getElementById(`fornecedor-row-${fornecedorClass}`);
+    // Escopo da busca é o modal da Etapa 5
+    const modalOverlay = document.getElementById('EtapasScript_modalDefinirEmpresaOverlay');
+    if (!modalOverlay) return;
 
-    if (!dashboardDiv || !totalHeaderDiv || !fornecedorRow) return;
+    const fornecedorClass = `for-modal-${fornecedor.replace(/[^a-zA-Z0-9]/g, '')}`;
+    const dashboardDiv = modalOverlay.querySelector(`.mini-dashboard[data-fornecedor="${fornecedor}"]`);
+    const totalHeaderDiv = modalOverlay.querySelector(`#total-header-${fornecedorClass}`);
+    const fornecedorRow = modalOverlay.querySelector(`#fornecedor-row-${fornecedorClass}`);
 
-    const totaisPorEmpresa = {};
-    let valorTotalFornecedor = 0;
-    const linhasFornecedor = document.querySelectorAll(`tr[data-fornecedor="${fornecedor}"].sub-produto-row`);
+    if (!dashboardDiv || !totalHeaderDiv || !fornecedorRow) return;
 
-    linhasFornecedor.forEach(row => {
-        const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
-        const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
-        
-        if (empresaCell && valorTotalCell) {
-            const empresa = empresaCell.textContent.trim() || "Não Definido";
-            const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+    const totaisPorEmpresa = {};
+    let valorTotalFornecedor = 0;
+    const linhasFornecedor = modalOverlay.querySelectorAll(`tr[data-fornecedor="${fornecedor}"].sub-produto-row`);
 
-            if (!totaisPorEmpresa[empresa]) {
-                totaisPorEmpresa[empresa] = 0;
-            }
-            totaisPorEmpresa[empresa] += valor;
-            valorTotalFornecedor += valor;
-        }
-    });
+    linhasFornecedor.forEach(row => {
+        const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
+        const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
+        
+        if (empresaCell && valorTotalCell) {
+            const empresa = empresaCell.textContent.trim() || "Não Definido";
+            const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
 
-    const pedidoMinimo = EtapasScript_pedidosMinimosFornecedores[String(fornecedor).trim()] || 0;
-    totalHeaderDiv.innerHTML = `
-        <span>Total do Pedido: <strong>${EtapasScript_formatarMoeda(valorTotalFornecedor)}</strong></span>
-        ${pedidoMinimo > 0 ? `<span style="margin-left: 15px;">(Mínimo por Empresa: ${EtapasScript_formatarMoeda(pedidoMinimo)})</span>` : ''}
-    `;
+            if (!totaisPorEmpresa[empresa]) totaisPorEmpresa[empresa] = 0;
+            totaisPorEmpresa[empresa] += valor;
+            valorTotalFornecedor += valor;
+        }
+    });
 
-    let dashboardHTML = '<strong>Totais por Empresa de Faturamento:</strong> ';
-    let todosAtingiramMinimo = true;
+    const pedidoMinimo = EtapasScript_pedidosMinimosFornecedores[String(fornecedor).trim()] || 0;
+    totalHeaderDiv.innerHTML = `
+        <span>Total do Pedido: <strong>${EtapasScript_formatarMoeda(valorTotalFornecedor)}</strong></span>
+        ${pedidoMinimo > 0 ? `<span style="margin-left: 15px;">(Mínimo por Empresa: ${EtapasScript_formatarMoeda(pedidoMinimo)})</span>` : ''}
+    `;
 
-    if (Object.keys(totaisPorEmpresa).length === 0 || (Object.keys(totaisPorEmpresa).length === 1 && totaisPorEmpresa["Não Definido"])) {
-        dashboardHTML += '<span style="margin-left: 10px;">Nenhuma empresa definida para os itens.</span>';
-        if (pedidoMinimo > 0) todosAtingiramMinimo = false;
-    } else {
-        for (const empresa in totaisPorEmpresa) {
-            if (empresa === "Não Definido") continue;
-            
-            const totalEmpresa = totaisPorEmpresa[empresa];
-            const atingiuMinimoEmpresa = totalEmpresa >= pedidoMinimo;
+    let dashboardHTML = '<strong>Totais por Empresa de Faturamento:</strong> ';
+    let todosAtingiramMinimo = true;
 
-            if (!atingiuMinimoEmpresa && pedidoMinimo > 0) {
-                todosAtingiramMinimo = false;
-                dashboardHTML += `<span style="margin-left: 15px; background-color: #e0e7ff; padding: 2px 6px; border-radius: 4px; color: red; font-weight: bold;">
-                                      ${empresa}: ${EtapasScript_formatarMoeda(totalEmpresa)} (Mínimo não atingido!)
-                                  </span>`;
-            } else {
-                 dashboardHTML += `<span style="margin-left: 15px; background-color: #e0e7ff; padding: 2px 6px; border-radius: 4px;">
-                                      ${empresa}: ${EtapasScript_formatarMoeda(totalEmpresa)}
-                                  </span>`;
-            }
-        }
-    }
-    dashboardDiv.innerHTML = dashboardHTML;
+    if (Object.keys(totaisPorEmpresa).length === 0 || (Object.keys(totaisPorEmpresa).length === 1 && totaisPorEmpresa["Não Definido"])) {
+        dashboardHTML += '<span style="margin-left: 10px;">Nenhuma empresa definida para os itens.</span>';
+        if (pedidoMinimo > 0) todosAtingiramMinimo = false;
+    } else {
+        for (const empresa in totaisPorEmpresa) {
+            if (empresa === "Não Definido") continue;
+            
+            const totalEmpresa = totaisPorEmpresa[empresa];
+            const atingiuMinimoEmpresa = totalEmpresa >= pedidoMinimo;
 
-    if (!todosAtingiramMinimo && pedidoMinimo > 0) {
-        fornecedorRow.style.backgroundColor = '#FEE2E2';
-    } else {
-        fornecedorRow.style.backgroundColor = '';
-    }
+            if (!atingiuMinimoEmpresa && pedidoMinimo > 0) {
+                todosAtingiramMinimo = false;
+                dashboardHTML += `<span style="margin-left: 15px; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; color: #b91c1c; font-weight: bold; border: 1px solid #fecaca;">
+                                      ${empresa}: ${EtapasScript_formatarMoeda(totalEmpresa)} (Mínimo não atingido!)
+                                  </span>`;
+            } else {
+                dashboardHTML += `<span style="margin-left: 15px; background-color: #e0e7ff; padding: 2px 6px; border-radius: 4px;">
+                                      ${empresa}: ${EtapasScript_formatarMoeda(totalEmpresa)}
+                                  </span>`;
+            }
+        }
+    }
+    dashboardDiv.innerHTML = dashboardHTML;
+
+    fornecedorRow.style.backgroundColor = (!todosAtingiramMinimo && pedidoMinimo > 0) ? '#FFF1F2' : '';
 }
 
 function agruparPorChave(array, chave) {
@@ -1003,226 +987,237 @@ function agruparPorChave(array, chave) {
 
 let EtapasScript_debounceTimer = null;
 
+/**
+ * Ponto de entrada para a Etapa 6 (versão Modal). Prepara e exibe o modal.
+ * ESTA É A VERSÃO CORRETA E FINAL. Substitua a sua função antiga por esta.
+ */
 function EtapasScript_ativarModoDefinirCondicoesPagamento() {
-    console.log("EtapasScript: Ativando modo Definir Condições de Pagamento (v2).");
-    CotacaoIndividualScript_modoEtapaAtual = 'definir_condicoes_pagamento';
+    console.log("EtapasScript: Ativando modo Definir Condições de Pagamento (Modal).");
+    CotacaoIndividualScript_modoEtapaAtual = 'definir_condicoes_pagamento';
 
-    const itensParaComprar = CotacaoIndividualScript_dadosOriginaisCotacao.filter(item => 
-        (parseFloat(String(item['Comprar'] || '0').replace(',', '.')) || 0) > 0
-    );
+    const itensParaComprar = CotacaoIndividualScript_dadosOriginaisCotacao.filter(item => 
+        (parseFloat(String(item['Comprar'] || '0').replace(',', '.')) || 0) > 0
+    );
 
-    const itemSemEmpresa = itensParaComprar.find(item => !item['Empresa Faturada']);
-    if (itemSemEmpresa) {
-        CotacaoIndividualScript_exibirFeedback("Erro: Existem itens para comprar sem 'Empresa Faturada'. Complete a Etapa 5.", true, 8000);
-        CotacaoIndividualScript_modoEtapaAtual = null;
-        return;
-    }
+    const itemSemEmpresa = itensParaComprar.find(item => !item['Empresa Faturada']);
+    if (itemSemEmpresa) {
+        CotacaoIndividualScript_exibirFeedback("Erro: Existem itens para comprar sem 'Empresa Faturada'. Complete a Etapa 5 primeiro.", true, 8000);
+        CotacaoIndividualScript_modoEtapaAtual = null;
+        return;
+    }
 
-    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.add('hidden');
-    const containerEtapa6 = document.getElementById('EtapasScript_definirCondicoesPagamentoContainer');
-    containerEtapa6.classList.remove('hidden');
+    const modalOverlay = document.getElementById('EtapasScript_modalCondicoesPagamentoOverlay');
+    modalOverlay.classList.add('active');
+    EtapasScript_exibirFeedbackModalCondicoes("Carregando dados de pagamento...", false, 0);
+    document.getElementById('etapa6-pedidos-list-modal').innerHTML = '<p class="text-gray-500 text-center p-4">Carregando...</p>';
 
-    document.getElementById('EtapasScript_btnVoltarEtapa6').addEventListener('click', EtapasScript_desativarModoDefinirCondicoesPagamento);
-    document.getElementById('EtapasScript_btnSalvarCondicoesPagamento').addEventListener('click', EtapasScript_salvarDadosCondicoesPagamento);
+    document.getElementById('EtapasScript_btnFecharModalCondicoes').addEventListener('click', EtapasScript_fecharModalCondicoesPagamento);
+    document.getElementById('EtapasScript_btnCancelarModalCondicoes').addEventListener('click', EtapasScript_fecharModalCondicoesPagamento);
+    document.getElementById('EtapasScript_btnSalvarModalCondicoes').addEventListener('click', EtapasScript_salvarDadosCondicoesPagamento);
 
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Carregando dados de pagamento...");
-    google.script.run
-        .withSuccessHandler(response => {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (response && response.success) {
-                EtapasScript_renderizarInterfaceCondicoesPagamento(itensParaComprar, response.condicoes || {});
-                google.script.run.EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Definindo Condições de Pagamento");
-            } else {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao carregar dados.", true);
-                EtapasScript_desativarModoDefinirCondicoesPagamento();
-            }
-        })
-        .withFailureHandler(err => {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação: " + err.message, true);
-        })
-        .EtapasController_obterDadosParaEtapaCondicoes();
+    google.script.run
+        .withSuccessHandler(response => {
+            if (response && response.success) {
+                EtapasScript_renderizarInterfaceCondicoesPagamento(itensParaComprar, response.condicoes || {}, 'etapa6-pedidos-list-modal');
+                google.script.run.EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Definindo Condições de Pagamento");
+                EtapasScript_exibirFeedbackModalCondicoes("", false, 1); // Limpa o feedback de carregamento
+            } else {
+                // LÓGICA DE FALHA CORRIGIDA:
+                EtapasScript_exibirFeedbackModalCondicoes(response.message || "Falha ao carregar dados.", true);
+                // Chama a função para FECHAR O MODAL, e não a antiga para desativar a view.
+                setTimeout(EtapasScript_fecharModalCondicoesPagamento, 3000);
+            }
+        })
+        .withFailureHandler(err => {
+            // LÓGICA DE FALHA CORRIGIDA:
+            EtapasScript_exibirFeedbackModalCondicoes("Erro de comunicação: " + err.message, true);
+            // Chama a função para FECHAR O MODAL, e não a antiga para desativar a view.
+            setTimeout(EtapasScript_fecharModalCondicoesPagamento, 3000);
+        })
+        .EtapasController_obterDadosParaEtapaCondicoes();
 }
 
-function EtapasScript_desativarModoDefinirCondicoesPagamento() {
-    console.log("EtapasScript: Tentando desativar modo Definir Condições de Pagamento.");
 
-    let todosPreenchidos = true;
-    const todosOsInputs = document.querySelectorAll('#etapa6-pedidos-list .etapa6-pagamento-input');
-    
-    if (todosOsInputs.length > 0) {
-        todosOsInputs.forEach(input => {
-            if (input.value.trim() === '') {
-                todosPreenchidos = false;
-            }
-        });
-    }
+/**
+ * Renderiza a interface de condições de pagamento dentro do container do modal.
+ * SUBSTITUI a implementação antiga.
+ * @param {Array<object>} itensParaComprar - Itens filtrados que precisam de pagamento.
+ * @param {object} condicoesFornecedores - Mapa de condições sugeridas.
+ * @param {string} pedidosListContainerId - ID do elemento onde a lista será renderizada.
+ */
+function EtapasScript_renderizarInterfaceCondicoesPagamento(itensParaComprar, condicoesFornecedores, pedidosListContainerId) {
+    const pedidosListContainer = document.getElementById(pedidosListContainerId);
+    const template = document.getElementById('etapa6-pedido-item-template');
+    
+    if (!pedidosListContainer || !template) {
+        console.error("Erro crítico: Container da lista de pedidos ou template não encontrado para a Etapa 6.");
+        EtapasScript_exibirFeedbackModalCondicoes("Erro de interface. Recarregue a página.", true, 0);
+        return;
+    }
 
-    if (!todosPreenchidos) {
-        const confirmarSaida = confirm("Atenção: Existem condições de pagamento não preenchidas. Deseja realmente sair e descartar as alterações não salvas?");
-        if (!confirmarSaida) {
-            console.log("Saída cancelada pelo usuário.");
-            return;
-        }
-    }
+    pedidosListContainer.innerHTML = '';
 
-    document.getElementById('EtapasScript_definirCondicoesPagamentoContainer').classList.add('hidden');
-    CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
-    CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
+    const agrupado = itensParaComprar.reduce((acc, item) => {
+        const fornecedor = item['Fornecedor'];
+        const empresa = item['Empresa Faturada'];
+        const chave = `${fornecedor}__${empresa}`;
+        if (!acc[chave]) {
+            acc[chave] = { fornecedor, empresa, total: 0, condicaoSalva: item['Condição de Pagamento'] || '' };
+        }
+        acc[chave].total += (parseFloat(String(item['Preço'] || 0).replace(',', '.')) || 0) * (parseFloat(String(item['Comprar'] || 0).replace(',', '.')) || 0);
+        return acc;
+    }, {});
+
+    const listaPedidos = Object.values(agrupado);
+    if (listaPedidos.length === 0) {
+        pedidosListContainer.innerHTML = '<p style="color: #6b7280; text-align: center;">Nenhum item a ser pago nesta cotação.</p>';
+        return;
+    }
+
+    listaPedidos.forEach((pedido, index) => {
+        const clone = template.content.cloneNode(true);
+        const uniqueId = `etapa6-pedido-modal-${index}`;
+        const condicoesSugeridas = condicoesFornecedores[pedido.fornecedor] || 'N/A';
+        
+        clone.querySelector('.fornecedor-nome').textContent = pedido.fornecedor;
+        clone.querySelector('.empresa-nome').textContent = pedido.empresa;
+        clone.querySelector('.valor-total').textContent = EtapasScript_formatarMoeda(pedido.total);
+        clone.querySelector('.condicoes-sugeridas').textContent = condicoesSugeridas.replace(/[,;]/g, ' / ');
+        const inputCond = clone.querySelector('input[type="text"]');
+        inputCond.id = `cond-pagto-${uniqueId}`;
+        inputCond.value = pedido.condicaoSalva;
+        
+        const itemDiv = clone.querySelector('.etapa6-pedido-item');
+        itemDiv.dataset.fornecedor = pedido.fornecedor;
+        itemDiv.dataset.empresa = pedido.empresa;
+        itemDiv.dataset.total = pedido.total;
+        
+        inputCond.addEventListener('input', () => {
+            clearTimeout(EtapasScript_debounceTimer);
+            EtapasScript_debounceTimer = setTimeout(EtapasScript_atualizarFluxoCaixaGeral, 300);
+        });
+        pedidosListContainer.appendChild(clone);
+    });
+    
+    EtapasScript_atualizarFluxoCaixaGeral();
 }
 
-function EtapasScript_renderizarInterfaceCondicoesPagamento(itensParaComprar, condicoesFornecedores) {
-    const pedidosListContainer = document.getElementById('etapa6-pedidos-list');
-    const template = document.getElementById('etapa6-pedido-item-template');
-    pedidosListContainer.innerHTML = '';
-
-    const agrupado = itensParaComprar.reduce((acc, item) => {
-        const fornecedor = item['Fornecedor'];
-        const empresa = item['Empresa Faturada'];
-        const chave = `${fornecedor}__${empresa}`;
-
-        if (!acc[chave]) {
-            acc[chave] = { fornecedor, empresa, total: 0, condicaoSalva: item['Condição de Pagamento'] || '' };
-        }
-        acc[chave].total += (parseFloat(String(item['Preço'] || 0).replace(',', '.')) || 0) * (parseFloat(String(item['Comprar'] || 0).replace(',', '.')) || 0);
-        return acc;
-    }, {});
-
-    const listaPedidos = Object.values(agrupado);
-
-    if (listaPedidos.length === 0) {
-        pedidosListContainer.innerHTML = '<p style="color: #6b7280; text-align: center;">Nenhum item a ser pago nesta cotação.</p>';
-        return;
-    }
-
-    listaPedidos.forEach((pedido, index) => {
-        const clone = template.content.cloneNode(true);
-        const uniqueId = `etapa6-pedido-${index}`;
-        
-        const condicoesSugeridas = condicoesFornecedores[pedido.fornecedor] || 'N/A';
-        
-        clone.querySelector('.fornecedor-nome').textContent = pedido.fornecedor;
-        clone.querySelector('.empresa-nome').textContent = pedido.empresa;
-        clone.querySelector('.valor-total').textContent = EtapasScript_formatarMoeda(pedido.total);
-        clone.querySelector('.condicoes-sugeridas').textContent = condicoesSugeridas.replace(/[,;]/g, ' / ');
-
-        const inputCond = clone.querySelector('input[type="text"]');
-        inputCond.id = `cond-pagto-${uniqueId}`;
-        inputCond.value = pedido.condicaoSalva;
-        
-        const itemDiv = clone.querySelector('.etapa6-pedido-item');
-        itemDiv.dataset.fornecedor = pedido.fornecedor;
-        itemDiv.dataset.empresa = pedido.empresa;
-        itemDiv.dataset.total = pedido.total;
-        
-        inputCond.addEventListener('input', () => {
-            clearTimeout(EtapasScript_debounceTimer);
-            EtapasScript_debounceTimer = setTimeout(EtapasScript_atualizarFluxoCaixaGeral, 300);
-        });
-
-        pedidosListContainer.appendChild(clone);
-    });
-    
-    EtapasScript_atualizarFluxoCaixaGeral();
-}
-
+/**
+ * Atualiza o fluxo de caixa no painel direito do modal.
+ * SUBSTITUI a implementação antiga.
+ */
 function EtapasScript_atualizarFluxoCaixaGeral() {
-    const todosOsPedidos = document.querySelectorAll('#etapa6-pedidos-list .etapa6-pedido-item');
-    const totaisDiarios = {};
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
+    const modalOverlay = document.getElementById('EtapasScript_modalCondicoesPagamentoOverlay');
+    if (!modalOverlay || !modalOverlay.classList.contains('active')) return;
 
-    todosOsPedidos.forEach(item => {
-        const valorTotal = parseFloat(item.dataset.total);
-        const condicao = item.querySelector('input[type="text"]').value;
-        
-        if (!condicao || isNaN(valorTotal) || valorTotal <= 0) return;
+    const todosOsPedidos = modalOverlay.querySelectorAll('#etapa6-pedidos-list-modal .etapa6-pedido-item');
+    const tbody = document.getElementById('etapa6-fluxo-preview-tbody-modal');
+    
+    if (!tbody) {
+        console.error("Corpo da tabela de fluxo de caixa do modal não encontrado.");
+        return;
+    }
 
-        const prazos = String(condicao).split(/[/,; ]+/).map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p) && p >= 0);
-        if (prazos.length === 0) return;
-        
-        const valorParcela = valorTotal / prazos.length;
+    const totaisDiarios = {};
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
 
-        prazos.forEach(dias => {
-            const dataVencimento = new Date(hoje.getTime());
-            dataVencimento.setDate(hoje.getDate() + dias);
-            const chaveData = dataVencimento.toISOString().split('T')[0];
-            
-            totaisDiarios[chaveData] = (totaisDiarios[chaveData] || 0) + valorParcela;
-        });
-    });
+    todosOsPedidos.forEach(item => {
+        const valorTotal = parseFloat(item.dataset.total);
+        const condicao = item.querySelector('input[type="text"]').value;
+        if (!condicao || isNaN(valorTotal) || valorTotal <= 0) return;
 
-    const chavesOrdenadas = Object.keys(totaisDiarios).sort();
-    const tbody = document.getElementById('etapa6-fluxo-preview-tbody');
-    tbody.innerHTML = '';
+        const prazos = String(condicao).split(/[/,; ]+/).map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p) && p >= 0);
+        if (prazos.length === 0) return;
+        
+        const valorParcela = valorTotal / prazos.length;
 
-    if (chavesOrdenadas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: #6b7280;">Nenhuma condição de pagamento válida informada.</td></tr>';
-        return;
-    }
+        prazos.forEach(dias => {
+            const dataVencimento = new Date(hoje.getTime());
+            dataVencimento.setDate(hoje.getDate() + dias);
+            const chaveData = dataVencimento.toISOString().split('T')[0];
+            totaisDiarios[chaveData] = (totaisDiarios[chaveData] || 0) + valorParcela;
+        });
+    });
 
-    chavesOrdenadas.forEach(chaveData => {
-        const [ano, mes, dia] = chaveData.split('-');
-        const dataLabel = `${dia}/${mes}/${ano}`;
-        const valorDia = totaisDiarios[chaveData];
-        
-        const row = tbody.insertRow();
-        row.insertCell().textContent = dataLabel;
-        row.insertCell().textContent = EtapasScript_formatarMoeda(valorDia);
-    });
+    const chavesOrdenadas = Object.keys(totaisDiarios).sort();
+    tbody.innerHTML = '';
+
+    if (chavesOrdenadas.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: #6b7280;">Nenhuma condição de pagamento válida informada.</td></tr>';
+        return;
+    }
+
+    chavesOrdenadas.forEach(chaveData => {
+        const [ano, mes, dia] = chaveData.split('-');
+        const dataLabel = `${dia}/${mes}/${ano}`;
+        const valorDia = totaisDiarios[chaveData];
+        const row = tbody.insertRow();
+        row.insertCell().textContent = dataLabel;
+        row.insertCell().textContent = EtapasScript_formatarMoeda(valorDia);
+    });
 }
 
+/**
+ * Coleta e salva os dados de condições de pagamento do modal.
+ * SUBSTITUI a implementação antiga.
+ */
 function EtapasScript_salvarDadosCondicoesPagamento() {
-    console.log("EtapasScript: Tentando salvar condições de pagamento (v2)...");
-    const dadosParaSalvar = [];
-    const todosOsPedidos = document.querySelectorAll('#etapa6-pedidos-list .etapa6-pedido-item');
-    let primeiroCampoVazio = null;
+    console.log("EtapasScript: Salvando condições de pagamento do modal...");
+    const dadosParaSalvar = [];
+    const modalOverlay = document.getElementById('EtapasScript_modalCondicoesPagamentoOverlay');
+    const todosOsPedidos = modalOverlay.querySelectorAll('#etapa6-pedidos-list-modal .etapa6-pedido-item');
+    let primeiroCampoVazio = null;
 
-    for (const item of todosOsPedidos) {
-        const fornecedor = item.dataset.fornecedor;
-        const empresa = item.dataset.empresa;
-        const condicaoInput = item.querySelector('input[type="text"]');
-        const condicao = condicaoInput.value.trim();
+    for (const item of todosOsPedidos) {
+        const fornecedor = item.dataset.fornecedor;
+        const empresa = item.dataset.empresa;
+        const condicaoInput = item.querySelector('input[type="text"]');
+        const condicao = condicaoInput.value.trim();
 
-        if (condicao === '') {
-            primeiroCampoVazio = condicaoInput;
-            break; 
-        }
+        if (condicao === '') {
+            primeiroCampoVazio = condicaoInput;
+            break; 
+        }
+        dadosParaSalvar.push({ fornecedor, empresa, condicao });
+    }
 
-        dadosParaSalvar.push({ fornecedor, empresa, condicao });
-    }
+    if (primeiroCampoVazio) {
+        EtapasScript_exibirFeedbackModalCondicoes("Erro: Todas as condições de pagamento devem ser preenchidas antes de salvar.", true, 5000);
+        primeiroCampoVazio.focus();
+        primeiroCampoVazio.style.borderColor = 'red';
+        setTimeout(() => { if (primeiroCampoVazio) primeiroCampoVazio.style.borderColor = '#d1d5db'; }, 3000);
+        return;
+    }
 
-    if (primeiroCampoVazio) {
-        CotacaoIndividualScript_exibirFeedback("Erro: Todas as condições de pagamento devem ser preenchidas antes de salvar.", true, 5000);
-        primeiroCampoVazio.focus();
-        primeiroCampoVazio.style.borderColor = 'red';
-        setTimeout(() => {
-             if (primeiroCampoVazio) primeiroCampoVazio.style.borderColor = '#d1d5db';
-        }, 3000);
-        return;
-    }
+    if (dadosParaSalvar.length === 0) {
+        EtapasScript_exibirFeedbackModalCondicoes("Não há pedidos para salvar.", false, 4000);
+        return;
+    }
 
-    if (dadosParaSalvar.length === 0) {
-        CotacaoIndividualScript_exibirFeedback("Não há pedidos para salvar.", false, 4000);
-        return;
-    }
+    const btnSalvar = document.getElementById('EtapasScript_btnSalvarModalCondicoes');
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = "Salvando...";
+    EtapasScript_exibirFeedbackModalCondicoes("Salvando condições de pagamento...", false, 0);
 
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Salvando condições...");
-    google.script.run
-        .withSuccessHandler(response => {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (response && response.success) {
-                CotacaoIndividualScript_exibirFeedback(response.message, false, 6000);
-                CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual);
-            } else {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao salvar condições de pagamento.", true, 8000);
-            }
-        })
-        .withFailureHandler(err => {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao salvar: " + err.message, true);
-        })
-        .EtapasController_salvarCondicoesPagamento(CotacaoIndividualScript_cotacaoIdAtual, dadosParaSalvar);
+    google.script.run
+        .withSuccessHandler(response => {
+            btnSalvar.disabled = false;
+            btnSalvar.textContent = "Salvar Condições";
+            if (response && response.success) {
+                EtapasScript_fecharModalCondicoesPagamento();
+                CotacaoIndividualScript_exibirFeedback(response.message, false, 6000);
+                CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual);
+            } else {
+                EtapasScript_exibirFeedbackModalCondicoes(response.message || "Falha ao salvar condições de pagamento.", true, 8000);
+            }
+        })
+        .withFailureHandler(err => {
+            btnSalvar.disabled = false;
+            btnSalvar.textContent = "Salvar Condições";
+            EtapasScript_exibirFeedbackModalCondicoes("Erro de comunicação ao salvar: " + err.message, true);
+        })
+        .EtapasController_salvarCondicoesPagamento(CotacaoIndividualScript_cotacaoIdAtual, dadosParaSalvar);
 }
 
 //================================================================================================
@@ -1256,6 +1251,203 @@ function EtapasScript_abrirPaginaImpressao() {
             CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao gerar link: " + error.message, true);
         })
         .App_obterUrlWebApp({ view: 'ImprimirPedidosView', idCotacao: CotacaoIndividualScript_cotacaoIdAtual });
+}
+
+/**
+ * Fecha o modal de Retirar Produtos e restaura o estado da aplicação.
+ */
+function EtapasScript_fecharModalRetirarProdutos() {
+    console.log("EtapasScript: Fechando modal de Retirar Produtos.");
+    const modalOverlay = document.getElementById('EtapasScript_modalRetirarProdutosOverlay');
+    if (modalOverlay) {
+        modalOverlay.classList.remove('active');
+    }
+    CotacaoIndividualScript_modoEtapaAtual = null; // Limpa o modo de etapa
+    
+    // Limpa feedback dentro do modal para a próxima vez que for aberto
+    const feedbackDiv = document.getElementById('EtapasScript_feedbackModalRetirarProdutos');
+    if(feedbackDiv) feedbackDiv.innerHTML = '';
+}
+
+/**
+ * Renderiza o conteúdo (acordeões) dentro do modal de Retirar Produtos.
+ */
+function EtapasScript_renderizarConteudoModalRetirarProdutos() {
+    console.log("EtapasScript: Renderizando conteúdo para o modal de Retirar Produtos.");
+    const { crit1, crit2, crit3 } = EtapasScript_identificarProdutosParaRetirada();
+
+    // Renderiza cada acordeão no seu respectivo container DENTRO do modal
+    EtapasScript_renderizarAcordeaoRetirarProdutos('EtapasScript_acordeaoContainerCrit1_Modal', "Quantidade maior que o necessário.", crit1, "crit1_modal");
+    EtapasScript_renderizarAcordeaoRetirarProdutos('EtapasScript_acordeaoContainerCrit2_Modal', "Não foi marcado para comprar.", crit2, "crit2_modal");
+    EtapasScript_renderizarAcordeaoRetirarProdutos('EtapasScript_acordeaoContainerCrit3_Modal', "Produtos inativos ou sem dados.", crit3, "crit3_modal");
+}
+
+/**
+ * Ponto de entrada para a Etapa 2 (versão Modal). Prepara e exibe o modal.
+ * Esta função substitui a implementação antiga.
+ */
+function EtapasScript_ativarModoRetirarProdutos() {
+    console.log("EtapasScript: Ativando modo Retirar Produtos (Modal).");
+    CotacaoIndividualScript_modoEtapaAtual = 'retirar_produtos';
+
+    if (CotacaoIndividualScript_dadosOriginaisCotacao.length === 0) {
+        CotacaoIndividualScript_exibirFeedback("Dados da cotação ainda não carregados. Tente novamente.", true, 5000);
+        CotacaoIndividualScript_modoEtapaAtual = null;
+        return;
+    }
+
+    // Renderiza o conteúdo do modal com os dados atuais
+    EtapasScript_renderizarConteudoModalRetirarProdutos();
+
+    // Abre o modal
+    const modalOverlay = document.getElementById('EtapasScript_modalRetirarProdutosOverlay');
+    if (modalOverlay) {
+        modalOverlay.classList.add('active');
+    }
+
+    // Configura os botões do modal
+    const btnConfirmar = document.getElementById('EtapasScript_btnConfirmarRemocaoModal');
+    const btnCancelar = document.getElementById('EtapasScript_btnCancelarModalRetirarProdutos');
+    const btnFechar = document.getElementById('EtapasScript_btnFecharModalRetirarProdutos');
+
+    // Remove event listeners antigos para evitar duplicação
+    btnConfirmar.removeEventListener('click', EtapasScript_manipularExclusaoProdutosRetirar);
+    btnCancelar.removeEventListener('click', EtapasScript_fecharModalRetirarProdutos);
+    btnFechar.removeEventListener('click', EtapasScript_fecharModalRetirarProdutos);
+
+    // Adiciona os novos event listeners
+    btnConfirmar.addEventListener('click', EtapasScript_manipularExclusaoProdutosRetirar);
+    btnCancelar.addEventListener('click', EtapasScript_fecharModalRetirarProdutos);
+    btnFechar.addEventListener('click', EtapasScript_fecharModalRetirarProdutos);
+}
+
+/**
+ * Exibe feedback dentro do modal de Retirar Produtos.
+ * @param {string} mensagem O texto a ser exibido.
+ * @param {boolean} isError Se a mensagem é um erro.
+ * @param {number} duracao Duração em milissegundos para a mensagem desaparecer.
+ */
+function EtapasScript_exibirFeedbackModalRetirarProdutos(mensagem, isError = false, duracao = 5000) {
+    const feedbackDiv = document.getElementById('EtapasScript_feedbackModalRetirarProdutos');
+    if (feedbackDiv) {
+        const innerDiv = document.createElement('div');
+        innerDiv.className = `p-3 rounded-md text-sm ${isError ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`;
+        innerDiv.textContent = mensagem;
+        feedbackDiv.innerHTML = ''; // Limpa mensagens antigas
+        feedbackDiv.appendChild(innerDiv);
+        
+        if (duracao > 0) {
+            setTimeout(() => {
+                if (feedbackDiv.contains(innerDiv)) {
+                    feedbackDiv.innerHTML = '';
+                }
+            }, duracao);
+        }
+    }
+}
+
+/**
+ * Fecha o modal de Definir Empresa para Faturamento e limpa o estado.
+ */
+function EtapasScript_fecharModalDefinirEmpresa() {
+    console.log("EtapasScript: Fechando modal de Definir Empresa.");
+    const modalOverlay = document.getElementById('EtapasScript_modalDefinirEmpresaOverlay');
+    if (modalOverlay) {
+        modalOverlay.classList.remove('active');
+    }
+    CotacaoIndividualScript_modoEtapaAtual = null; // Limpa o modo de etapa
+
+    // Limpa o conteúdo interno do modal para a próxima abertura
+    const modalBody = document.getElementById('EtapasScript_modalBodyDefinirEmpresa');
+    const controlsContainer = document.getElementById('EtapasScript_controlsContainer_Modal');
+    const tableContainer = document.getElementById('EtapasScript_tabelaContainer_Modal');
+    const feedbackDiv = document.getElementById('EtapasScript_feedbackModalDefinirEmpresa');
+
+    if(controlsContainer) controlsContainer.innerHTML = '';
+    if(tableContainer) tableContainer.innerHTML = '';
+    if(feedbackDiv) feedbackDiv.innerHTML = '';
+}
+
+/**
+ * Exibe feedback dentro do modal de Definir Empresa.
+ * @param {string} mensagem O texto a ser exibido.
+ * @param {boolean} isError Se a mensagem é um erro.
+ * @param {number} duracao Duração em milissegundos.
+ */
+function EtapasScript_exibirFeedbackModalDefinirEmpresa(mensagem, isError = false, duracao = 5000) {
+    const feedbackDiv = document.getElementById('EtapasScript_feedbackModalDefinirEmpresa');
+    if (feedbackDiv) {
+        const innerDiv = document.createElement('div');
+        innerDiv.className = `p-3 rounded-md text-sm ${isError ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`;
+        innerDiv.textContent = mensagem;
+        feedbackDiv.innerHTML = '';
+        feedbackDiv.appendChild(innerDiv);
+        
+        if (duracao > 0) {
+            setTimeout(() => {
+                if (feedbackDiv.contains(innerDiv)) {
+                    feedbackDiv.innerHTML = '';
+                }
+            }, duracao);
+        }
+    }
+}
+
+/**
+ * Fecha o modal de Condições de Pagamento, com verificação de dados não salvos.
+ */
+function EtapasScript_fecharModalCondicoesPagamento() {
+    let todosPreenchidos = true;
+    const modalOverlay = document.getElementById('EtapasScript_modalCondicoesPagamentoOverlay');
+    const todosOsInputs = modalOverlay.querySelectorAll('#etapa6-pedidos-list-modal .etapa6-pagamento-input');
+    
+    if (todosOsInputs.length > 0) {
+        todosOsInputs.forEach(input => {
+            if (input.value.trim() === '') {
+                todosPreenchidos = false;
+            }
+        });
+    }
+
+    let procederFechamento = true;
+    if (!todosPreenchidos) {
+        procederFechamento = confirm("Atenção: Existem condições de pagamento não preenchidas. Deseja realmente fechar e descartar as alterações não salvas?");
+    }
+
+    if (procederFechamento) {
+        console.log("EtapasScript: Fechando modal de Condições de Pagamento.");
+        if (modalOverlay) {
+            modalOverlay.classList.remove('active');
+        }
+        CotacaoIndividualScript_modoEtapaAtual = null; // Limpa o modo de etapa
+        
+        const feedbackDiv = document.getElementById('EtapasScript_feedbackModalCondicoes');
+        if(feedbackDiv) feedbackDiv.innerHTML = '';
+    } else {
+        console.log("Fechamento do modal cancelado pelo usuário.");
+    }
+}
+
+/**
+ * Exibe feedback dentro do modal de Condições de Pagamento.
+ */
+function EtapasScript_exibirFeedbackModalCondicoes(mensagem, isError = false, duracao = 5000) {
+    const feedbackDiv = document.getElementById('EtapasScript_feedbackModalCondicoes');
+    if (feedbackDiv) {
+        const innerDiv = document.createElement('div');
+        innerDiv.className = `p-3 rounded-md text-sm ${isError ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`;
+        innerDiv.textContent = mensagem;
+        feedbackDiv.innerHTML = '';
+        feedbackDiv.appendChild(innerDiv);
+        
+        if (duracao > 0) {
+            setTimeout(() => {
+                if (feedbackDiv.contains(innerDiv)) {
+                    feedbackDiv.innerHTML = '';
+                }
+            }, duracao);
+        }
+    }
 }
 
 </script>

@@ -960,43 +960,51 @@ function initDropdownsInterno() {
                     // Lógica para desativar o modo anterior se não for um relatório (que abre em nova guia)
                     if (modoAnterior && !action.startsWith('relatorio_')) {
                          if (novoModoPotencial && modoAnterior !== novoModoPotencial || !novoModoPotencial) {
-                            if (modoAnterior === 'contagem_estoque' && typeof EtapasScript_desativarModoContagemEstoque === 'function') EtapasScript_desativarModoContagemEstoque();
-                            else if (modoAnterior === 'retirar_produtos' && typeof EtapasScript_desativarModoRetirarProdutos === 'function') EtapasScript_desativarModoRetirarProdutos();
-                            else if (modoAnterior === 'gerenciar_cotacoes_portal' && typeof FuncoesScript_desativarModoGerenciarCotacoesPortal === 'function') FuncoesScript_desativarModoGerenciarCotacoesPortal();
+                            if (modoAnterior === 'contagem_estoque' && typeof EtapasScript_fecharModalContagemEstoque === 'function') EtapasScript_fecharModalContagemEstoque();
+                            else if (modoAnterior === 'retirar_produtos' && typeof EtapasScript_fecharModalRetirarProdutos === 'function') EtapasScript_fecharModalRetirarProdutos();
+                            
+                            // =================================================================================================================
+                            // INÍCIO DA CORREÇÃO: Substituímos a chamada à função deletada pela nova função que fecha o modal.
+                            // =================================================================================================================
+                            else if (modoAnterior === 'gerenciar_cotacoes_portal' && typeof FuncoesScript_fecharModalGerenciarCotacoes === 'function') FuncoesScript_fecharModalGerenciarCotacoes();
+                            // =================================================================================================================
+                            // FIM DA CORREÇÃO
+                            // =================================================================================================================
+                            
                             else if (modoAnterior === 'realizar_cotacao' && typeof EtapasScript_desativarModoRealizarCotacao === 'function') EtapasScript_desativarModoRealizarCotacao();
-                            else if (modoAnterior === 'definir_empresa' && typeof EtapasScript_desativarModoDefinirEmpresa === 'function') EtapasScript_desativarModoDefinirEmpresa();
-                            else if (modoAnterior === 'definir_condicoes_pagamento' && typeof EtapasScript_desativarModoDefinirCondicoesPagamento === 'function') EtapasScript_desativarModoDefinirCondicoesPagamento();
+                            else if (modoAnterior === 'definir_empresa' && typeof EtapasScript_fecharModalDefinirEmpresa === 'function') EtapasScript_fecharModalDefinirEmpresa();
+                            else if (modoAnterior === 'definir_condicoes_pagamento' && typeof EtapasScript_fecharModalCondicoesPagamento === 'function') EtapasScript_fecharModalCondicoesPagamento();
                             else if (modoAnterior === 'pedido_direto' && typeof FuncoesScript_desativarModoPedidoDireto === 'function') FuncoesScript_desativarModoPedidoDireto();
                         }
                     }
                     
                     switch(action) {
                         case 'etapa_contagem_estoque':
-                            if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque' && typeof EtapasScript_ativarModoContagemEstoque === 'function') EtapasScript_ativarModoContagemEstoque();
+                            if (typeof EtapasScript_ativarModoContagemEstoque === 'function') EtapasScript_ativarModoContagemEstoque();
                             break;
                         case 'etapa_retirar_produtos':
-                            if (CotacaoIndividualScript_modoEtapaAtual !== 'retirar_produtos' && typeof EtapasScript_ativarModoRetirarProdutos === 'function') EtapasScript_ativarModoRetirarProdutos();
+                            if (typeof EtapasScript_ativarModoRetirarProdutos === 'function') EtapasScript_ativarModoRetirarProdutos();
                             break;
                         case 'etapa_enviar_fornecedores':
                             if (typeof EtapasScript_iniciarEnvioParaFornecedores === 'function') EtapasScript_iniciarEnvioParaFornecedores();
                             break;
                         case 'etapa_realizar_cotacao':
-                             if (CotacaoIndividualScript_modoEtapaAtual !== 'realizar_cotacao' && typeof EtapasScript_ativarModoRealizarCotacao === 'function') EtapasScript_ativarModoRealizarCotacao();
+                             if (typeof EtapasScript_ativarModoRealizarCotacao === 'function') EtapasScript_ativarModoRealizarCotacao();
                             break;
                         case 'etapa_definir_empresa':
-                            if (CotacaoIndividualScript_modoEtapaAtual !== 'definir_empresa' && typeof EtapasScript_ativarModoDefinirEmpresa === 'function') EtapasScript_ativarModoDefinirEmpresa();
+                            if (typeof EtapasScript_ativarModoDefinirEmpresa === 'function') EtapasScript_ativarModoDefinirEmpresa();
                             break;
                         case 'etapa_definir_condicoes_pagamento':
-                            if (CotacaoIndividualScript_modoEtapaAtual !== 'definir_condicoes_pagamento' && typeof EtapasScript_ativarModoDefinirCondicoesPagamento === 'function') EtapasScript_ativarModoDefinirCondicoesPagamento();
+                            if (typeof EtapasScript_ativarModoDefinirCondicoesPagamento === 'function') EtapasScript_ativarModoDefinirCondicoesPagamento();
                             break;
                         case 'etapa_imprimir_pedidos':
                              if (typeof EtapasScript_abrirPaginaImpressao === 'function') EtapasScript_abrirPaginaImpressao();
                             break;
                         case 'funcao_gerenciar_cotacoes':
-                            if (CotacaoIndividualScript_modoEtapaAtual !== 'gerenciar_cotacoes_portal' && typeof FuncoesScript_ativarModoGerenciarCotacoesPortal === 'function') FuncoesScript_ativarModoGerenciarCotacoesPortal();
+                            if (typeof FuncoesScript_ativarModoGerenciarCotacoesPortal === 'function') FuncoesScript_ativarModoGerenciarCotacoesPortal();
                             break;
                         case 'funcao_pedido_direto':
-                            if (CotacaoIndividualScript_modoEtapaAtual !== 'pedido_direto' && typeof FuncoesScript_ativarModoPedidoDireto === 'function') FuncoesScript_ativarModoPedidoDireto();
+                            if (typeof FuncoesScript_ativarModoPedidoDireto === 'function') FuncoesScript_ativarModoPedidoDireto();
                             break;
                         case 'funcao_acrescentar_itens':
                             if (typeof FuncoesScript_ativarModoAcrescentarItens === 'function') FuncoesScript_ativarModoAcrescentarItens();
@@ -1016,8 +1024,10 @@ function initDropdownsInterno() {
                             }
                             break;
                         default:
-                            if (!action.startsWith('relatorio_')) { // Não restaura se for um relatório pendente
-                                CotacaoIndividualScript_restaurarVisualizacaoPadrao(true); 
+                            if (!action.startsWith('relatorio_')) {
+                                if (typeof CotacaoIndividualScript_restaurarVisualizacaoPadrao === 'function') {
+                                     CotacaoIndividualScript_restaurarVisualizacaoPadrao(true); 
+                                }
                                 CotacaoIndividualScript_modoEtapaAtual = null;
                             }
                             CotacaoIndividualScript_exibirFeedback(`Ação do menu: ${this.textContent} (ID: ${action}) selecionada. Implementação pendente.`, false, 4000);
@@ -1039,7 +1049,6 @@ function initDropdownsInterno() {
         });
     });
 }
-
 
   async function inicializarPaginaPrincipal() {
     console.log("CotacaoIndividualScript: Iniciando lógica principal da página...");
@@ -1100,7 +1109,7 @@ function initDropdownsInterno() {
         if (tbody) tbody.innerHTML = `<tr><td colspan="${CotacaoIndividualScript_cabecalhosVisiveis.length || 1}" class="text-center p-8 text-red-500">Erro: ID da Cotação não fornecido.</td></tr>`;
     }
     
-        // Vincular eventos para o novo modal "Acrescentar Itens"
+    // Vincular eventos para o novo modal "Acrescentar Itens"
     const btnFecharModalItens = document.getElementById('CotacaoIndividualScript_btnFecharModalAcrescentarItens');
     const btnCancelarModalItens = document.getElementById('CotacaoIndividualScript_btnCancelarModalAcrescentarItens');
     const btnAcrescentarModal = document.getElementById('CotacaoIndividualScript_btnAcrescentarItensModal');
@@ -1145,11 +1154,6 @@ function initDropdownsInterno() {
         });
     }
 
-    const btnVoltarGerenciarCotacoes = document.getElementById('FuncoesScript_btnVoltarGerenciarCotacoes');
-    if(btnVoltarGerenciarCotacoes) {
-        btnVoltarGerenciarCotacoes.addEventListener('click', FuncoesScript_desativarModoGerenciarCotacoesPortal);
-    }
-   
     initDropdownsInterno();
   }
 

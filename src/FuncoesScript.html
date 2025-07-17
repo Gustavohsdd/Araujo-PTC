@@ -14,247 +14,219 @@
 //----------------------------------------------------------------------------------------------------
 
 /**
- * Ativa o modo de visualização "Gerenciar Cotações (Portal)".
- */
+ * Ativa o modo de visualização "Gerenciar Cotações (Portal)" através de um modal.
+ * SUBSTITUI a implementação antiga.
+ */
 function FuncoesScript_ativarModoGerenciarCotacoesPortal() {
-    console.log("FuncoesScript: Ativando modo Gerenciar Cotações (Portal).");
-    CotacaoIndividualScript_modoEtapaAtual = 'gerenciar_cotacoes_portal'; 
+    console.log("FuncoesScript: Ativando modo Gerenciar Cotações (Portal) via Modal.");
+    CotacaoIndividualScript_modoEtapaAtual = 'gerenciar_cotacoes_portal'; 
+    
+    const modalOverlay = document.getElementById('FuncoesScript_modalGerenciarCotacoesOverlay');
+    if (!modalOverlay) {
+        console.error("FuncoesScript: Modal de Gerenciar Cotações não encontrado no DOM.");
+        CotacaoIndividualScript_exibirFeedback("Erro: Componente do modal não encontrado.", true);
+        return;
+    }
 
-    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.add('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.remove('hidden');
-    
-    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
-    if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden'); // Esconde botão de salvar contagem
+    modalOverlay.classList.add('active');
+    const portalBodyModal = document.getElementById('FuncoesScript_modalContentGerenciarCotacoes');
+    portalBodyModal.innerHTML = '<div class="empty-state">Carregando dados das cotações do portal...</div>';
 
-    const portalBody = document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_BODY);
-    if (portalBody) {
-        portalBody.innerHTML = '<div class="empty-state">Carregando dados das cotações do portal...</div>';
-    }
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Carregando Cotações do Portal...");
-
-    google.script.run
-        .withSuccessHandler(function(response) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (response && response.success) {
-                FuncoesScript_renderizarConteudoGerenciarCotacoesPortal(response.dados);
-            } else {
-                if (portalBody) portalBody.innerHTML = `<div class="empty-state">Falha ao carregar dados: ${response.message || 'Erro desconhecido.'}</div>`;
-                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao carregar dados para gerenciar cotações.", true);
-            }
-        })
-        .withFailureHandler(function(error) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (portalBody) portalBody.innerHTML = `<div class="empty-state">Erro de comunicação: ${error.message}</div>`;
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao buscar dados das cotações: " + error.message, true);
-        })
-        .FuncoesController_obterDadosGerenciarCotacoes(); 
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response && response.success) {
+                FuncoesScript_renderizarConteudoGerenciarCotacoesPortal(response.dados);
+            } else {
+                portalBodyModal.innerHTML = `<div class="empty-state">Falha ao carregar dados: ${response.message || 'Erro desconhecido.'}</div>`;
+                FuncoesScript_exibirFeedbackModalGerenciarCotacoes(response.message || "Falha ao carregar dados.", true);
+            }
+        })
+        .withFailureHandler(function(error) {
+            portalBodyModal.innerHTML = `<div class="empty-state">Erro de comunicação: ${error.message}</div>`;
+            FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Erro de comunicação: " + error.message, true);
+        })
+        .FuncoesController_obterDadosGerenciarCotacoes();
+        
+    // Configura os botões de fechar do modal
+    document.getElementById('FuncoesScript_btnFecharModalGerenciarCotacoes').addEventListener('click', FuncoesScript_fecharModalGerenciarCotacoes);
+    document.getElementById('FuncoesScript_btnConcluirModalGerenciarCotacoes').addEventListener('click', FuncoesScript_fecharModalGerenciarCotacoes);
 }
 
 /**
- * Desativa o modo "Gerenciar Cotações (Portal)" e restaura a visualização padrão da tabela.
- */
-function FuncoesScript_desativarModoGerenciarCotacoesPortal() {
-    console.log("FuncoesScript: Desativando modo Gerenciar Cotações (Portal).");
-    CotacaoIndividualScript_modoEtapaAtual = null; 
-    if (typeof CotacaoIndividualScript_restaurarVisualizacaoPadrao === 'function') {
-        CotacaoIndividualScript_restaurarVisualizacaoPadrao(true); 
-    } else {
-        console.error("FuncoesScript_desativarModoGerenciarCotacoesPortal: CotacaoIndividualScript_restaurarVisualizacaoPadrao não está definida.");
-        document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
-        document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
-        document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
-    }
-}
-
-/**
- * Renderiza o conteúdo da seção "Gerenciar Cotações (Portal)" com os dados recebidos.
- */
+ * Renderiza o conteúdo da seção "Gerenciar Cotações (Portal)" DENTRO DO MODAL.
+ * SUBSTITUI a implementação antiga.
+ */
 function FuncoesScript_renderizarConteudoGerenciarCotacoesPortal(dadosCotacoes) {
-    const portalBody = document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_BODY);
-    if (!portalBody) {
-        console.error("FuncoesScript_renderizarConteudoGerenciarCotacoesPortal: Elemento portalBody não encontrado.");
-        return;
-    }
-    portalBody.innerHTML = ''; 
+    const portalBody = document.getElementById('FuncoesScript_modalContentGerenciarCotacoes');
+    if (!portalBody) {
+        console.error("FuncoesScript_renderizarConteudoGerenciarCotacoesPortal: Elemento do corpo do modal não encontrado.");
+        return;
+    }
+    portalBody.innerHTML = ''; 
 
-    if (!dadosCotacoes || dadosCotacoes.length === 0) {
-        portalBody.innerHTML = '<div class="empty-state">Nenhuma cotação em aberto encontrada no portal.</div>';
-        return;
-    }
+    if (!dadosCotacoes || dadosCotacoes.length === 0) {
+        portalBody.innerHTML = '<div class="empty-state">Nenhuma cotação em aberto encontrada no portal.</div>';
+        return;
+    }
 
-    dadosCotacoes.forEach(cotacao => {
-        const accordionItem = document.createElement('div');
-        accordionItem.className = 'gerenciar-cotacoes-accordion-item';
-        accordionItem.dataset.idCotacao = cotacao.idCotacao;
+    dadosCotacoes.forEach(cotacao => {
+        const accordionItem = document.createElement('div');
+        accordionItem.className = 'gerenciar-cotacoes-accordion-item';
+        accordionItem.dataset.idCotacao = cotacao.idCotacao;
 
-        const accordionHeader = document.createElement('div');
-        accordionHeader.className = 'gerenciar-cotacoes-accordion-header';
-        accordionHeader.innerHTML = `
-            <span class="accordion-title-text">Cotação ID: ${cotacao.idCotacao}</span>
-            <span class="accordion-percentage">${cotacao.percentualRespondido.toFixed(1)}% Respondido</span>
-            <svg class="gerenciar-cotacoes-accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
-        `;
+        const accordionHeader = document.createElement('div');
+        accordionHeader.className = 'gerenciar-cotacoes-accordion-header';
+        accordionHeader.innerHTML = `
+            <span class="accordion-title-text">Cotação ID: ${cotacao.idCotacao}</span>
+            <span class="accordion-percentage">${cotacao.percentualRespondido.toFixed(1)}% Respondido</span>
+            <svg class="gerenciar-cotacoes-accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+        `;
 
-        const accordionContent = document.createElement('div');
-        accordionContent.className = 'gerenciar-cotacoes-accordion-content';
+        const accordionContent = document.createElement('div');
+        accordionContent.className = 'gerenciar-cotacoes-accordion-content';
 
-        const textoGlobalDiv = document.createElement('div');
-        textoGlobalDiv.className = 'gerenciar-cotacoes-texto-global-cotacao';
-        const defaultTextCotacao = `Olá,\nSegue o link para a Cotação ${cotacao.idCotacao}.\nOs pedidos serão fechados hoje às 16:00.\n\nAtenciosamente,`;
-        const textoSalvoCotacao = cotacao.textoPersonalizadoCotacao !== null && cotacao.textoPersonalizadoCotacao !== undefined && cotacao.textoPersonalizadoCotacao !== ""
-                                  ? cotacao.textoPersonalizadoCotacao
-                                  : defaultTextCotacao;
+        const textoGlobalDiv = document.createElement('div');
+        textoGlobalDiv.className = 'gerenciar-cotacoes-texto-global-cotacao';
+        const defaultTextCotacao = `Olá,\nSegue o link para a Cotação ${cotacao.idCotacao}.\nOs pedidos serão fechados hoje às 16:00.\n\nAtenciosamente,`;
+        const textoSalvoCotacao = cotacao.textoPersonalizadoCotacao !== null && cotacao.textoPersonalizadoCotacao !== undefined && cotacao.textoPersonalizadoCotacao !== ""
+                                    ? cotacao.textoPersonalizadoCotacao
+                                    : defaultTextCotacao;
 
-        textoGlobalDiv.innerHTML = `
-            <label for="texto-cotacao-${cotacao.idCotacao}">Mensagem Padrão para esta Cotação:</label>
-            <textarea id="texto-cotacao-${cotacao.idCotacao}" placeholder="Digite a mensagem padrão para os fornecedores desta cotação...">${textoSalvoCotacao}</textarea>
-            <button class="btn-salvar-texto-cotacao-portal">Salvar Texto da Cotação</button>
-        `;
-        accordionContent.appendChild(textoGlobalDiv);
+        textoGlobalDiv.innerHTML = `
+            <label for="texto-cotacao-${cotacao.idCotacao}">Mensagem Padrão para esta Cotação:</label>
+            <textarea id="texto-cotacao-${cotacao.idCotacao}" placeholder="Digite a mensagem padrão para os fornecedores desta cotação...">${textoSalvoCotacao}</textarea>
+            <button class="btn-salvar-texto-cotacao-portal">Salvar Texto da Cotação</button>
+        `;
+        accordionContent.appendChild(textoGlobalDiv);
 
-        if (cotacao.fornecedores && cotacao.fornecedores.length > 0) {
-            const fornecedorListaHeader = document.createElement('div');
-            fornecedorListaHeader.className = 'gerenciar-cotacoes-fornecedor-lista-header';
-            fornecedorListaHeader.innerHTML = `
-                <h5>Fornecedores:</h5>
-                <button class="btn-excluir-fornecedores-selecionados-cotacao btn-excluir-selecionados">Excluir Selecionados</button>
-            `;
-            accordionContent.appendChild(fornecedorListaHeader);
+        if (cotacao.fornecedores && cotacao.fornecedores.length > 0) {
+            const fornecedorListaHeader = document.createElement('div');
+            fornecedorListaHeader.className = 'gerenciar-cotacoes-fornecedor-lista-header';
+            fornecedorListaHeader.innerHTML = `
+                <h5>Fornecedores:</h5>
+                <button class="btn-excluir-fornecedores-selecionados-cotacao btn-excluir-selecionados">Excluir Selecionados</button>
+            `;
+            accordionContent.appendChild(fornecedorListaHeader);
 
-            cotacao.fornecedores.forEach(fornecedor => {
-                const fornecedorItem = document.createElement('div');
-                fornecedorItem.className = 'gerenciar-cotacoes-fornecedor-item';
-                fornecedorItem.dataset.fornecedorNome = fornecedor.nome;
+            cotacao.fornecedores.forEach(fornecedor => {
+                const fornecedorItem = document.createElement('div');
+                fornecedorItem.className = 'gerenciar-cotacoes-fornecedor-item';
+                fornecedorItem.dataset.fornecedorNome = fornecedor.nome;
 
-                fornecedorItem.innerHTML = `
-                    <input type="checkbox" class="checkbox-selecionar-fornecedor-portal" data-fornecedor-nome="${fornecedor.nome}">
-                    <div class="gerenciar-cotacoes-fornecedor-info">
-                        <span class="fornecedor-nome">${fornecedor.nome} (Status: ${fornecedor.statusResposta || 'N/A'})</span>
-                        <span class="link-display" title="Link do fornecedor">Link: ${fornecedor.link}</span>
-                    </div>
-                    <div class="gerenciar-cotacoes-fornecedor-actions-item">
-                        <button class="btn-copiar-msg-link-fornecedor">Copiar Mensagem e Link</button>
-                    </div>
-                `;
-                accordionContent.appendChild(fornecedorItem);
+                fornecedorItem.innerHTML = `
+                    <input type="checkbox" class="checkbox-selecionar-fornecedor-portal" data-fornecedor-nome="${fornecedor.nome}">
+                    <div class="gerenciar-cotacoes-fornecedor-info">
+                        <span class="fornecedor-nome">${fornecedor.nome} (Status: ${fornecedor.statusResposta || 'N/A'})</span>
+                        <span class="link-display" title="Link do fornecedor">Link: ${fornecedor.link}</span>
+                    </div>
+                    <div class="gerenciar-cotacoes-fornecedor-actions-item">
+                        <button class="btn-copiar-msg-link-fornecedor">Copiar Mensagem e Link</button>
+                    </div>
+                `;
+                accordionContent.appendChild(fornecedorItem);
 
-                const btnCopiar = fornecedorItem.querySelector('.btn-copiar-msg-link-fornecedor');
-                btnCopiar.addEventListener('click', function() {
-                    const textoCotacaoTextarea = accordionContent.querySelector(`#texto-cotacao-${cotacao.idCotacao}`);
-                    const textoParaCopiar = `${textoCotacaoTextarea.value}\nLink: ${fornecedor.link}`;
-                    
-                    navigator.clipboard.writeText(textoParaCopiar)
-                        .then(() => CotacaoIndividualScript_exibirFeedback("Mensagem e link copiados!", false, 2000))
-                        .catch(err => {
-                            console.error('FuncoesScript: Falha ao copiar para clipboard - ', err);
-                             try { 
-                                const tempInput = document.createElement("textarea");
-                                tempInput.style.position = "fixed"; tempInput.style.opacity = "0";
-                                tempInput.value = textoParaCopiar;
-                                document.body.appendChild(tempInput);
-                                tempInput.select(); document.execCommand("copy");
-                                document.body.removeChild(tempInput);
-                                CotacaoIndividualScript_exibirFeedback("Mensagem e link copiados! (método alternativo)", false, 2000);
-                            } catch (e_fallback) {
-                                console.error('FuncoesScript: Falha ao copiar com método alternativo - ', e_fallback);
-                                CotacaoIndividualScript_exibirFeedback("Falha ao copiar o texto.", true, 3000);
-                            }
-                        });
-                });
-            });
-        } else {
-            accordionContent.innerHTML += '<p class="text-sm text-gray-500">Nenhum fornecedor encontrado para esta cotação no portal.</p>';
-        }
+                const btnCopiar = fornecedorItem.querySelector('.btn-copiar-msg-link-fornecedor');
+                btnCopiar.addEventListener('click', function() {
+                    const textoCotacaoTextarea = accordionContent.querySelector(`#texto-cotacao-${cotacao.idCotacao}`);
+                    const textoParaCopiar = `${textoCotacaoTextarea.value}\nLink: ${fornecedor.link}`;
+                    
+                    navigator.clipboard.writeText(textoParaCopiar)
+                        .then(() => FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Mensagem e link copiados!", false, 2000))
+                        .catch(err => {
+                            console.error('FuncoesScript: Falha ao copiar para clipboard - ', err);
+                            FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Falha ao copiar o texto.", true, 3000);
+                        });
+                });
+            });
+        } else {
+            accordionContent.innerHTML += '<p class="text-sm text-gray-500">Nenhum fornecedor encontrado para esta cotação no portal.</p>';
+        }
 
-        accordionHeader.addEventListener('click', function() {
-            this.classList.toggle('expanded');
-            accordionContent.classList.toggle('expanded');
-            const icon = this.querySelector('.gerenciar-cotacoes-accordion-icon');
-            if (icon) {
-                icon.style.transform = this.classList.contains('expanded') ? 'rotate(90deg)' : 'rotate(0deg)';
-            }
-        });
+        accordionHeader.addEventListener('click', function() {
+            this.classList.toggle('expanded');
+            accordionContent.classList.toggle('expanded');
+            const icon = this.querySelector('.gerenciar-cotacoes-accordion-icon');
+            if (icon) {
+                icon.style.transform = this.classList.contains('expanded') ? 'rotate(90deg)' : 'rotate(0deg)';
+            }
+        });
 
-        const btnSalvarTextoCotacao = textoGlobalDiv.querySelector('.btn-salvar-texto-cotacao-portal');
-        btnSalvarTextoCotacao.addEventListener('click', function() {
-            const textareaTextoCotacao = accordionContent.querySelector(`#texto-cotacao-${cotacao.idCotacao}`);
-            FuncoesScript_salvarTextoGlobalCotacaoPortal(cotacao.idCotacao, textareaTextoCotacao.value);
-        });
-        
-        const btnExcluirSelecionadosPortal = accordionContent.querySelector('.btn-excluir-fornecedores-selecionados-cotacao');
-        if(btnExcluirSelecionadosPortal) {
-            btnExcluirSelecionadosPortal.addEventListener('click', function() {
-                const fornecedoresSelecionados = [];
-                accordionContent.querySelectorAll('.checkbox-selecionar-fornecedor-portal:checked').forEach(cb => {
-                    fornecedoresSelecionados.push(cb.dataset.fornecedorNome);
-                });
-                if (fornecedoresSelecionados.length > 0) {
-                    // Idealmente, usar um modal customizado para confirmação.
-                    // Para este exemplo, a exclusão prossegue após um feedback.
-                    CotacaoIndividualScript_exibirFeedback(`Confirmar exclusão de ${fornecedoresSelecionados.length} fornecedor(es)?`, false, 0); 
-                    // setTimeout para permitir que o usuário veja a mensagem antes do overlay.
-                    setTimeout(() => {
-                        FuncoesScript_excluirFornecedoresDaCotacaoPortal(cotacao.idCotacao, fornecedoresSelecionados);
-                    }, 1000); // Pequeno delay para o usuário ver a mensagem.
-                } else {
-                    CotacaoIndividualScript_exibirFeedback("Nenhum fornecedor selecionado para exclusão.", true, 3000);
-                }
-            });
-        }
+        const btnSalvarTextoCotacao = textoGlobalDiv.querySelector('.btn-salvar-texto-cotacao-portal');
+        btnSalvarTextoCotacao.addEventListener('click', function() {
+            const textareaTextoCotacao = accordionContent.querySelector(`#texto-cotacao-${cotacao.idCotacao}`);
+            FuncoesScript_salvarTextoGlobalCotacaoPortal(cotacao.idCotacao, textareaTextoCotacao.value);
+        });
+        
+        const btnExcluirSelecionadosPortal = accordionContent.querySelector('.btn-excluir-fornecedores-selecionados-cotacao');
+        if(btnExcluirSelecionadosPortal) {
+            btnExcluirSelecionadosPortal.addEventListener('click', function() {
+                const fornecedoresSelecionados = [];
+                accordionContent.querySelectorAll('.checkbox-selecionar-fornecedor-portal:checked').forEach(cb => {
+                    fornecedoresSelecionados.push(cb.dataset.fornecedorNome);
+                });
+                if (fornecedoresSelecionados.length > 0) {
+                    if (confirm(`Tem certeza que deseja excluir ${fornecedoresSelecionados.length} fornecedor(es) desta cotação?`)) {
+                        FuncoesScript_excluirFornecedoresDaCotacaoPortal(cotacao.idCotacao, fornecedoresSelecionados);
+                    }
+                } else {
+                    FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Nenhum fornecedor selecionado para exclusão.", true, 3000);
+                }
+            });
+        }
 
-        accordionItem.appendChild(accordionHeader);
-        accordionItem.appendChild(accordionContent);
-        portalBody.appendChild(accordionItem);
-    });
+        accordionItem.appendChild(accordionHeader);
+        accordionItem.appendChild(accordionContent);
+        portalBody.appendChild(accordionItem);
+    });
 }
 
 /**
- * Salva o texto personalizado global para uma cotação específica no portal.
- */
+ * Salva o texto personalizado global para uma cotação e atualiza o modal.
+ * SUBSTITUI a implementação antiga.
+ */
 function FuncoesScript_salvarTextoGlobalCotacaoPortal(idCotacao, textoPersonalizado) {
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, "Salvando texto da cotação...");
-    google.script.run
-        .withSuccessHandler(function(response) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (response && response.success) {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Texto da cotação salvo! Atualizando...", false, 3000);
-                // Após salvar, recarrega o modo para exibir dados atualizados sem sair da tela.
-                FuncoesScript_ativarModoGerenciarCotacoesPortal(); 
-            } else {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao salvar texto da cotação.", true, 5000);
-            }
-        })
-        .withFailureHandler(function(error) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao salvar texto da cotação: " + error.message, true, 5000);
-        })
-        .FuncoesController_salvarTextoGlobalCotacaoPortal(idCotacao, textoPersonalizado); 
+    FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Salvando texto...", false, 0);
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response && response.success) {
+                FuncoesScript_exibirFeedbackModalGerenciarCotacoes(response.message || "Texto da cotação salvo!", false, 3000);
+                // Não precisa recarregar a UI inteira, a alteração já está no textarea.
+            } else {
+                FuncoesScript_exibirFeedbackModalGerenciarCotacoes(response.message || "Falha ao salvar texto da cotação.", true, 5000);
+            }
+        })
+        .withFailureHandler(function(error) {
+            FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Erro de comunicação: " + error.message, true, 5000);
+        })
+        .FuncoesController_salvarTextoGlobalCotacaoPortal(idCotacao, textoPersonalizado); 
 }
 
 /**
- * Exclui fornecedores selecionados de uma cotação específica no portal.
- */
+ * Exclui fornecedores selecionados e atualiza o modal.
+ * SUBSTITUI a implementação antiga.
+ */
 function FuncoesScript_excluirFornecedoresDaCotacaoPortal(idCotacao, nomesFornecedores) {
-    CotacaoIndividualScript_mostrarLoadingOverlay(true, `Excluindo ${nomesFornecedores.length} fornecedor(es)...`);
-    google.script.run
-        .withSuccessHandler(function(response) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            if (response && response.success) {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Fornecedor(es) excluído(s) com sucesso! Atualizando...", false, 4000);
-                // Após excluir, recarrega o modo para exibir dados atualizados sem sair da tela.
-                FuncoesScript_ativarModoGerenciarCotacoesPortal();
-            } else {
-                CotacaoIndividualScript_exibirFeedback(response.message || "Falha ao excluir fornecedor(es).", true, 7000);
-            }
-        })
-        .withFailureHandler(function(error) {
-            CotacaoIndividualScript_mostrarLoadingOverlay(false);
-            CotacaoIndividualScript_exibirFeedback("Erro de comunicação ao excluir fornecedor(es): " + error.message, true, 7000);
-        })
-        .FuncoesController_excluirFornecedoresDeCotacaoPortal(idCotacao, nomesFornecedores); 
+    FuncoesScript_exibirFeedbackModalGerenciarCotacoes(`Excluindo ${nomesFornecedores.length} fornecedor(es)...`, false, 0);
+    google.script.run
+        .withSuccessHandler(function(response) {
+            if (response && response.success) {
+                FuncoesScript_exibirFeedbackModalGerenciarCotacoes(response.message || "Fornecedor(es) excluído(s)! Atualizando...", false, 4000);
+                // Após excluir, recarrega o conteúdo do modal
+                const portalBodyModal = document.getElementById('FuncoesScript_modalContentGerenciarCotacoes');
+                portalBodyModal.innerHTML = '<div class="empty-state">Atualizando dados...</div>';
+                google.script.run
+                    .withSuccessHandler(r => FuncoesScript_renderizarConteudoGerenciarCotacoesPortal(r.dados))
+                    .FuncoesController_obterDadosGerenciarCotacoes();
+            } else {
+                FuncoesScript_exibirFeedbackModalGerenciarCotacoes(response.message || "Falha ao excluir fornecedor(es).", true, 7000);
+            }
+        })
+        .withFailureHandler(function(error) {
+            FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Erro de comunicação: " + error.message, true, 7000);
+        })
+        .FuncoesController_excluirFornecedoresDeCotacaoPortal(idCotacao, nomesFornecedores); 
 }
 
 //####################################################################################################
@@ -837,6 +809,47 @@ function FuncoesScript_iniciarPreenchimentoUltimosPrecos() {
             CotacaoIndividualScript_exibirFeedback("Erro de comunicação com o servidor: " + error.message, true);
         })
         .FuncoesController_preencherUltimosPrecos(idCotacao);
+}
+
+/**
+ * Fecha o modal de "Gerenciar Cotações (Portal)" e limpa seu estado.
+ */
+function FuncoesScript_fecharModalGerenciarCotacoes() {
+    console.log("FuncoesScript: Fechando modal de Gerenciar Cotações.");
+    const modalOverlay = document.getElementById('FuncoesScript_modalGerenciarCotacoesOverlay');
+    if (modalOverlay) {
+        modalOverlay.classList.remove('active');
+    }
+    CotacaoIndividualScript_modoEtapaAtual = null;
+    
+    // Limpa o feedback para a próxima abertura
+    const feedbackDiv = document.getElementById('FuncoesScript_feedbackModalGerenciarCotacoes');
+    if(feedbackDiv) feedbackDiv.innerHTML = '';
+}
+
+/**
+ * Exibe feedback dentro do modal de Gerenciar Cotações.
+ * @param {string} mensagem O texto a ser exibido.
+ * @param {boolean} isError Se a mensagem é um erro.
+ * @param {number} duracao Duração em milissegundos para a mensagem desaparecer.
+ */
+function FuncoesScript_exibirFeedbackModalGerenciarCotacoes(mensagem, isError = false, duracao = 5000) {
+    const feedbackDiv = document.getElementById('FuncoesScript_feedbackModalGerenciarCotacoes');
+    if (feedbackDiv) {
+        const innerDiv = document.createElement('div');
+        innerDiv.className = `p-3 rounded-md text-sm ${isError ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}`;
+        innerDiv.textContent = mensagem;
+        feedbackDiv.innerHTML = '';
+        feedbackDiv.appendChild(innerDiv);
+        
+        if (duracao > 0) {
+            setTimeout(() => {
+                if (feedbackDiv.contains(innerDiv)) {
+                    feedbackDiv.innerHTML = '';
+                }
+            }, duracao);
+        }
+    }
 }
 
 </script>
