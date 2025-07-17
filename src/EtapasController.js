@@ -254,3 +254,52 @@ function EtapasController_obterDadosParaImpressao(idCotacao) {
     return { success: false, message: "Erro crítico no controller ao buscar dados para impressão: " + error.message };
   }
 }
+
+/**
+ * Controller que busca os dados dos pedidos e gera uma estrutura com links (simulados) para o envio manual.
+ * Substitui a necessidade de uma função em FuncoesController.
+ * @param {string} idCotacao O ID da cotação.
+ * @returns {object} Um objeto com o resultado da operação e os dados para o modal.
+ */
+function EtapasController_gerarDadosParaEnvioManual(idCotacao) {
+  Logger.log(`EtapasController_gerarDadosParaEnvioManual: Iniciando para Cotação ID '${idCotacao}'.`);
+  try {
+    // 1. Reutiliza a função de buscar dados para impressão para obter os pedidos agrupados.
+    const resultadoBusca = EtapasCRUD_buscarDadosAgrupadosParaImpressao(idCotacao);
+
+    if (!resultadoBusca.success) {
+      return { success: false, message: resultadoBusca.message };
+    }
+    
+    if (!resultadoBusca.dados || Object.keys(resultadoBusca.dados).length === 0) {
+      return { success: true, dados: [] }; // Sucesso, mas sem dados para processar.
+    }
+
+    // 2. Transforma a estrutura de dados para a lista que o modal espera.
+    const dadosParaModal = [];
+    const dadosAgrupados = resultadoBusca.dados;
+
+    for (const nomeFornecedor in dadosAgrupados) {
+      const pedidosDoFornecedor = dadosAgrupados[nomeFornecedor];
+      pedidosDoFornecedor.forEach(pedido => {
+        // Em um cenário real, aqui ocorreria a geração do PDF e obtenção do link do Google Drive.
+        // Para esta implementação, vamos criar um link de placeholder.
+        const idSimuladoPdf = Utilities.getUuid();
+        const linkPdfSimulado = `https://drive.google.com/file/d/${idSimuladoPdf}/view?usp=sharing`;
+
+        dadosParaModal.push({
+          fornecedor: pedido.fornecedor,
+          empresaFaturada: pedido.empresaFaturada,
+          linkPdf: linkPdfSimulado // Link (simulado) para o PDF
+        });
+      });
+    }
+
+    Logger.log(`EtapasController_gerarDadosParaEnvioManual: ${dadosParaModal.length} links preparados para o modal.`);
+    return { success: true, dados: dadosParaModal };
+
+  } catch (error) {
+    Logger.log(`ERRO em EtapasController_gerarDadosParaEnvioManual: ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, message: "Erro crítico no controller ao gerar dados para envio manual: " + error.message };
+  }
+}

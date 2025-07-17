@@ -896,7 +896,6 @@
             <button id="CotacaoIndividualScript_menuFuncoesBtn" class="btn-menu-superior dropdown-menu-button">Funções <svg class="dropdown-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.23 8.29a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg></button>
             <div id="CotacaoIndividualScript_menuFuncoesDropdown" class="dropdown-menu-content">
                 <a href="#" data-action="funcao_gerenciar_cotacoes">Gerenciar Cotações (Portal)</a>
-                <a href="#" data-action="funcao_pedido_direto">Pedido Direto</a>
                 <a href="#" data-action="funcao_acrescentar_itens">Acrescentar Itens</a>
                 <a href="#" id="ContagemEstoqueMobileLink"
                   onclick="FuncoesScript_abrirContagemEstoqueMobile(); return false;">
@@ -909,8 +908,40 @@
     </div>
 
     <div class="main-content-area">
+      <style>
+          .view-tabs-container {
+              margin-bottom: 1rem;
+              display: flex;
+              gap: 0.5rem;
+              border-bottom: 2px solid #e2e8f0;
+              padding-bottom: 0.5rem;
+          }
+          .view-tab-btn {
+              padding: 0.5rem 1.25rem;
+              font-size: 0.9rem;
+              font-weight: 600;
+              border: none;
+              background-color: transparent;
+              color: #6b7280;
+              cursor: pointer;
+              border-bottom: 3px solid transparent;
+              transition: all 0.2s ease-in-out;
+              border-radius: 0.375rem 0.375rem 0 0;
+          }
+          .view-tab-btn:hover {
+              background-color: #f4f7f6;
+              color: #1D4ED8;
+          }
+          .view-tab-btn.active {
+              color: #1D4ED8;
+              border-bottom-color: #1D4ED8;
+          }
+      </style>
+      <div class="view-tabs-container">
+          <button id="CotacaoIndividualScript_btnAbaCategoria" class="view-tab-btn active">Visualizar por Categoria</button>
+          <button id="CotacaoIndividualScript_btnAbaFornecedor" class="view-tab-btn">Visualizar por Fornecedor</button>
+      </div>
       <div id="CotacaoIndividualScript_mensagemFeedback" class="feedback-message hidden"></div>
-      
       <div class="table-container" id="CotacaoIndividualScript_tableContainer">
         <table class="sticky-header-table" id="CotacaoIndividualScript_tabelaProdutosCotacao">
           <thead>
@@ -938,7 +969,6 @@
             Salvar Contagem e Voltar
         </button>
       </div>
-
       <div id="CotacaoIndividualScript_retirarProdutosContainer" class="retirar-produtos-container hidden">
         <h3>Retirar Produtos Desnecessários da Cotação</h3>
         <p class="text-sm text-gray-600 mb-4">Analise os produtos abaixo e marque aqueles que deseja remover desta cotação.</p>
@@ -963,11 +993,9 @@
         <p class="text-sm text-gray-600 mb-4">
           Abaixo estão os subprodutos com preço zerado ou não preenchido. Marque os que deseja remover da cotação antes de prosseguir com a análise final.
         </p>
-        
         <div id="EtapasScript_listaSubprodutosSemPreco">
           <div class="p-4 text-center text-gray-500">Nenhum subproduto sem preço encontrado.</div>
         </div>
-        
         <div class="mt-4 flex justify-between items-center">
           <button id="EtapasScript_btnVoltarEtapa4" class="btn-confirmar-remocao" style="background-color: #6b7280;">
             Voltar
@@ -977,16 +1005,11 @@
           </button>
         </div>
       </div>
-
-      <div id="EtapasScript_realizarCotacaoContainer" class="retirar-produtos-container hidden">
-        </div>
-
-                  <div id="EtapasScript_definirCondicoesPagamentoContainer" class="gerenciar-cotacoes-portal-container hidden">
+      
+      <div id="EtapasScript_definirCondicoesPagamentoContainer" class="gerenciar-cotacoes-portal-container hidden">
         <h4>Definir Condições de Pagamento</h4>
-        
         <div class="etapa6-dialog-container">
-            <div class="etapa6-pedidos-column" id="etapa6-pedidos-list">
-                </div>
+            <div class="etapa6-pedidos-column" id="etapa6-pedidos-list"></div>
             <div class="etapa6-fluxo-column">
                 <div class="etapa6-fluxo-preview-container">
                     <h4 style="margin-top:0; color: #1e40af;">Resumo do Fluxo de Caixa</h4>
@@ -1006,7 +1029,6 @@
                 </div>
             </div>
         </div>
-
         <div class="mt-4 flex justify-between items-center" style="padding-top: 1rem; border-top: 1px solid #e2e8f0;">
           <button id="EtapasScript_btnVoltarEtapa6" class="btn-confirmar-remocao" style="background-color: #6b7280;">
             Voltar
@@ -1017,7 +1039,6 @@
           </button>
         </div>
       </div>
-
       <template id="etapa6-pedido-item-template">
         <div class="etapa6-pedido-item">
             <div class="etapa6-pedido-header">
@@ -1032,9 +1053,10 @@
                     <label for="cond-pagto-{id}" style="flex-shrink: 0; font-size: 0.875rem; font-weight: 500; color: #374151;">Condição de Pagamento:</label>
                     <input type="text" id="cond-pagto-{id}" class="etapa6-pagamento-input" value="" style="flex-grow: 1; width: auto;">
                 </div>
-                </div>
+            </div>
         </div>
       </template>
+      </div>
 
     </div>
     <div id="CotacaoIndividualScript_pageLoadingOverlay" class="loading-overlay hidden">

@@ -236,7 +236,7 @@ function FuncoesScript_excluirFornecedoresDaCotacaoPortal(idCotacao, nomesFornec
 //----------------------------------------------------------------------------------------------------
 // CONSTANTES E VARIÁVEIS PARA O MODO PEDIDO DIRETO
 //----------------------------------------------------------------------------------------------------
-const FuncoesScript_COLUNAS_A_OCULTAR_PEDIDO_DIRETO = [
+const FuncoesScript_COLUNAS_A_OCULTAR_VISTA_FORNECEDOR = [
     "Fornecedor", 
     "Preço por Fator", 
     "Economia em Cotação"
@@ -248,37 +248,35 @@ const FuncoesScript_COLUNAS_A_OCULTAR_PEDIDO_DIRETO = [
 //----------------------------------------------------------------------------------------------------
 
 /**
- * Ativa o modo de visualização "Pedido Direto", agrupando por fornecedor.
+ * NOVA FUNÇÃO: Prepara e renderiza a visualização por fornecedor. (VERSÃO CORRIGIDA)
  */
-function FuncoesScript_ativarModoPedidoDireto() {
-    console.log("FuncoesScript: Ativando modo Pedido Direto.");
-    CotacaoIndividualScript_modoEtapaAtual = 'pedido_direto';
+function FuncoesScript_renderizarVisualizacaoFornecedor() {
+    console.log("FuncoesScript: Preparando para renderizar a visualização por Fornecedor (Versão Corrigida).");
 
-    // 1. Garante que os containers corretos estão visíveis/ocultos
-    document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO_CONTAINER).classList.remove('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_RETIRAR_PRODUTOS_CONTAINER).classList.add('hidden');
-    document.getElementById(CotacaoIndividualScript_ID_GERENCIAR_COTACOES_PORTAL_CONTAINER).classList.add('hidden');
-    
-    // Esconde botões de outras etapas se estiverem visíveis
-    const btnSalvarContagem = document.getElementById(CotacaoIndividualScript_ID_BTN_SALVAR_CONTAGEM_ESTOQUE);
-    if (btnSalvarContagem) btnSalvarContagem.classList.add('hidden');
+    // 1. Começa com uma cópia das colunas padrão definidas no script principal.
+    // Garante que CotacaoIndividualScript_COLUNAS_A_EXIBIR_PADRAO esteja acessível.
+    let colunasParaExibir = [...CotacaoIndividualScript_COLUNAS_A_EXIBIR_PADRAO];
 
-    // 2. Define os cabeçalhos para este modo
-    const colunasParaOcultarNesteModo = [
-        ...CotacaoIndividualScript_COLUNAS_A_OCULTAR_DEFAULT,
-        ...FuncoesScript_COLUNAS_A_OCULTAR_PEDIDO_DIRETO
-    ];
-    
-    if (typeof CABECALHOS_COTACOES_TODOS !== 'undefined' && CABECALHOS_COTACOES_TODOS.length > 0) {
-        CotacaoIndividualScript_cabecalhosVisiveis = CABECALHOS_COTACOES_TODOS.filter(
-            header => !colunasParaOcultarNesteModo.includes(header)
-        );
-    } else {
-        CotacaoIndividualScript_cabecalhosVisiveis = [];
+    // 2. Remove 'Fornecedor' da lista de colunas da tabela, pois ele já aparece no cabeçalho do grupo.
+    colunasParaExibir = colunasParaExibir.filter(col => col !== 'Fornecedor');
+
+    // 3. Adiciona 'Estoque Atual' à lista, se ainda não estiver presente, na posição correta.
+    if (!colunasParaExibir.includes("Estoque Atual")) {
+        const fatorIndex = colunasParaExibir.indexOf('Fator');
+        if (fatorIndex !== -1) {
+            // Insere 'Estoque Atual' logo após 'Fator' para uma ordem lógica.
+            colunasParaExibir.splice(fatorIndex + 1, 0, "Estoque Atual");
+        } else {
+            // Se 'Fator' não for encontrado por algum motivo, apenas adiciona no final.
+            colunasParaExibir.push("Estoque Atual");
+        }
     }
 
-    // 3. Renderiza o cabeçalho e o corpo da tabela com a nova lógica
-    if(typeof renderizarCabecalhoTabelaPrincipalInterno === 'function') {
+    // 4. Define a variável global que será usada para renderizar o cabeçalho e as linhas da tabela.
+    CotacaoIndividualScript_cabecalhosVisiveis = colunasParaExibir;
+
+    // 5. Chama as funções de renderização, que usarão a variável global que acabamos de definir.
+    if (typeof renderizarCabecalhoTabelaPrincipalInterno === 'function') {
         renderizarCabecalhoTabelaPrincipalInterno();
     } else {
         console.error("Função 'renderizarCabecalhoTabelaPrincipalInterno' não encontrada em CotacaoIndividualScript.");
@@ -286,21 +284,7 @@ function FuncoesScript_ativarModoPedidoDireto() {
     
     FuncoesScript_renderizarGruposPorFornecedor();
 
-    CotacaoIndividualScript_exibirFeedback("Modo 'Pedido Direto' ativado. Produtos agrupados por fornecedor.", false, 4000);
-}
-
-/**
- * Desativa o modo "Pedido Direto" e restaura a visualização padrão.
- */
-function FuncoesScript_desativarModoPedidoDireto() {
-    console.log("FuncoesScript: Desativando modo Pedido Direto.");
-    // A função restaurarVisualizacaoPadrao já faz todo o trabalho de reverter para o padrão.
-    if (typeof CotacaoIndividualScript_restaurarVisualizacaoPadrao === 'function') {
-        CotacaoIndividualScript_restaurarVisualizacaoPadrao(true);
-        CotacaoIndividualScript_exibirFeedback("Visualização padrão restaurada.", false, 3000);
-    } else {
-        console.error("FuncoesScript_desativarModoPedidoDireto: CotacaoIndividualScript_restaurarVisualizacaoPadrao não está definida.");
-    }
+    // CotacaoIndividualScript_exibirFeedback("Visualização por fornecedor ativada.", false, 3000);
 }
 
 
@@ -309,7 +293,7 @@ function FuncoesScript_desativarModoPedidoDireto() {
 //----------------------------------------------------------------------------------------------------
 
 /**
- * Renderiza o corpo da tabela principal, agrupando os produtos por Fornecedor.
+ * FUNÇÃO ATUALIZADA E CORRIGIDA: Renderiza os grupos por fornecedor, garantindo que a edição inline e a navegação pelo teclado funcionem corretamente.
  */
 function FuncoesScript_renderizarGruposPorFornecedor() {
     const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
@@ -328,7 +312,6 @@ function FuncoesScript_renderizarGruposPorFornecedor() {
         return;
     }
 
-    // 1. Agrupar dados por Fornecedor
     const gruposPorFornecedor = {};
     todosOsProdutosDaCotacao.forEach(linhaProduto => {
         const fornecedor = linhaProduto["Fornecedor"] || "Sem Fornecedor";
@@ -341,21 +324,18 @@ function FuncoesScript_renderizarGruposPorFornecedor() {
         gruposPorFornecedor[fornecedor].subProdutos.push(linhaProduto);
     });
 
-    // 2. Converter para array e ordenar por nome do fornecedor
     const arrayDeGrupos = Object.values(gruposPorFornecedor).sort((a, b) => {
         return String(a.fornecedorNome).localeCompare(String(b.fornecedorNome));
     });
 
     const colunasEditaveis = ["SubProduto", "Tamanho", "UN", "Fator", "Preço", "Comprar"];
 
-    // 3. Renderizar os grupos
     arrayDeGrupos.forEach(grupo => {
         const fornecedorSanitizedParaClasse = String(grupo.fornecedorNome).replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || 'sem-fornecedor';
         const fornecedorTargetClass = `content-for-fornecedor-${fornecedorSanitizedParaClasse}`;
 
-        // Cria a linha de cabeçalho do Fornecedor (reutilizando o estilo de categoria)
         const fornecedorRow = tbody.insertRow();
-        fornecedorRow.className = 'categoria-accordion-header-row'; // Reutiliza estilo
+        fornecedorRow.className = 'categoria-accordion-header-row';
         fornecedorRow.dataset.targetClass = fornecedorTargetClass;
         fornecedorRow.dataset.fornecedorNome = grupo.fornecedorNome;
 
@@ -363,7 +343,7 @@ function FuncoesScript_renderizarGruposPorFornecedor() {
         fornecedorCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
         
         const fornecedorHeaderContent = document.createElement('div');
-        fornecedorHeaderContent.className = 'categoria-header-content'; // Reutiliza estilo
+        fornecedorHeaderContent.className = 'categoria-header-content';
         
         const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         icon.setAttribute("class", "categoria-accordion-icon");
@@ -387,13 +367,14 @@ function FuncoesScript_renderizarGruposPorFornecedor() {
             });
         });
 
-        // Renderiza os subprodutos para este fornecedor
         if (grupo.subProdutos && grupo.subProdutos.length > 0) {
+            // Adiciona uma ordenação para garantir a consistência da exibição
+            grupo.subProdutos.sort((a,b) => String(a.Produto).localeCompare(b.Produto) || String(a.SubProduto).localeCompare(b.SubProduto));
+            
             grupo.subProdutos.forEach(subProduto => {
                 const subRow = tbody.insertRow();
                 subRow.className = `sub-produto-row category-content-row ${fornecedorTargetClass} hidden`;
                 
-                // Adiciona os mesmos datasets da renderização original para consistência
                 subRow.dataset.subprodutoOriginalPersistido = subProduto["_subProdutoOriginalPersistido"] || subProduto["SubProduto"];
                 subRow.dataset.produto = subProduto['Produto'];
                 subRow.dataset.fornecedor = subProduto['Fornecedor'];
@@ -405,22 +386,25 @@ function FuncoesScript_renderizarGruposPorFornecedor() {
                     if (classeCor) td.classList.add(classeCor);
                     
                     let valor = subProduto[cabecalhoVisivel];
-                    let valorFormatado = (valor === null || valor === undefined) ? "" : valor;
+                    let valorFormatado;
                     
-                    if (typeof valorFormatado === 'number') {
-                        if (cabecalhoVisivel === 'Preço por Fator') {
-                            valorFormatado = valorFormatado.toFixed(4).replace('.', ',');
-                        } else if (['Valor Total', 'Economia em Cotação', 'Preço'].includes(cabecalhoVisivel)) {
-                            valorFormatado = valorFormatado.toFixed(2).replace('.', ',');
-                        }
+                    const camposNumericos = ["Fator", "Preço", "Preço por Fator", "Comprar", "Valor Total", "Economia em Cotação"];
+                    if (camposNumericos.includes(cabecalhoVisivel) && typeof valor === 'number') {
+                        const fractionDigits = { 'Fator': 4, 'Preço por Fator': 4, 'Preço': 2, 'Comprar': 2, 'Valor Total': 2, 'Economia em Cotação': 2 };
+                        valorFormatado = valor.toLocaleString('pt-BR', { minimumFractionDigits: fractionDigits[cabecalhoVisivel] || 2, maximumFractionDigits: fractionDigits[cabecalhoVisivel] || 2 });
+                    } else {
+                        valorFormatado = valor == null ? "" : String(valor);
                     }
 
                     td.textContent = valorFormatado;
                     td.dataset.coluna = cabecalhoVisivel;
-                    td.dataset.valorOriginal = (valor === null || valor === undefined) ? "" : valor;
+                    // Correção #1: Armazena o valor FORMATADO para consistência com a lógica de salvamento.
+                    td.dataset.valorOriginal = valorFormatado; 
 
                     if (colunasEditaveis.includes(cabecalhoVisivel)) {
                         td.classList.add('editable-price-cell');
+                        // Correção #2: Adiciona 'tabIndex' para tornar a célula focável pelo teclado.
+                        td.tabIndex = 0; 
                         td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
                     }
                 });
@@ -428,10 +412,11 @@ function FuncoesScript_renderizarGruposPorFornecedor() {
         }
     });
 
-    // Por padrão, expande todos os acordeões de fornecedor ao carregar este modo
     tbody.querySelectorAll('.categoria-accordion-header-row').forEach(headerRow => {
         headerRow.click();
     });
+
+    CotacaoIndividualScript_filtrarTabelaPrincipal();
 }
 
 

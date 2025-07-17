@@ -14,21 +14,39 @@ function initImprimirPedidosScript() {
     const loadingOverlay = document.getElementById('ImprimirPedidosScript_loadingOverlay');
     const containerPrincipal = document.getElementById('ImprimirPedidosScript_containerPrincipal');
     
-    // Seleciona todos os botões
+    // Seleciona os botões da barra de ações
     const printButton = document.getElementById('print-button');
     const checklistButton = document.getElementById('checklist-button');
-    const manualSendButton = document.getElementById('manual-send-button'); // NOVO
+    const manualSendButton = document.getElementById('manual-send-button');
 
-    // Adiciona os event listeners
+    // Seleciona os elementos do novo modal
+    const modalOverlay = document.getElementById('ImprimirPedidosScript_modalEnvioManualOverlay');
+    const btnFecharModal = document.getElementById('ImprimirPedidosScript_btnFecharModalEnvioManual');
+
+    // Adiciona os event listeners dos botões de ação
     if(printButton) {
         printButton.addEventListener('click', ImprimirPedidosScript_executarImpressao);
     }
     if(checklistButton) {
         checklistButton.addEventListener('click', ImprimirPedidosScript_executarImpressaoChecklist);
     }
-    if(manualSendButton) { // NOVO
+    if(manualSendButton) {
         manualSendButton.addEventListener('click', ImprimirPedidosScript_iniciarGeracaoDeLinksManuais);
     }
+
+    // Adiciona os event listeners do modal
+    if(btnFecharModal) {
+        btnFecharModal.addEventListener('click', ImprimirPedidosScript_fecharModalEnvioManual);
+    }
+    if(modalOverlay) {
+        modalOverlay.addEventListener('click', function(event) {
+            // Fecha o modal se o clique for no fundo escuro (overlay)
+            if (event.target === modalOverlay) {
+                ImprimirPedidosScript_fecharModalEnvioManual();
+            }
+        });
+    }
+
 
     try {
         google.script.url.getLocation(function(location) {
@@ -267,7 +285,7 @@ function formatarMoeda(valor) {
 }
 
 /**
- * Inicia o processo de gerar os PDFs no back-end e abrir a nova guia com os links.
+ * Inicia o processo de gerar os dados no back-end e abrir o MODAL com os links.
  */
 function ImprimirPedidosScript_iniciarGeracaoDeLinksManuais() {
     if (!ImprimirPedidosScript_idCotacaoAtual) {
@@ -277,7 +295,7 @@ function ImprimirPedidosScript_iniciarGeracaoDeLinksManuais() {
 
     const loadingOverlay = document.getElementById('ImprimirPedidosScript_loadingOverlay');
     if(loadingOverlay) {
-        loadingOverlay.querySelector('p').textContent = "Gerando ou buscando links dos PDFs... Isso pode levar um momento.";
+        loadingOverlay.querySelector('p').textContent = "Gerando dados para envio... Isso pode levar um momento.";
         loadingOverlay.classList.remove('hidden');
     }
 
@@ -286,34 +304,116 @@ function ImprimirPedidosScript_iniciarGeracaoDeLinksManuais() {
             if (loadingOverlay) loadingOverlay.classList.add('hidden');
             
             if (response && response.success) {
-                const dadosJson = JSON.stringify(response.dados);
-                const dadosCodificados = encodeURIComponent(dadosJson);
-
-                google.script.run
-                    .withSuccessHandler(responseUrl => { // Renomeado para responseUrl para clareza
-                        // ===== INÍCIO DA CORREÇÃO =====
-                        if (responseUrl && responseUrl.success && responseUrl.url) {
-                            // AQUI ESTÁ A CORREÇÃO: Usamos responseUrl.url em vez do objeto inteiro
-                            const urlFinal = `${responseUrl.url}?view=EnviarManualmenteView&data=${dadosCodificados}`;
-                            window.open(urlFinal, '_blank');
-                        } else {
-                            alert("Não foi possível obter a URL do Web App para abrir a nova guia.");
-                        }
-                        // ===== FIM DA CORREÇÃO =====
-                    })
-                    .withFailureHandler(err => {
-                         alert(`Erro de comunicação ao obter URL do App: ${err.message}`);
-                    })
-                    .App_obterUrlWebApp({});
-
+                // Em vez de abrir uma nova URL, chamamos a função para abrir o modal
+                ImprimirPedidosScript_abrirModalEnvioManual(response.dados);
             } else {
-                alert(`Falha ao gerar os PDFs: ${response.message || 'Erro desconhecido.'}`);
+                alert(`Falha ao gerar os dados para envio: ${response.message || 'Erro desconhecido.'}`);
             }
         })
         .withFailureHandler(error => {
             if (loadingOverlay) loadingOverlay.classList.add('hidden');
-            alert(`Erro de comunicação ao gerar PDFs: ${error.message}`);
+            alert(`Erro de comunicação ao gerar dados para envio: ${error.message}`);
         })
-        .FuncoesController_gerarPdfsParaEnvioManual(ImprimirPedidosScript_idCotacaoAtual);
+        // Alterado para chamar a nova função do controller de Etapas
+        .EtapasController_gerarDadosParaEnvioManual(ImprimirPedidosScript_idCotacaoAtual);
+}
+
+/**
+ * Abre e popula o modal de envio manual com os dados recebidos do controller.
+ * @param {Array<object>} dados - O array com os dados dos pedidos gerados.
+ */
+function ImprimirPedidosScript_abrirModalEnvioManual(dados) {
+    const modalOverlay = document.getElementById('ImprimirPedidosScript_modalEnvioManualOverlay');
+    if(modalOverlay) {
+        ImprimirPedidosScript_renderizarListaDeEnvioManual(dados);
+        modalOverlay.classList.remove('hidden');
+    }
+}
+
+/**
+ * Fecha o modal de envio manual.
+ */
+function ImprimirPedidosScript_fecharModalEnvioManual() {
+    const modalOverlay = document.getElementById('ImprimirPedidosScript_modalEnvioManualOverlay');
+    if(modalOverlay) {
+        modalOverlay.classList.add('hidden');
+    }
+}
+
+/**
+ * Renderiza a lista de pedidos dentro do modal.
+ * @param {Array<object>} dados - O array com os dados dos pedidos gerados.
+ */
+function ImprimirPedidosScript_renderizarListaDeEnvioManual(dados) {
+    const container = document.getElementById('ImprimirPedidosScript_pedidosContainerModal');
+    if (!container) return;
+    
+    container.innerHTML = ''; // Limpa a mensagem de "Carregando..."
+
+    if (!dados || dados.length === 0) {
+        container.innerHTML = '<p>Nenhum link de pedido foi gerado.</p>';
+        return;
+    }
+
+    dados.forEach(pedido => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'pedido-item';
+        itemDiv.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-bottom: 1px solid #e2e8f0;';
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'pedido-info';
+        infoDiv.style.cssText = 'display: flex; flex-direction: column;';
+        
+        const fornecedorSpan = document.createElement('span');
+        fornecedorSpan.className = 'fornecedor';
+        fornecedorSpan.textContent = pedido.fornecedor;
+        fornecedorSpan.style.cssText = 'font-weight: 600; font-size: 1.1rem;';
+        
+        const empresaSpan = document.createElement('span');
+        empresaSpan.className = 'empresa';
+        empresaSpan.textContent = `Faturar para: ${pedido.empresaFaturada}`;
+        empresaSpan.style.cssText = 'font-size: 0.9rem; color: #64748b;';
+
+        infoDiv.appendChild(fornecedorSpan);
+        infoDiv.appendChild(empresaSpan);
+
+        const copyButton = document.createElement('button');
+        copyButton.className = 'copy-button';
+        copyButton.textContent = 'Copiar Mensagem + Link';
+        copyButton.style.cssText = "padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 600; color: #fff; background-color: #2563eb; border: none; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s;"
+        copyButton.dataset.linkPdf = pedido.linkPdf;
+
+        copyButton.addEventListener('click', ImprimirPedidosScript_copiarParaAreaDeTransferencia);
+
+        itemDiv.appendChild(infoDiv);
+        itemDiv.appendChild(copyButton);
+        container.appendChild(itemDiv);
+    });
+}
+
+/**
+ * Copia a mensagem personalizada e o link do PDF para a área de transferência.
+ * @param {Event} event - O evento de clique do botão.
+ */
+function ImprimirPedidosScript_copiarParaAreaDeTransferencia(event) {
+    const botao = event.currentTarget;
+    const link = botao.dataset.linkPdf;
+    const mensagem = document.getElementById('ImprimirPedidosScript_generic-message').value;
+
+    const textoParaCopiar = `${mensagem}\n\nLink para o pedido: ${link}`;
+
+    navigator.clipboard.writeText(textoParaCopiar).then(() => {
+        const textoOriginal = botao.textContent;
+        botao.textContent = 'Copiado!';
+        botao.style.backgroundColor = '#16a34a'; // Verde sucesso
+
+        setTimeout(() => {
+            botao.textContent = textoOriginal;
+            botao.style.backgroundColor = '#2563eb'; // Cor original
+        }, 2000);
+    }).catch(err => {
+        console.error('Falha ao copiar texto: ', err);
+        alert('Não foi possível copiar o texto. Por favor, copie manualmente.');
+    });
 }
 </script>

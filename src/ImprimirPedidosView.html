@@ -209,6 +209,33 @@
     <div class="page-container" id="ImprimirPedidosScript_containerPrincipal">
         </div>
     
+    <div id="ImprimirPedidosScript_modalEnvioManualOverlay" class="loading-overlay no-print hidden" style="background-color: rgba(0, 0, 0, 0.6); align-items: center; justify-content: center;">
+        <div id="ImprimirPedidosScript_modalEnvioManualContent" style="background-color: #fff; padding: 2rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 900px; width: 90%; max-height: 80vh; display: flex; flex-direction: column;">
+            <div id="ImprimirPedidosScript_modalHeader" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem;">
+                <h1 style="color: #1e3a8a; margin: 0; font-size: 1.75rem;">Enviar Pedidos Manualmente</h1>
+                <button id="ImprimirPedidosScript_btnFecharModalEnvioManual" style="background: none; border: none; font-size: 2rem; cursor: pointer; color: #6b7280;">&times;</button>
+            </div>
+            
+            <div id="ImprimirPedidosScript_modalBody" style="overflow-y: auto; flex-grow: 1;">
+                <p>Os links para os PDFs dos pedidos foram gerados. Use a área abaixo para personalizar sua mensagem e copie o conteúdo para enviar aos fornecedores via WhatsApp ou e-mail.</p>
+                
+                <div class="message-section" style="margin-top: 1rem;">
+                    <label for="ImprimirPedidosScript_generic-message" style="font-weight: 600; display: block; margin-bottom: 0.5rem;">Mensagem Padrão:</label>
+                    <textarea id="ImprimirPedidosScript_generic-message" style="width: 100%; min-height: 80px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-family: 'Inter', sans-serif; font-size: 1rem; box-sizing: border-box;">Segue pedido em anexo.
+
+Atenção à forma de pagamento escolhida, qualquer coisa estou à disposição.</textarea>
+                </div>
+
+                <div class="pedidos-list-header" style="margin-top: 2rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; margin-bottom: 1rem; font-weight: 600; font-size: 1.25rem;">
+                    Pedidos Gerados
+                </div>
+                <div id="ImprimirPedidosScript_pedidosContainerModal">
+                    <p class="loading" style="text-align: center; font-size: 1.2rem; color: #64748b;">Carregando links dos pedidos...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+        
     <?!= App_incluirHtml('ImprimirPedidosScript', true) ?>
 </body>
 </html>
