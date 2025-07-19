@@ -6,6 +6,35 @@ function initRelatorioAnaliseCompra() {
         return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     }
 
+    /**
+     * NOVA FUNÇÃO: Formata o valor do imposto para exibir o valor em BRL e o percentual.
+     * @param {number | null} value O valor monetário do imposto.
+     * @param {number | null} percentage A porcentagem correspondente do imposto.
+     * @returns {string} A string formatada. Ex: "R$ 1,23 (10,00%)"
+     */
+    function RelatorioAnaliseCompraScript_formatTaxValue(value, percentage) {
+        if (value === null || typeof value === 'undefined' || isNaN(value)) {
+            return "N/A";
+        }
+        const currencyPart = value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        
+        const hasPercentage = percentage !== null && typeof percentage !== 'undefined' && !isNaN(percentage) && percentage > 0;
+        const percentPart = hasPercentage ? ` (${percentage.toFixed(2).replace('.', ',')}%)` : '';
+        
+        return `${currencyPart}${percentPart}`;
+    }
+
+    function formatDifference(value) {
+        if (value === null || typeof value === 'undefined' || isNaN(value)) return "N/A";
+        const formatted = formatCurrency(value);
+        if (value > 0) {
+            return `<span class="col-diff-pos">(+) ${formatted}</span>`;
+        } else if (value < 0) {
+            return `<span class="col-diff-neg">(-) ${formatCurrency(Math.abs(value))}</span>`;
+        }
+        return formatted;
+    }
+
     function renderReport(data) {
         const reportContent = document.getElementById('report-content');
         const template = document.getElementById('product-card-template');
@@ -19,19 +48,17 @@ function initRelatorioAnaliseCompra() {
         data.forEach(produto => {
             const card = template.content.cloneNode(true);
             
-            // Popula o novo cabeçalho com nome e intervalo
             card.querySelector('.product-name-text').textContent = produto.produto;
             const intervaloHeader = card.querySelector('.avg-interval-header');
             const intervaloTexto = produto.intervaloMedioDias !== null ? `Intervalo Médio: ${Math.round(produto.intervaloMedioDias)} dias` : "";
             if (intervaloHeader && intervaloTexto) {
                 intervaloHeader.textContent = intervaloTexto;
             } else if (intervaloHeader) {
-                intervaloHeader.style.display = 'none'; // Esconde a pílula de intervalo se não houver dados
+                intervaloHeader.style.display = 'none';
             }
 
-            // Popula o histórico de preços
             const priceHistoryTbody = card.querySelector('[data-section="price-history"] tbody');
-            if (produto.ultimos6Pedidos.length > 0) {
+            if (produto.ultimos6Pedidos && produto.ultimos6Pedidos.length > 0) {
                 produto.ultimos6Pedidos.forEach(pedido => {
                     const tr = priceHistoryTbody.insertRow();
                     tr.insertCell().textContent = pedido.data;
@@ -45,14 +72,12 @@ function initRelatorioAnaliseCompra() {
                 td.textContent = "Sem pedidos recentes.";
             }
             
-            // Popula a variação de preço por fator
             card.querySelector('[data-metric="min-price-factor"]').textContent = formatCurrency(produto.precoFatorMin6M);
             card.querySelector('[data-metric="max-price-factor"]').textContent = formatCurrency(produto.precoFatorMax6M);
             card.querySelector('[data-metric="avg-price-factor"]').textContent = formatCurrency(produto.precoFatorMedioPonderado6M);
             
-            // Popula o volume de compra
             const volumeTbody = card.querySelector('[data-section="purchase-volume"] tbody');
-             if (produto.volumesPorPedido.length > 0) {
+             if (produto.volumesPorPedido && produto.volumesPorPedido.length > 0) {
                 produto.volumesPorPedido.forEach(pedido => {
                     const tr = volumeTbody.insertRow();
                     tr.insertCell().textContent = pedido.data;
@@ -64,6 +89,37 @@ function initRelatorioAnaliseCompra() {
                 const td = tr.insertCell();
                 td.colSpan = 3;
                 td.textContent = "Sem dados de volume.";
+            }
+
+            const taxContainer = card.querySelector('.tax-analysis-container');
+            const taxTbody = card.querySelector('.tax-table tbody');
+            if (produto.analiseTributaria && produto.analiseTributaria.length > 0) {
+                taxContainer.style.display = 'block';
+                
+                produto.analiseTributaria.forEach(item => {
+                    const tr = taxTbody.insertRow();
+                    tr.insertCell().textContent = item.fornecedor;
+                    tr.insertCell().textContent = item.numeroNF;
+                    tr.insertCell().textContent = item.dataUltimaNF;
+
+                    tr.insertCell().innerHTML = formatCurrency(item.precoUnitarioNF);
+                    tr.cells[3].className = 'col-currency';
+
+                    // Células de impostos ATUALIZADAS para usar a nova função de formatação
+                    tr.insertCell().innerHTML = RelatorioAnaliseCompraScript_formatTaxValue(item.impostos.icms, item.impostos.icms_percent);
+                    tr.cells[4].className = 'col-currency';
+                    tr.insertCell().innerHTML = RelatorioAnaliseCompraScript_formatTaxValue(item.impostos.icms_st, item.impostos.icms_st_percent);
+                    tr.cells[5].className = 'col-currency';
+                    tr.insertCell().innerHTML = RelatorioAnaliseCompraScript_formatTaxValue(item.impostos.ipi, item.impostos.ipi_percent);
+                    tr.cells[6].className = 'col-currency';
+                    tr.insertCell().innerHTML = RelatorioAnaliseCompraScript_formatTaxValue(item.impostos.pis, item.impostos.pis_percent);
+                    tr.cells[7].className = 'col-currency';
+                    tr.insertCell().innerHTML = RelatorioAnaliseCompraScript_formatTaxValue(item.impostos.cofins, item.impostos.cofins_percent);
+                    tr.cells[8].className = 'col-currency';
+                    
+                    tr.insertCell().innerHTML = formatCurrency(item.custoTotalNF);
+                    tr.cells[9].className = 'col-currency';
+                });
             }
 
             reportContent.appendChild(card);
@@ -92,6 +148,7 @@ function initRelatorioAnaliseCompra() {
             });
 
             if (response.success) {
+                console.log("Dados recebidos para o relatório:", response.dados);
                 renderReport(response.dados);
             } else {
                 throw new Error(response.message || "Falha ao carregar dados do relatório.");

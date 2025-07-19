@@ -31,14 +31,12 @@
             border-radius: 9999px;
             white-space: nowrap;
         }
-        /* -- INÍCIO DA ALTERAÇÃO: Layout para 3 colunas -- */
         .product-body { 
             padding: 1.25rem; 
             display: grid; 
             grid-template-columns: repeat(3, 1fr);
             gap: 1rem; 
         }
-        /* -- FIM DA ALTERAÇÃO -- */
         .analysis-section { background-color: #f9fafb; border-radius: 0.375rem; padding: 0.75rem; border: 1px solid #e5e7eb; }
         .analysis-section h3 { font-size: 1rem; font-weight: 600; color: #111827; margin-top: 0; margin-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
         table { width: 100%; border-collapse: collapse; }
@@ -48,6 +46,45 @@
         tr:last-child td { border-bottom: none; }
         .metric-value { font-weight: 600; color: #1D4ED8; }
         .loading, .empty-state { text-align: center; padding: 3rem; font-size: 1.25rem; color: #6b7280; }
+
+        /* INÍCIO - NOVOS ESTILOS PARA CARD DE IMPOSTOS */
+        .tax-analysis-container {
+            padding: 0 1.25rem 1.25rem 1.25rem;
+        }
+        .tax-analysis-container h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #111827;
+            margin-top: 0;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.75rem;
+        }
+        .tax-table-container {
+            overflow-x: auto;
+        }
+        .tax-table th, .tax-table td {
+            padding: 0.5rem;
+            white-space: nowrap;
+            font-size: 0.8rem;
+        }
+        .tax-table th {
+            background-color: #f3f4f6;
+        }
+        .tax-table .col-currency {
+            text-align: right;
+            font-weight: 500;
+        }
+        .tax-table .col-diff-pos {
+            color: #c0504d; /* Vermelho - Cotação mais cara */
+            font-weight: bold;
+        }
+        .tax-table .col-diff-neg {
+            color: #4f81bd; /* Azul - Cotação mais barata */
+            font-weight: bold;
+        }
+        /* FIM - NOVOS ESTILOS */
+
     </style>
 </head>
 <body>
@@ -72,7 +109,6 @@
                         <tbody></tbody>
                     </table>
                 </div>
-                <!-- INÍCIO DA ALTERAÇÃO: Simplificação do quadro de variação -->
                 <div class="analysis-section" data-section="price-variation">
                     <h3>Variação por Fator (Últimos 6 Meses)</h3>
                      <table>
@@ -83,7 +119,6 @@
                         </tbody>
                     </table>
                 </div>
-                <!-- FIM DA ALTERAÇÃO -->
                 <div class="analysis-section" data-section="purchase-volume">
                     <h3>Volume por Pedido</h3>
                     <div style="max-height: 200px; overflow-y: auto;">
@@ -94,7 +129,31 @@
                     </div>
                 </div>
             </div>
-        </div>
+
+            <div class="tax-analysis-container" style="display: none;">
+                <h3>Análise Tributária (Última Compra por Fornecedor)</h3>
+                <div class="tax-table-container">
+                    <table class="tax-table">
+                        <thead>
+                            <tr>
+                                <th>Fornecedor</th>
+                                <th>NF</th>
+                                <th>Data NF</th>
+                                <th>Preço Unit. NF</th>
+                                <th>ICMS</th>
+                                <th>ICMS ST</th>
+                                <th>IPI</th>
+                                <th>PIS</th>
+                                <th>COFINS</th>
+                                <th>Custo Total NF</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
     </template>
 
     <script>
