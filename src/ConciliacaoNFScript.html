@@ -544,7 +544,8 @@ function tentarConciliacaoAutomatica() {
 
 /**
  * [ALTERADO] Atualiza a exibição de um card de conciliação.
- * Agora desabilita o botão de ajuste se múltiplos itens da NF estiverem vinculados.
+ * Agora desabilita o botão de ajuste se múltiplos itens da NF estiverem vinculados
+ * e calcula a diferença de valor total entre a cotação e a NF.
  * @param {jQuery} card - O card a ser atualizado.
  */
 function _atualizarVisualMatchedCard(card) {
@@ -558,8 +559,20 @@ function _atualizarVisualMatchedCard(card) {
     const diffPreco = info.itemNF_Agregada.precoNF - info.itemCot.preco;
     const diffQtd = info.itemNF_Agregada.qtdNF - info.itemCot.qtdComprar;
 
+    // --- INÍCIO DA NOVA LÓGICA DE CÁLCULO TOTAL ---
+    const totalValorCotacao = info.itemCot.qtdComprar * info.itemCot.preco;
+    const totalValorNF = info.itemNF_Agregada.qtdNF * info.itemNF_Agregada.precoNF;
+    const diffTotalValor = totalValorNF - totalValorCotacao;
+    // --- FIM DA NOVA LÓGICA DE CÁLCULO TOTAL ---
+
+
     card.find('.divergencia-preco').html(Math.abs(diffPreco) < 0.01 ? `<span class="badge text-bg-success">OK</span>` : `<span class="badge text-bg-danger">${formatarMoeda(diffPreco)}</span>`);
     card.find('.divergencia-qtd').html(Math.abs(diffQtd) < 0.001 ? `<span class="badge text-bg-success">OK</span>` : `<span class="badge text-bg-warning">${diffQtd > 0 ? '+' : ''}${diffQtd.toFixed(2)}</span>`);
+    
+    // --- INÍCIO DA ATUALIZAÇÃO DO NOVO CAMPO NO VISUAL ---
+    card.find('.divergencia-total-valor').html(Math.abs(diffTotalValor) < 0.01 ? `<span class="text-success">${formatarMoeda(diffTotalValor)}</span>` : `<span class="text-danger">${formatarMoeda(diffTotalValor)}</span>`);
+    // --- FIM DA ATUALIZAÇÃO DO NOVO CAMPO NO VISUAL ---
+
 
     const fatorInfoEl = card.find('.fator-info');
     const ajusteButton = card.find('.btn-reajustar-item');
