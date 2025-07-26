@@ -90,8 +90,9 @@ function addEventListeners() {
     panelDireito.on('click', '.btn-remove-setor', onRemoverSetorManualClick);
     panelDireito.on('input', '.input-porcentagem, .input-setor', onPorcentagemOuSetorChange);
 
-    // Ajuste Manual
+    // Ajuste Manual e Desfazer Conciliação
     panelDireito.on('click', '.btn-reajustar-item', onBtnReajustarItemClick);
+    panelDireito.on('click', '.btn-desfazer-conciliacao', ConciliacaoNFScript_onDesfazerConciliacaoClick); // <-- NOVA LINHA ADICIONADA AQUI
     $('#btn-salvar-ajuste-manual').on('click', onBtnSalvarAjusteManualClick);
     $('#ajuste-fator').on('input', calcularVisualizacaoAjuste);
 
@@ -1615,6 +1616,60 @@ function ConciliacaoNFScript_salvarSubProdutoIndividual(event) {
             feedbackEl.text(err.message).addClass('text-danger');
         })
         .ConciliacaoNFController_salvarSubProdutosViaNF(dadosLote);
+}
+
+/**
+ * [NOVO] Acionado ao clicar no botão "X" de um item combinado.
+ * Reverte a conciliação, retornando os itens da cotação e da NF aos seus estados originais
+ * e removendo o card da área de "Itens para Rateio".
+ * @param {Event} event - O evento de clique.
+ */
+function ConciliacaoNFScript_onDesfazerConciliacaoClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // 1. Identificar o card combinado que será removido.
+    const matchedCard = $(event.currentTarget).closest('.matched-item-card');
+    const conciliacaoInfo = matchedCard.data('conciliacao-info');
+
+    if (!conciliacaoInfo) {
+        console.error("Não foi possível encontrar as informações de conciliação do card.");
+        return;
+    }
+
+    // 2. Reverter o estado visual do item da cotação original.
+    // O item da cotação não recebe a classe 'matched', então não precisa ser alterado,
+    // apenas o item da NF.
+
+    // 3. Reverter o estado visual de TODOS os itens da NF que foram vinculados a este card.
+    if (conciliacaoInfo.itensNF_Original && conciliacaoInfo.itensNF_Original.length > 0) {
+        conciliacaoInfo.itensNF_Original.forEach(itemNF_Original => {
+            // Encontra o elemento correspondente na lista de "Itens da NF" usando o número do item como identificador único.
+            const nfItemElement = $('#nf-items-list .list-group-item').filter(function() {
+                const itemData = $(this).data('item-info');
+                return itemData && itemData.numeroItem === itemNF_Original.numeroItem;
+            });
+
+            if (nfItemElement.length > 0) {
+                nfItemElement.removeClass('matched'); // Remove a marcação de combinado.
+                nfItemElement.removeData('ajuste-manual'); // Remove qualquer fator de ajuste que tenha sido aplicado.
+                nfItemElement.find('.ajuste-info').empty(); // Limpa a informação visual do ajuste.
+            }
+        });
+    }
+
+    // 4. Remover o card de "Itens para Rateio".
+    matchedCard.remove();
+    
+    // 5. Garantir que o item da cotação que ficou órfão agora pode ser selecionado novamente.
+    // Apenas desmarca a seleção ativa para evitar confusão.
+    if (selectedCotacaoItem) {
+        selectedCotacaoItem.removeClass('selected-for-match');
+        selectedCotacaoItem = null;
+    }
+    
+    // 6. Recalcular todos os totais e resumos financeiros.
+    recalcularErenderizarResumoRateio();
 }
 
 </script>

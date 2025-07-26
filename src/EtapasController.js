@@ -256,15 +256,23 @@ function EtapasController_obterDadosParaImpressao(idCotacao) {
 }
 
 /**
- * Controller que busca os dados dos pedidos e gera uma estrutura com links (simulados) para o envio manual.
- * Substitui a necessidade de uma função em FuncoesController.
+ * Controller que busca os dados dos pedidos, GERA ARQUIVOS PDF REAIS e retorna uma estrutura com os links para o envio manual.
  * @param {string} idCotacao O ID da cotação.
  * @returns {object} Um objeto com o resultado da operação e os dados para o modal.
  */
 function EtapasController_gerarDadosParaEnvioManual(idCotacao) {
   Logger.log(`EtapasController_gerarDadosParaEnvioManual: Iniciando para Cotação ID '${idCotacao}'.`);
+  
+  // Define o nome da pasta onde os PDFs serão salvos no Google Drive.
+  const NOME_PASTA_PDFS = "Pedidos PDF Gerados"; 
+
   try {
-    // 1. Reutiliza a função de buscar dados para impressão para obter os pedidos agrupados.
+    // 1. Encontra ou cria a pasta de destino no Google Drive
+    const pastas = DriveApp.getFoldersByName(NOME_PASTA_PDFS);
+    let pastaDestino = pastas.hasNext() ? pastas.next() : DriveApp.createFolder(NOME_PASTA_PDFS);
+    Logger.log(`Usando a pasta de destino para PDFs: "${pastaDestino.getName()}" (ID: ${pastaDestino.getId()})`);
+
+    // 2. Reutiliza a função de buscar dados para impressão para obter os pedidos agrupados.
     const resultadoBusca = EtapasCRUD_buscarDadosAgrupadosParaImpressao(idCotacao);
 
     if (!resultadoBusca.success) {
@@ -275,31 +283,138 @@ function EtapasController_gerarDadosParaEnvioManual(idCotacao) {
       return { success: true, dados: [] }; // Sucesso, mas sem dados para processar.
     }
 
-    // 2. Transforma a estrutura de dados para a lista que o modal espera.
+    // 3. Transforma a estrutura de dados, gerando um PDF real para cada pedido.
     const dadosParaModal = [];
     const dadosAgrupados = resultadoBusca.dados;
 
     for (const nomeFornecedor in dadosAgrupados) {
       const pedidosDoFornecedor = dadosAgrupados[nomeFornecedor];
-      pedidosDoFornecedor.forEach(pedido => {
-        // Em um cenário real, aqui ocorreria a geração do PDF e obtenção do link do Google Drive.
-        // Para esta implementação, vamos criar um link de placeholder.
-        const idSimuladoPdf = Utilities.getUuid();
-        const linkPdfSimulado = `https://drive.google.com/file/d/${idSimuladoPdf}/view?usp=sharing`;
+      
+      for (const pedido of pedidosDoFornecedor) {
+        // --- INÍCIO DA LÓGICA DE GERAÇÃO DE PDF REAL ---
+        // A lógica de simulação foi substituída por esta chamada.
+        const linkPdfReal = EtapasController_criarArquivoPdfDoPedido(pedido, pastaDestino);
+        // --- FIM DA LÓGICA DE GERAÇÃO DE PDF REAL ---
 
-        dadosParaModal.push({
-          fornecedor: pedido.fornecedor,
-          empresaFaturada: pedido.empresaFaturada,
-          linkPdf: linkPdfSimulado // Link (simulado) para o PDF
-        });
-      });
+        if (linkPdfReal) {
+            dadosParaModal.push({
+              fornecedor: pedido.fornecedor,
+              empresaFaturada: pedido.empresaFaturada,
+              linkPdf: linkPdfReal // Usa o link real do PDF gerado no Google Drive.
+            });
+        } else {
+             // Se a geração do PDF falhar, registra um log e continua para o próximo.
+            Logger.log(`Falha ao gerar PDF para o fornecedor ${pedido.fornecedor} e empresa ${pedido.empresaFaturada}. O link não será incluído no modal.`);
+        }
+      }
     }
 
-    Logger.log(`EtapasController_gerarDadosParaEnvioManual: ${dadosParaModal.length} links preparados para o modal.`);
+    Logger.log(`EtapasController_gerarDadosParaEnvioManual: ${dadosParaModal.length} links de PDF reais foram preparados para o modal.`);
     return { success: true, dados: dadosParaModal };
 
   } catch (error) {
     Logger.log(`ERRO em EtapasController_gerarDadosParaEnvioManual: ${error.toString()} Stack: ${error.stack}`);
     return { success: false, message: "Erro crítico no controller ao gerar dados para envio manual: " + error.message };
   }
+}
+
+/**
+ * Formata um número como moeda BRL para ser usado no HTML do PDF.
+ * @param {number} valor O número a ser formatado.
+ * @returns {string} O valor formatado como "R$ X.XXX,XX".
+ */
+function EtapasController_formatarMoedaParaPdf(valor) {
+    const numero = Number(valor) || 0;
+    return numero.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    });
+}
+
+/**
+ * Gera o conteúdo HTML para um pedido, cria um arquivo PDF e o salva em uma pasta no Google Drive.
+ * @param {object} pedido O objeto do pedido contendo dados do fornecedor, empresa, itens, etc.
+ * @param {GoogleAppsScript.Drive.Folder} pastaDestino O objeto da pasta do Drive onde o PDF será salvo.
+ * @returns {string|null} A URL do arquivo PDF gerado ou null em caso de erro.
+ */
+function EtapasController_criarArquivoPdfDoPedido(pedido, pastaDestino) {
+    const nomeArquivo = `Pedido_${pedido.fornecedor.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    Logger.log(`Gerando PDF: ${nomeArquivo}`);
+
+    try {
+        // Gera o conteúdo HTML do pedido
+        let htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10pt; color: #333; }
+                    h2 { font-size: 16pt; color: #000; border-bottom: 2px solid #ccc; padding-bottom: 5px; margin-bottom: 10px; }
+                    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; font-size: 9pt; }
+                    .info-grid strong { font-weight: bold; color: #555; display: block; }
+                    .itens-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                    .itens-table th { background-color: #444; color: #ffffff; padding: 8px; text-align: left; font-size: 10pt; text-transform: uppercase; }
+                    .itens-table td { padding: 8px; border-bottom: 1px solid #ddd; }
+                    .col-un, .col-qtd { text-align: center; }
+                    .col-valor { text-align: right; }
+                    .total-pedido-footer { text-align: right; font-size: 14pt; font-weight: bold; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="pedido-header-fornecedor">
+                    <h2>${pedido.fornecedor}</h2>
+                    <div class="info-grid">
+                        <div><strong>EMPRESA PARA FATURAMENTO:</strong><span>${pedido.empresaFaturada}</span></div>
+                        <div><strong>CNPJ:</strong><span>${pedido.cnpj || 'Não informado'}</span></div>
+                        <div><strong>CONDIÇÃO DE PAGAMENTO:</strong><span>${pedido.condicaoPagamento || 'Não informada'}</span></div>
+                    </div>
+                </div>
+                <table class="itens-table">
+                    <thead>
+                        <tr>
+                            <th>PRODUTO (SUBPRODUTO)</th>
+                            <th class="col-un">UN</th>
+                            <th class="col-qtd">QTD.</th>
+                            <th class="col-valor">VALOR UNIT.</th>
+                            <th class="col-valor">VALOR TOTAL</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+        pedido.itens.forEach(item => {
+            htmlContent += `
+                <tr>
+                    <td>${item.subProduto}</td>
+                    <td class="col-un">${item.un}</td>
+                    <td class="col-qtd">${item.qtd}</td>
+                    <td class="col-valor">${EtapasController_formatarMoedaParaPdf(item.valorUnit)}</td>
+                    <td class="col-valor">${EtapasController_formatarMoedaParaPdf(item.valorTotal)}</td>
+                </tr>`;
+        });
+
+        htmlContent += `
+                    </tbody>
+                </table>
+                <div class="total-pedido-footer">
+                    TOTAL DO PEDIDO: ${EtapasController_formatarMoedaParaPdf(pedido.totalPedido)}
+                </div>
+            </body>
+            </html>`;
+
+        // Cria o blob HTML e converte para PDF
+        const pdfBlob = Utilities.newBlob(htmlContent, 'text/html', nomeArquivo).getAs('application/pdf');
+        
+        // Salva o arquivo PDF na pasta de destino
+        const pdfArquivo = pastaDestino.createFile(pdfBlob);
+        
+        // Retorna a URL do arquivo criado
+        const urlArquivo = pdfArquivo.getUrl();
+        Logger.log(`PDF gerado com sucesso. URL: ${urlArquivo}`);
+        return urlArquivo;
+
+    } catch (e) {
+        Logger.log(`ERRO CRÍTICO ao gerar PDF para ${pedido.fornecedor}: ${e.toString()}`);
+        return null;
+    }
 }
