@@ -33,10 +33,16 @@ function NotasFiscaisScript_init() {
 
     console.log('[NF] init: começando binding dos elementos.');
 
-    // (Re)bind do botão Buscar (com retry se necessário) -> usa id correto da View
+    // Botão Buscar (já existente)
     if (typeof NotasFiscaisScript_bindBuscarIfPresent === 'function') {
       NotasFiscaisScript_bindBuscarIfPresent();
     }
+
+    // NOVO: botão "Conciliação NF"
+    NotasFiscaisScript_bindBtnConciliacaoIfPresent();
+
+    // >>> garanta a cor exata do botão (igual Cotações)
+    NotasFiscaisScript_aplicarEstiloConciliacaoBtn();
 
     // Enter nos filtros dispara busca
     if (typeof NotasFiscaisScript_wireFiltersEnterKey === 'function') {
@@ -923,6 +929,67 @@ function NotasFiscaisScript_carregarSugestoesCentroCusto() {
       console.error('[NF] Falha ao carregar sugestões de centro de custo:', err);
     })
     .NotasFiscaisController_listarSetoresRegrasRateio();
+}
+
+function NotasFiscaisScript_abrirConciliacaoNF() {
+  try {
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      alert('Esta página não está rodando dentro do HtmlService do Apps Script. Abra pelo link publicado do Web App.');
+      return;
+    }
+
+    // Feedback simples no console (se quiser, posso integrar com seu loader)
+    console.log('[NF] Abrindo página de conciliação de NF...');
+
+    google.script.run
+      .withSuccessHandler(function (response) {
+        if (response && response.success && response.url) {
+          window.open(response.url, '_blank');
+        } else {
+          const msg = (response && response.message) ? response.message : 'Erro ao gerar a URL da conciliação.';
+          alert(msg);
+        }
+      })
+      .withFailureHandler(function (err) {
+        alert('Falha de comunicação ao tentar abrir a página de conciliação: ' + err.message);
+      })
+      .App_obterUrlWebApp({ view: 'conciliacaonf' });
+  } catch (e) {
+    console.error('[NF] abrirConciliacaoNF -> exceção:', e);
+    alert('Erro ao abrir a conciliação.');
+  }
+}
+
+function NotasFiscaisScript_bindBtnConciliacaoIfPresent() {
+  try {
+    const btnConciliar = document.getElementById('NotasFiscaisView_btnConciliacaoNF');
+    if (!btnConciliar) {
+      console.warn('[NF] Botão "NotasFiscaisView_btnConciliacaoNF" não encontrado na View.');
+      return;
+    }
+    // Evita bind duplicado
+    btnConciliar.replaceWith(btnConciliar.cloneNode(true));
+    const btn = document.getElementById('NotasFiscaisView_btnConciliacaoNF');
+    btn.addEventListener('click', NotasFiscaisScript_abrirConciliacaoNF);
+  } catch (e) {
+    console.error('[NF] bindBtnConciliacaoIfPresent -> erro:', e);
+  }
+}
+
+function NotasFiscaisScript_aplicarEstiloConciliacaoBtn() {
+  try {
+    const btn = document.getElementById('NotasFiscaisView_btnConciliacaoNF');
+    if (!btn) return;
+
+    // Remove qualquer bg anterior que possa ter ficado
+    const remover = ['bg-blue-600','bg-blue-700','hover:bg-blue-700','text-white'];
+    remover.forEach(c => btn.classList.remove(c));
+
+    // Garante nossa classe padrão
+    btn.classList.add('NotasFiscaisView_btnConciliacaoNF');
+  } catch (e) {
+    console.warn('[NF] aplicarEstiloConciliacaoBtn:', e);
+  }
 }
 
 // Chamada inicial

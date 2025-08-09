@@ -24,6 +24,22 @@
   }
   .btn-paginacao:hover { background-color: #F9FAFB; }
   .btn-paginacao:disabled { opacity: 0.5; cursor: not-allowed; }
+
+</style>
+
+<!-- Estilo: botão Conciliação NF igual ao de Cotações -->
+<style id="NotasFiscaisView_estilosConciliacaoNF">
+  .NotasFiscaisView_btnConciliacaoNF {
+    background-color: #6366f1; /* mesmo de CotacoesView */
+    color: #ffffff;
+  }
+  .NotasFiscaisView_btnConciliacaoNF:hover {
+    filter: brightness(0.95);
+  }
+  .NotasFiscaisView_btnConciliacaoNF:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.35);
+  }
 </style>
 
 <!-- Card principal -->
@@ -37,18 +53,27 @@
   <!-- Cabeçalho: Título + Botão Buscar -->
   <div class="p-3 md:p-4 border-b border-gray-200">
     <div class="flex items-center justify-between gap-3">
-      <h4 class="text-lg md:text-xl font-semibold text-gray-700 flex items-center gap-2">
-        <svg class="w-5 h-5 md:w-6 md:h-6 text-gray-500" fill="none" viewBox="0 0 24 24">
-          <path fill="currentColor" d="M19 21H5a2 2 0 01-2-2V7a2 2 0 012-2h2l2-2h6l2 2h2a2 2 0 012 2v12a2 2 0 01-2 2zM5 9v10h14V9H5z"></path>
-        </svg>
-        Gestão de Notas Fiscais
-      </h4>
-      <button id="NotasFiscaisView_btnBuscar" type="button"
-        class="inline-flex items-center justify-center px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-  Buscar
-</button>
-    </div>
+  <h4 class="text-lg md:text-xl font-semibold text-gray-700 flex items-center gap-2">
+    <svg class="w-5 h-5 md:w-6 md:h-6 text-gray-500" fill="none" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M19 21H5a2 2 0 01-2-2V7a2 2 0 012-2h2l2-2h6l2 2h2a2 2 0 012 2v12a2 2 0 01-2 2zM5 9v10h14V9H5z"></path>
+    </svg>
+    Gestão de Notas Fiscais
+  </h4>
+
+  <!-- Agrupamento dos botões à direita -->
+  <div class="flex items-center gap-2">
+    <button id="NotasFiscaisView_btnConciliacaoNF" type="button"
+        class="inline-flex items-center justify-center px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-md NotasFiscaisView_btnConciliacaoNF">
+        Conciliação NF
+    </button>
+
+
+    <button id="NotasFiscaisView_btnBuscar" type="button"
+      class="inline-flex items-center justify-center px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+      Buscar
+    </button>
   </div>
+</div>
 
   <!-- Filtros compactos -->
   <div class="px-3 md:px-4 py-3 border-b border-gray-200 bg-gray-50">
