@@ -2,7 +2,7 @@
 
 // Constantes globais de App.gs
 const App_VIEWS_PERMITIDAS = ["fornecedores", "produtos", "subprodutos", "cotacoes", "cotacaoIndividual",
-  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf", "rateionf", "relatoriorateio"];
+  "contagemdeestoque", "EnviarManualmenteView", "marcarprodutos", "conciliacaonf", "rateionf", "relatoriorateio", "notasfiscais"];
 
 const App_VIEW_FILENAME_MAP = {
   "fornecedores": "FornecedoresView",
@@ -15,10 +15,11 @@ const App_VIEW_FILENAME_MAP = {
   "marcarprodutos": "MarcacaoProdutosView",
   "conciliacaonf": "ConciliacaoNFView",
   "rateionf": "RateioNFView",
-  "relatoriorateio": "RelatorioRateioView"
-}
+  "relatoriorateio": "RelatorioRateioView",
+  "notasfiscais": "NotasFiscaisView"
+};
 
-  const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL'); 
+const WEB_APP_URL_PROJETO_ATUAL = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
 
 /**
  * Função principal para servir o Web App.
@@ -28,7 +29,7 @@ const App_VIEW_FILENAME_MAP = {
  */
 function doGet(e) {
   Logger.log(`App.gs: Requisição GET recebida: ${JSON.stringify(e)}`);
-  
+
   const token = e.parameter.token;
   const view = e.parameter.view;
 
@@ -38,40 +39,40 @@ function doGet(e) {
     try {
       // Esta função agora retorna também a 'dataAberturaFormatada'
       const dadosPortal = PortalController_buscarDadosParaPortalWebService(token);
-      
+
       if (!dadosPortal.valido) {
         Logger.log(`App.gs: Token inválido ou erro ao buscar dados para o portal. Token: ${token}. Mensagem: ${dadosPortal.mensagemErro}`);
         // Você pode criar uma página de erro mais elaborada aqui se desejar
         return HtmlService.createHtmlOutput(`<html><body><h1>Acesso Inválido</h1><p>${dadosPortal.mensagemErro}</p></body></html>`)
-                         .setTitle("Acesso Inválido ao Portal");
+          .setTitle("Acesso Inválido ao Portal");
       }
 
-      const htmlTemplate = HtmlService.createTemplateFromFile('PortalFornecedorView'); 
-      
+      const htmlTemplate = HtmlService.createTemplateFromFile('PortalFornecedorView');
+
       // Propriedades existentes sendo passadas para o template
       htmlTemplate.nomeFornecedor = dadosPortal.nomeFornecedor;
       htmlTemplate.idCotacao = dadosPortal.idCotacao;
-      htmlTemplate.produtos = dadosPortal.produtos; 
-      htmlTemplate.token = token; 
-      htmlTemplate.status = dadosPortal.status; 
-      htmlTemplate.pedidoFinalizado = dadosPortal.pedidoFinalizado; 
+      htmlTemplate.produtos = dadosPortal.produtos;
+      htmlTemplate.token = token;
+      htmlTemplate.status = dadosPortal.status;
+      htmlTemplate.pedidoFinalizado = dadosPortal.pedidoFinalizado;
 
       // <<< LINHA ADICIONADA PARA A PRÉ-VISUALIZAÇÃO >>>
       // Passa a nova data de abertura formatada para o template HTML.
       htmlTemplate.dataAberturaFormatada = dadosPortal.dataAberturaFormatada;
-      
+
       const finalHtmlOutput = htmlTemplate.evaluate();
       finalHtmlOutput.setTitle(`Cotação ${dadosPortal.idCotacao} - ${dadosPortal.nomeFornecedor}`)
-                     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
       return finalHtmlOutput;
 
     } catch (err) {
       Logger.log(`App.gs: ERRO CRÍTICO ao tentar carregar o Portal do Fornecedor para token ${token}: ${err}\n${err.stack}`);
       return HtmlService.createHtmlOutput('<html><body><h1>Erro Crítico</h1><p>Ocorreu um erro inesperado ao carregar o portal. Por favor, contate o suporte.</p></body></html>')
-                       .setTitle("Erro no Portal");
+        .setTitle("Erro no Portal");
     }
-  } 
-  
+  }
+
   // Roteamento baseado no parâmetro 'view'
   switch (view) {
     case 'cotacaoIndividual':
@@ -110,7 +111,6 @@ function doGet(e) {
         .setTitle("Relatório de Análise - Cotação " + e.parameter.idCotacao)
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 
-    // --- MODIFICAÇÃO INÍCIO ---
     case 'marcarprodutos':
       Logger.log("App.gs: Carregando MarcacaoProdutosView.");
       const templateMarcacao = HtmlService.createTemplateFromFile('MarcacaoProdutosView');
@@ -118,7 +118,7 @@ function doGet(e) {
         .setTitle("Marcação de Recebimento")
         .addMetaTag('viewport', 'width=device-width, initial-scale=1') // Garante responsividade
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
-    
+
     case 'conciliacaonf':
       Logger.log("App.gs: Carregando ConciliacaoNFView.");
       const templateConciliacao = HtmlService.createTemplateFromFile('ConciliacaoNFView');
@@ -126,8 +126,17 @@ function doGet(e) {
         .setTitle("Conciliação de NF-e")
         .addMetaTag('viewport', 'width=device-width, initial-scale=1')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
-    // --- MODIFICAÇÃO FIM ---
     
+    // --- NOVO CASE ADICIONADO ---
+    case 'notasfiscais':
+      Logger.log("App.gs: Carregando NotasFiscaisView.");
+      const templateNotasFiscais = HtmlService.createTemplateFromFile('NotasFiscaisView');
+      return templateNotasFiscais.evaluate()
+        .setTitle("Gestão de Notas Fiscais")
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+    // --- FIM DA MODIFICAÇÃO ---
+
     case 'relatoriorateio':
       Logger.log("App.gs: Carregando RelatorioRateioView.");
       const templateRelatorioRateio = HtmlService.createTemplateFromFile('RelatorioRateioView');

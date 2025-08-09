@@ -22,21 +22,8 @@
       aside { width: 100% !important; height: auto !important; }
       #mainContentArea { padding: 1rem; }
     }
-    /* Estilos gerais da tabela - th pode ser estilizado mais especificamente nas views */
     .table-auto th, .table-auto td { padding: 0.75rem 1rem; border-bottom: 1px solid #E5E7EB; text-align: left; }
-    /* .table-auto th { background-color: #F3F4F6; font-weight: 600; color: #374151; } */ /* Comentado para permitir estilização mais específica nas views */
-    .action-button { padding: 0.3rem 0.6rem; border-radius: 0.375rem; font-size: 0.875rem; margin-right: 0.5rem; transition: background-color 0.2s; cursor:pointer; }
-    .edit-button { background-color: #3B82F6; color: white; }
-    .delete-button { background-color: #EF4444; color: white; }
-    .cancel-edit-button { background-color: #6B7280; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 500; margin-right: 0.5rem; }
-    .toggle-button { display: inline-flex; align-items: center; padding: 0.5rem 1rem; margin-bottom: 1rem; background-color: #DBEAFE; color: #1E40AF; border: 1px solid #BFDBFE; border-radius: 0.5rem; font-weight: 500; cursor: pointer; }
-    .toggle-button svg { width: 1.25rem; height: 1.25rem; margin-right: 0.5rem; transition: transform 0.3s ease-in-out; }
-    .toggle-button.expanded svg { transform: rotate(180deg); }
-    .search-input-container { margin-bottom: 1rem; position: relative; }
-    .search-input-container input { padding-left: 2.5rem; width: 100%; max-width: 400px; border-radius: 0.5rem; border: 1px solid #D1D5DB; }
-    .search-input-container .search-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 1.25rem; height: 1.25rem; color: #9CA3AF; }
     .menu-item.active { background-color: #2563EB; font-weight: 600; }
-    .highlight { background-color: yellow; font-weight: bold; }
   </style>
 </head>
 <body class="bg-blue-50 text-gray-800">
@@ -48,48 +35,33 @@
           <li>
             <a href="#" onclick="navigateTo('fornecedores'); return false;" id="menuFornecedores"
                class="menu-item flex items-center py-2.5 px-4 rounded-lg transition duration-200 hover:bg-blue-600">
-              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857
-                         M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002
-                         5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0
-                         2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-              </svg>
+              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857 M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
               Fornecedores
             </a>
           </li>
           <li>
             <a href="#" onclick="navigateTo('produtos'); return false;" id="menuProdutos"
                class="menu-item flex items-center py-2.5 px-4 rounded-lg transition duration-200 hover:bg-blue-600">
-              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0
-                         01-2 2H5a2 2 0 01-2-2v-6a2 2
-                         0 012-2m14 0V9a2 2 0 00-2-2M5
-                         11V9a2 2 0 012-2m0 0V5a2 2 0
-                         012-2h6a2 2 0 012 2v2M7 7h10"/>
-              </svg>
+              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
               Produtos
             </a>
           </li>
           <li>
             <a href="#" onclick="navigateTo('subprodutos'); return false;" id="menuSubprodutos" class="menu-item flex items-center py-2.5 px-4 rounded-lg transition duration-200 hover:bg-blue-600">
-              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M7 7h10m-5 5v5m-5-5h10a2
-                         2 0 012 2v3a2 2 0 01-2
-                         2H5a2 2 0 01-2-2v-3a2 2
-                         0 012-2z"/>
-              </svg>
+              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10m-5 5v5m-5-5h10a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-3a2 2 0 012-2z"/></svg>
               SubProdutos
             </a>
           </li>
           <li>
             <a href="#" onclick="navigateTo('cotacoes'); return false;" id="menuCotacoes" class="menu-item flex items-center py-2.5 px-4 rounded-lg transition duration-200 hover:bg-blue-600">
-              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-              </svg>
+              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
               Cotações
+            </a>
+          </li>
+          <li>
+            <a href="#" onclick="navigateTo('notasfiscais'); return false;" id="menuNotasfiscais" class="menu-item flex items-center py-2.5 px-4 rounded-lg transition duration-200 hover:bg-blue-600">
+              <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              Notas Fiscais
             </a>
           </li>
         </ul>
@@ -112,7 +84,6 @@
       if (activeMenuItem) {
         activeMenuItem.classList.remove('active');
       }
-      // Constrói o ID: 'menu' + primeira letra maiúscula + resto do nome. Ex: 'fornecedores' -> 'menuFornecedores', 'subprodutos' -> 'menuSubprodutos'
       const menuItemId = 'menu' + viewName.charAt(0).toUpperCase() + viewName.slice(1);
       const currentElement = document.getElementById(menuItemId);
       if (currentElement) {
@@ -130,18 +101,16 @@
       google.script.run
         .withSuccessHandler(function(htmlContent) {
           const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = htmlContent; // Conteúdo da view (ex: FornecedoresView.html)
+          tempDiv.innerHTML = htmlContent;
 
-          mainContentArea.innerHTML = ''; // Limpa o conteúdo anterior ('Carregando...')
+          mainContentArea.innerHTML = '';
 
-          // Anexa nós de conteúdo (não-script)
           Array.from(tempDiv.childNodes).forEach(node => {
             if (node.nodeName !== 'SCRIPT') {
               mainContentArea.appendChild(node.cloneNode(true));
             }
           });
 
-          // Coleta e executa scripts da view carregada
           const scriptsToExecute = Array.from(tempDiv.querySelectorAll('script'));
           let scriptLoadChain = Promise.resolve();
 
@@ -153,32 +122,27 @@
                   newScript.setAttribute(attr.name, attr.value);
                 });
 
-                if (oldScript.src) { // Script externo com atributo src
+                if (oldScript.src) {
                   newScript.src = oldScript.src;
                   newScript.onload = resolve;
                   newScript.onerror = (err) => {
                     console.error('Erro ao carregar script externo:', oldScript.src, err);
-                    resolve(); // Resolve mesmo em caso de erro para não parar a cadeia de scripts
+                    resolve();
                   };
                   document.head.appendChild(newScript);
-                } else { // Script inline
+                } else {
                   newScript.textContent = oldScript.textContent;
-                  // Adiciona ao head, executa, e então remove.
-                  // Isso garante a execução no escopo global.
                   document.head.appendChild(newScript);
                   if (newScript.parentNode) {
                     newScript.parentNode.removeChild(newScript);
                   }
-                  resolve(); // Scripts inline são executados sincronicamente
+                  resolve();
                 }
               });
             });
           });
 
           scriptLoadChain
-            .then(() => {
-              // console.log("Todos os scripts para " + viewName + " foram processados.");
-            })
             .catch(error => {
               console.error("Erro na cadeia de carregamento de scripts para " + viewName + ":", error);
               mainContentArea.innerHTML += `<div class="error-message p-2">Erro ao processar scripts da view ${viewName}.</div>`;
@@ -198,6 +162,6 @@
         })
         .App_obterView(viewName);
     }
-
-  </script></body>
+  </script>
+</body>
 </html>

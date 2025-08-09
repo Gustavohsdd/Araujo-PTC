@@ -1,0 +1,617 @@
+<!-- NotasFiscaisScript.html -->
+<script>
+// Variáveis de UI globais
+var modalEditarClassificacao, modalConfirmarDesfazer, modalEditarBoletos, btnBuscar, loader;
+
+/**
+ * Bootstrap seguro de inicialização
+ */
+function NotasFiscaisScript_safeReady() {
+  try {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', NotasFiscaisScript_init);
+    } else {
+      NotasFiscaisScript_init();
+    }
+  } catch (e) {
+    console.error('Falha ao iniciar Notas Fiscais:', e);
+    alert('Erro ao iniciar a página de Notas Fiscais. Veja o console.');
+  }
+}
+
+/**
+ * Inicialização da página
+ */
+function NotasFiscaisScript_init() {
+  // Referências de UI
+  modalEditarClassificacao = document.getElementById('modalEditarClassificacao');
+  modalConfirmarDesfazer   = document.getElementById('modalConfirmarDesfazer');
+  modalEditarBoletos       = document.getElementById('modalEditarBoletos');
+  btnBuscar                = document.getElementById('NotasFiscaisView_btnBuscar');
+  loader                   = document.getElementById('loader');
+
+  console.log('[NF] init: começando binding dos elementos.');
+
+  // (Re)bind do botão Buscar (com retry se necessário)
+  NotasFiscaisScript_bindBuscarIfPresent();
+
+  // Enter nos filtros dispara busca
+  NotasFiscaisScript_wireFiltersEnterKey();
+
+  // Listeners dos modais — só liga se a função existir
+  const elSalvarClass   = document.getElementById('btn-salvar-classificacao');
+  const elConfirmarDesf = document.getElementById('btn-confirmar-desfazer');
+  const elSalvarBoletos = document.getElementById('btn-salvar-boletos-contas');
+  const elAddFatura     = document.getElementById('btn-add-fatura');
+  const elAddConta      = document.getElementById('btn-add-conta');
+
+  if (elSalvarClass && typeof NotasFiscaisScript_salvarClassificacao === 'function') {
+    elSalvarClass.addEventListener('click', NotasFiscaisScript_salvarClassificacao);
+  }
+  if (elConfirmarDesf && typeof NotasFiscaisScript_confirmarDesfazer === 'function') {
+    elConfirmarDesf.addEventListener('click', NotasFiscaisScript_confirmarDesfazer);
+  }
+  if (elSalvarBoletos && typeof NotasFiscaisScript_salvarFinanceiro === 'function') {
+    elSalvarBoletos.addEventListener('click', NotasFiscaisScript_salvarFinanceiro);
+  }
+  if (elAddFatura) {
+    elAddFatura.addEventListener('click', () => {
+      if (typeof NotasFiscaisScript_adicionarLinhaTabela === 'function') {
+        NotasFiscaisScript_adicionarLinhaTabela('tabela-faturas-body', true);
+      } else {
+        console.warn('[NF] Função NotasFiscaisScript_adicionarLinhaTabela não definida.');
+      }
+    });
+  }
+  if (elAddConta) {
+    elAddConta.addEventListener('click', () => {
+      if (typeof NotasFiscaisScript_adicionarLinhaTabela === 'function') {
+        NotasFiscaisScript_adicionarLinhaTabela('tabela-contas-a-pagar-body', false);
+      } else {
+        console.warn('[NF] Função NotasFiscaisScript_adicionarLinhaTabela não definida.');
+      }
+    });
+  }
+
+  // Fechar modais (usa closeModal se existir; senão esconde via class)
+  document.querySelectorAll('[data-modal-close]').forEach(button => {
+    button.addEventListener('click', () => {
+      const modal = button.closest('.fixed.inset-0');
+      if (!modal) return;
+      if (typeof NotasFiscaisScript_closeModal === 'function') {
+        NotasFiscaisScript_closeModal(modal);
+      } else {
+        modal.classList.add('hidden');
+      }
+    });
+  });
+
+  console.log('[NF] init: concluído.');
+}
+
+// ======================
+// RESTAURAÇÃO: EDIÇÃO REAL
+// ======================
+
+// Estado simples para passar dados entre ações
+const NotasFiscaisScript_state = {
+  chaveAcessoAtual: null,
+  numeroNFAtual: null,
+};
+
+// Utilitários para abrir/fechar modal (usa closeModal se existir)
+function NotasFiscaisScript_openModalById(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('hidden');
+}
+function NotasFiscaisScript_closeModalById(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (typeof NotasFiscaisScript_closeModal === 'function') {
+    NotasFiscaisScript_closeModal(el);
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+// -----------------------------
+// CLASSIFICAÇÃO (editar/salvar)
+// -----------------------------
+function NotasFiscaisScript_ensureClassificacaoUI() {
+  const modal = document.getElementById('modalEditarClassificacao');
+  if (!modal) return;
+  const body = modal.querySelector('.p-4');
+  if (!body) return;
+
+  // Injeta o select de status se ainda não existir
+  if (!body.querySelector('#classificacao-status')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'space-y-2';
+    wrapper.innerHTML = `
+      <label class="block text-xs text-gray-600">Status da Conciliação</label>
+      <select id="classificacao-status" class="w-full h-9 px-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <option value="Pendente">Pendente</option>
+        <option value="Conciliada">Conciliada</option>
+        <option value="Bonificação">Bonificação</option>
+        <option value="NF Tipo B">NF Tipo B</option>
+        <option value="Sem Pedido">Sem Pedido</option>
+      </select>
+    `;
+    body.appendChild(wrapper);
+  }
+}
+
+/** Abre modal de Classificação */
+function NotasFiscaisScript_abrirModalClassificacao(chaveAcesso, numeroNF) {
+  NotasFiscaisScript_state.chaveAcessoAtual = chaveAcesso;
+  NotasFiscaisScript_state.numeroNFAtual = numeroNF;
+  NotasFiscaisScript_ensureClassificacaoUI();
+  NotasFiscaisScript_openModalById('modalEditarClassificacao');
+}
+
+/** Salva a Classificação (status) via controller */
+function NotasFiscaisScript_salvarClassificacao() {
+  try {
+    const chave = NotasFiscaisScript_state.chaveAcessoAtual;
+    if (!chave) { alert('Chave da NF não definida.'); return; }
+    const sel = document.getElementById('classificacao-status');
+    if (!sel) { alert('Campo de status não encontrado.'); return; }
+    const status = sel.value || 'Pendente';
+
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      alert('Ambiente inválido. Abra pelo link do Web App.');
+      return;
+    }
+
+    NotasFiscaisScript_toggleLoader(true);
+    google.script.run
+      .withSuccessHandler(resp => {
+        NotasFiscaisScript_toggleLoader(false);
+        if (resp && resp.success) {
+          alert(resp.message || 'Classificação atualizada.');
+          NotasFiscaisScript_closeModalById('modalEditarClassificacao');
+          NotasFiscaisScript_buscar();
+        } else {
+          NotasFiscaisScript_handleFailure(resp || {message:'Falha ao atualizar classificação.'});
+        }
+      })
+      .withFailureHandler(err => {
+        NotasFiscaisScript_toggleLoader(false);
+        NotasFiscaisScript_handleFailure(err);
+      })
+      .NotasFiscaisController_atualizarStatusNF(chave, status);
+
+  } catch (e) {
+    NotasFiscaisScript_toggleLoader(false);
+    console.error('[NF] salvarClassificacao:', e);
+    alert('Erro ao salvar classificação.');
+  }
+}
+
+// -------------------------------------
+// FINANCEIRO (faturas + contas a pagar)
+// -------------------------------------
+
+// helper para inputs
+function NotasFiscaisScript_rowInput(name, value, attrs='') {
+  value = value == null ? '' : value;
+  return `<input name="${name}" value="${value}" ${attrs}
+           class="w-full h-8 px-2 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">`;
+}
+
+/** Abre modal Financeiro e carrega faturas/contas */
+function NotasFiscaisScript_abrirModalBoletos(chaveAcesso, numeroNF) {
+  NotasFiscaisScript_state.chaveAcessoAtual = chaveAcesso;
+  NotasFiscaisScript_state.numeroNFAtual = numeroNF;
+
+  NotasFiscaisScript_openModalById('modalEditarBoletos');
+
+  // Render vazio enquanto busca
+  const tFat = document.getElementById('tabela-faturas-body');
+  const tCap = document.getElementById('tabela-contas-a-pagar-body');
+  if (tFat) tFat.innerHTML = `<tr><td colspan="5" class="px-2 py-2 text-center text-xs text-gray-500">Carregando...</td></tr>`;
+  if (tCap) tCap.innerHTML = `<tr><td colspan="7" class="px-2 py-2 text-center text-xs text-gray-500">Carregando...</td></tr>`;
+
+  // Buscar no backend
+  NotasFiscaisScript_carregarResumoFinanceiro(chaveAcesso);
+}
+
+/** Busca faturas e contas no controller e renderiza inputs editáveis */
+function NotasFiscaisScript_carregarResumoFinanceiro(chaveAcesso) {
+  if (typeof google === 'undefined' || !google.script || !google.script.run) {
+    alert('Ambiente inválido. Abra pelo link do Web App.');
+    return;
+  }
+  NotasFiscaisScript_toggleLoader(true);
+
+  google.script.run
+    .withSuccessHandler(resp => {
+      NotasFiscaisScript_toggleLoader(false);
+      if (!resp || !resp.success) {
+        NotasFiscaisScript_handleFailure(resp || {message:'Falha ao obter dados financeiros.'});
+        return;
+      }
+      const { faturas, contasAPagar } = resp.dados || { faturas: [], contasAPagar: [] };
+      NotasFiscaisScript_renderFaturas(faturas || []);
+      NotasFiscaisScript_renderContasAPagar(contasAPagar || []);
+    })
+    .withFailureHandler(err => {
+      NotasFiscaisScript_toggleLoader(false);
+      NotasFiscaisScript_handleFailure(err);
+    })
+    .NotasFiscaisController_obterResumoFinanceiroDaNF(chaveAcesso);
+}
+
+/** Renderiza as Faturas como linhas com inputs (aderente aos cabeçalhos do backend) */
+function NotasFiscaisScript_renderFaturas(faturas) {
+  const tbody = document.getElementById('tabela-faturas-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const chave = NotasFiscaisScript_state.chaveAcessoAtual || '';
+  (faturas || []).forEach(f => {
+    const tr = document.createElement('tr');
+    const numFat = f['Número da Fatura'] || f['Numero da Fatura'] || '';
+    const numPar = f['Número da Parcela'] || f['Numero da Parcela'] || f['Parcela'] || '';
+    const venc   = f['Data de Vencimento'] || f['Vencimento'] || '';
+    const val    = f['Valor da Parcela'] || f['Valor'] || '';
+
+    tr.innerHTML = `
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Fatura', numFat)}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Parcela', numPar)}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento', (venc||'').toString().slice(0,10), 'type="date"')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela', val, 'inputmode="decimal"')}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Se não houver linhas, deixa pelo menos uma em branco para edição
+  if (!tbody.children.length) {
+    NotasFiscaisScript_adicionarLinhaTabela('tabela-faturas-body', true);
+  }
+}
+
+/** Renderiza Contas a Pagar com inputs (mapeando para os cabeçalhos do backend) */
+function NotasFiscaisScript_renderContasAPagar(linhas) {
+  const tbody = document.getElementById('tabela-contas-a-pagar-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const chave = NotasFiscaisScript_state.chaveAcessoAtual || '';
+  (linhas || []).forEach(l => {
+    const resumo = l['Resumo dos Itens'] || l['Título'] || l['Descricao'] || '';
+    const venc   = l['Data de Vencimento'] || l['Vencimento'] || '';
+    const valor  = l['Valor da Parcela'] || l['Valor por Setor'] || l['Valor'] || '';
+    const setor  = l['Setor'] || l['Empresa'] || '';
+    const valorSetor = l['Valor por Setor'] || '';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Resumo dos Itens', resumo)}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento', (venc||'').toString().slice(0,10), 'type="date"')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela', valor, 'inputmode="decimal"')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Setor', setor)}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor por Setor', valorSetor, 'inputmode="decimal"')}</td>
+      <td class="px-2 py-1 text-xs"></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (!tbody.children.length) {
+    NotasFiscaisScript_adicionarLinhaTabela('tabela-contas-a-pagar-body', false);
+  }
+}
+
+/** Adiciona uma linha em branco (fatura ou conta) */
+function NotasFiscaisScript_adicionarLinhaTabela(tbodyId, isFatura) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  const chave = NotasFiscaisScript_state.chaveAcessoAtual || '';
+  const tr = document.createElement('tr');
+
+  if (isFatura) {
+    tr.innerHTML = `
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Fatura','')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Parcela','')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento','', 'type="date"')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela','', 'inputmode="decimal"')}</td>
+    `;
+  } else {
+    tr.innerHTML = `
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Resumo dos Itens','')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento','', 'type="date"')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela','', 'inputmode="decimal"')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Setor','')}</td>
+      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor por Setor','', 'inputmode="decimal"')}</td>
+      <td class="px-2 py-1 text-xs"></td>
+    `;
+  }
+  tbody.appendChild(tr);
+}
+
+/** Salva faturas e contas (chama 2 endpoints em sequência) */
+function NotasFiscaisScript_salvarFinanceiro() {
+  try {
+    const chave = NotasFiscaisScript_state.chaveAcessoAtual;
+    if (!chave) { alert('Chave da NF não definida.'); return; }
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      alert('Ambiente inválido. Abra pelo link do Web App.');
+      return;
+    }
+
+    // Coleta faturas
+    const fatRows = Array.from(document.querySelectorAll('#tabela-faturas-body tr'));
+    const faturas = fatRows.map(tr => {
+      const o = {};
+      tr.querySelectorAll('input').forEach(inp => { o[inp.name] = inp.value; });
+      return o;
+    }).filter(o => Object.values(o).some(v => String(v||'').trim() !== ''));
+
+    // Coleta contas
+    const capRows = Array.from(document.querySelectorAll('#tabela-contas-a-pagar-body tr'));
+    const contas = capRows.map(tr => {
+      const o = {};
+      tr.querySelectorAll('input').forEach(inp => { o[inp.name] = inp.value; });
+      return o;
+    }).filter(o => Object.values(o).some(v => String(v||'').trim() !== ''));
+
+    NotasFiscaisScript_toggleLoader(true);
+
+    // 1º salva faturas
+    google.script.run
+      .withSuccessHandler(r1 => {
+        // 2º salva contas
+        google.script.run
+          .withSuccessHandler(r2 => {
+            NotasFiscaisScript_toggleLoader(false);
+            if ((r1 && r1.success) && (r2 && r2.success)) {
+              alert('Financeiro salvo com sucesso.');
+              NotasFiscaisScript_closeModalById('modalEditarBoletos');
+              NotasFiscaisScript_buscar();
+            } else {
+              const msg = (r1 && r1.message ? r1.message : '') + ' ' + (r2 && r2.message ? r2.message : '');
+              NotasFiscaisScript_handleFailure({message: msg || 'Falha ao salvar financeiro.'});
+            }
+          })
+          .withFailureHandler(err2 => {
+            NotasFiscaisScript_toggleLoader(false);
+            NotasFiscaisScript_handleFailure(err2);
+          })
+          .NotasFiscaisController_salvarContasAPagar(chave, contas);
+      })
+      .withFailureHandler(err1 => {
+        NotasFiscaisScript_toggleLoader(false);
+        NotasFiscaisScript_handleFailure(err1);
+      })
+      .NotasFiscaisController_salvarFaturas(chave, faturas);
+
+  } catch (e) {
+    NotasFiscaisScript_toggleLoader(false);
+    console.error('[NF] salvarFinanceiro:', e);
+    alert('Erro ao salvar financeiro.');
+  }
+}
+
+
+function NotasFiscaisScript_bindBuscarIfPresent() {
+  // (Re)captura a referência do botão
+  btnBuscar = document.getElementById('NotasFiscaisView_btnBuscar');
+
+  if (btnBuscar) {
+    // Garante que não duplicamos listener
+    btnBuscar.removeEventListener?.('click', NotasFiscaisScript_buscar);
+    btnBuscar.addEventListener('click', NotasFiscaisScript_buscar);
+    console.log('[NF] bindBuscar: botão encontrado e listener ligado.');
+    return;
+  }
+
+  console.warn('[NF] bindBuscar: botão ainda não existe. Tentando novamente por até 5s...');
+  let tentativas = 0;
+  const maxTentativas = 25; // 25 * 200ms = 5s
+  const timer = setInterval(() => {
+    tentativas++;
+    btnBuscar = document.getElementById('NotasFiscaisView_btnBuscar');
+    if (btnBuscar) {
+      btnBuscar.removeEventListener?.('click', NotasFiscaisScript_buscar);
+      btnBuscar.addEventListener('click', NotasFiscaisScript_buscar);
+      clearInterval(timer);
+      console.log('[NF] bindBuscar: botão apareceu e listener foi ligado na tentativa', tentativas);
+    } else if (tentativas >= maxTentativas) {
+      clearInterval(timer);
+      console.error('[NF] bindBuscar: não foi possível localizar o botão Buscar após 5s.');
+      alert('Erro: botão "Buscar" não foi encontrado. Atualize a página. Se persistir, verifique o ID "NotasFiscaisView_btnBuscar" na View.');
+    }
+  }, 200);
+}
+
+/**
+ * Coleta os valores dos filtros (tolerante)
+ */
+function NotasFiscaisScript_coletarFiltros() {
+  return {
+    busca: document.getElementById('filtro-busca')?.value || '',
+    status: document.getElementById('filtro-status')?.value || '',
+    fornecedor: document.getElementById('filtro-fornecedor')?.value || '',
+    dataInicio: document.getElementById('filtro-data-inicio')?.value || '',
+    dataFim: document.getElementById('filtro-data-fim')?.value || '',
+  };
+}
+
+/**
+ * Liga tecla Enter nos filtros
+ */
+function NotasFiscaisScript_wireFiltersEnterKey() {
+  const ids = ['filtro-busca','filtro-status','filtro-fornecedor','filtro-data-inicio','filtro-data-fim'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        NotasFiscaisScript_buscar();
+      }
+    });
+  });
+}
+
+/**
+ * Executa a busca de notas fiscais
+ */
+function NotasFiscaisScript_buscar() {
+  try {
+    // Guarda: ambiente do HtmlService
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      console.error('[NF] buscar: google.script.run indisponível.');
+      alert('Esta página não está rodando dentro do HtmlService do Apps Script (google.script.run indisponível). Abra pelo link publicado do Web App.');
+      return;
+    }
+
+    const filtros = NotasFiscaisScript_coletarFiltros();
+    console.log('[NF] buscar: filtros ->', filtros);
+
+    NotasFiscaisScript_toggleLoader(true);
+    if (btnBuscar) btnBuscar.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(response => {
+        try {
+          console.log('[NF] listarNotas -> sucesso:', response);
+          if (response && response.success) {
+            NotasFiscaisScript_renderizarTabela(response.dados || []);
+          } else {
+            NotasFiscaisScript_handleFailure(response || {message:'Falha desconhecida.'});
+          }
+        } finally {
+          NotasFiscaisScript_toggleLoader(false);
+          if (btnBuscar) btnBuscar.disabled = false;
+        }
+      })
+      .withFailureHandler(err => {
+        try {
+          console.error('[NF] listarNotas -> falha:', err);
+          NotasFiscaisScript_handleFailure(err);
+        } finally {
+          NotasFiscaisScript_toggleLoader(false);
+          if (btnBuscar) btnBuscar.disabled = false;
+        }
+      })
+      .NotasFiscaisController_listarNotas(filtros);
+
+  } catch (e) {
+    console.error('[NF] buscar -> exceção:', e);
+    NotasFiscaisScript_handleFailure(e);
+    NotasFiscaisScript_toggleLoader(false);
+    if (btnBuscar) btnBuscar.disabled = false;
+  }
+}
+
+/**
+ * Renderiza a tabela com layout compacto
+ */
+const NotasFiscaisScript_TD_CLASS = 'px-2 py-1 text-xs text-gray-700 align-middle break-words';
+const NotasFiscaisScript_TD_RIGHT_CLASS = 'px-2 py-1 text-xs text-gray-700 text-right align-middle';
+const NotasFiscaisScript_TAG_STATUS_CLASS = 'text-[10px] font-medium px-2 py-0.5 rounded-full';
+const NotasFiscaisScript_ACTION_ICON_CLASS = 'w-4 h-4';
+
+function NotasFiscaisScript_renderizarTabela(notas) {
+  const tbody = document.getElementById('tabela-notas-fiscais-body');
+  tbody.innerHTML = '';
+
+  if (!notas || notas.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="px-2 py-2 text-center text-sm text-gray-600">
+          Nenhuma nota fiscal encontrada para os filtros aplicados.
+        </td>
+      </tr>`;
+    NotasFiscaisScript_toggleLoader(false);
+    return;
+  }
+
+  notas.forEach(nf => {
+    const tr = document.createElement('tr');
+    const status = (nf.statusConciliacao || '').toLowerCase();
+    const statusClass =
+      status.includes('conciliada') ? 'bg-green-100 text-green-700 border border-green-200' :
+      status.includes('pendente')   ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
+      'bg-gray-100 text-gray-700 border border-gray-200';
+
+    tr.innerHTML = `
+      <td class="${NotasFiscaisScript_TD_CLASS} font-medium text-gray-900">${nf.numeroNF || ''}</td>
+      <td class="${NotasFiscaisScript_TD_CLASS}">${nf.nomeEmitente || ''}</td>
+      <td class="${NotasFiscaisScript_TD_CLASS}">${nf.cnpjEmitente || ''}</td>
+      <td class="${NotasFiscaisScript_TD_CLASS}">${nf.dataEmissao || ''}</td>
+      <td class="${NotasFiscaisScript_TD_CLASS}">
+        <span class="${NotasFiscaisScript_TAG_STATUS_CLASS} ${statusClass}">${nf.statusConciliacao || ''}</span>
+      </td>
+      <td class="${NotasFiscaisScript_TD_RIGHT_CLASS}">
+        ${(Number(nf.valorTotalNF) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+      </td>
+      <td class="${NotasFiscaisScript_TD_CLASS}">
+        <div class="flex items-center gap-2">
+          <!-- Classificação -->
+          <button class="text-blue-600 hover:text-blue-800"
+                  title="Editar classificação"
+                  onclick="NotasFiscaisScript_abrirModalClassificacao('${nf.chaveAcesso}', '${nf.numeroNF}')">
+            <svg class="${NotasFiscaisScript_ACTION_ICON_CLASS}" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.414 2.586a2 2 0 010 2.828l-1.586 1.586-2.828-2.828L14.586 2.586a2 2 0 012.828 0zM6 13l6.293-6.293 2.828 2.828L8.828 15.828A2 2 0 017.414 16H5v-2.414A2 2 0 016 13z"></path>
+            </svg>
+          </button>
+
+          <!-- Desfazer Conciliação -->
+          <button class="text-yellow-600 hover:text-yellow-800"
+                  title="Desfazer conciliação"
+                  ${!(nf.statusConciliacao || '').toLowerCase().includes('conciliada') ? 'disabled' : ''}
+                  onclick="NotasFiscaisScript_abrirModalDesfazer('${nf.chaveAcesso}', '${nf.numeroNF}')">
+            <svg class="${NotasFiscaisScript_ACTION_ICON_CLASS}" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-9H7l3-3 3 3h-2v4h-2V9z" clip-rule="evenodd"></path>
+            </svg>
+          </button>
+
+          <!-- Financeiro -->
+          <button class="text-teal-600 hover:text-teal-800"
+                  title="Editar financeiro"
+                  onclick="NotasFiscaisScript_abrirModalBoletos('${nf.chaveAcesso}', '${nf.numeroNF}')">
+            <svg class="${NotasFiscaisScript_ACTION_ICON_CLASS}" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4 4h12a2 2 0 012 2v8a2 2 0 01-2 2H9l-4 3v-3H4a2 2 0 01-2-2V6a2 2 0 012-2zm1 3a1 1 0 100 2h10a1 1 0 100-2H5zm0 4a1 1 0 100 2h6a1 1 0 100-2H5z" clip-rule="evenodd"></path>
+            </svg>
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  NotasFiscaisScript_toggleLoader(false);
+}
+
+/**
+ * Manipula falhas de execução
+ */
+function NotasFiscaisScript_handleFailure(error) {
+  const msg = (error && error.message) ? error.message :
+              (error && error.toString) ? error.toString() :
+              'Ocorreu um erro. Verifique o console.';
+  console.error('Erro na página Notas Fiscais:', error);
+  alert('Erro: ' + msg);
+}
+
+/**
+ * Exibe/oculta loader
+ */
+function NotasFiscaisScript_toggleLoader(show) {
+  try {
+    if (!loader) return;
+    loader.classList.toggle('hidden', !show);
+  } catch (e) {
+    console.error('Falha ao alternar loader:', e);
+  }
+}
+
+// Chamada inicial
+NotasFiscaisScript_safeReady();
+</script>

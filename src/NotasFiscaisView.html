@@ -1,0 +1,236 @@
+<!-- NotasFiscaisView.html -->
+
+<!-- Card principal -->
+<div id="NotasFiscaisView_container" class="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden relative">
+
+  <!-- LOADER (overlay) -->
+  <div id="loader" class="hidden absolute inset-0 z-40 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
+    <div class="animate-spin rounded-full h-10 w-10 border-4 border-gray-300 border-t-transparent"></div>
+  </div>
+
+  <!-- Cabeçalho: Título + Botão Buscar -->
+  <div class="p-3 md:p-4 border-b border-gray-200">
+    <div class="flex items-center justify-between gap-3">
+      <h4 class="text-lg md:text-xl font-semibold text-gray-700 flex items-center gap-2">
+        <svg class="w-5 h-5 md:w-6 md:h-6 text-gray-500" fill="none" viewBox="0 0 24 24">
+          <path fill="currentColor" d="M19 21H5a2 2 0 01-2-2V7a2 2 0 012-2h2l2-2h6l2 2h2a2 2 0 012 2v12a2 2 0 01-2 2zM5 9v10h14V9H5z"></path>
+        </svg>
+        Gestão de Notas Fiscais
+      </h4>
+      <button id="NotasFiscaisView_btnBuscar" type="button"
+        class="inline-flex items-center justify-center px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+  Buscar
+</button>
+    </div>
+  </div>
+
+  <!-- Filtros compactos -->
+  <div class="px-3 md:px-4 py-3 border-b border-gray-200 bg-gray-50">
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-2 md:gap-3 items-end">
+      <!-- Busca (texto livre) -->
+      <div class="col-span-2 md:col-span-2">
+        <label for="filtro-busca" class="block text-[11px] text-gray-600 mb-1">Busca</label>
+        <input id="filtro-busca" type="text"
+               class="w-full h-8 px-2 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+               placeholder="NF, emitente, CNPJ, chave...">
+      </div>
+
+      <!-- Status -->
+      <div class="col-span-1">
+        <label for="filtro-status" class="block text-[11px] text-gray-600 mb-1">Status</label>
+        <select id="filtro-status"
+                class="w-full h-8 px-2 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
+          <option value="">(Todos)</option>
+          <option value="Pendente">Pendente</option>
+          <option value="Conciliada">Conciliada</option>
+          <option value="Bonificação">Bonificação</option>
+          <option value="NF Tipo B">NF Tipo B</option>
+          <option value="Sem Pedido">Sem Pedido</option>
+        </select>
+      </div>
+
+      <!-- Fornecedor -->
+      <div class="col-span-1">
+        <label for="filtro-fornecedor" class="block text-[11px] text-gray-600 mb-1">Fornecedor</label>
+        <input id="filtro-fornecedor" type="text"
+               class="w-full h-8 px-2 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+               placeholder="Nome do fornecedor">
+      </div>
+
+      <!-- Data Início -->
+      <div class="col-span-1">
+        <label for="filtro-data-inicio" class="block text-[11px] text-gray-600 mb-1">Data início</label>
+        <input id="filtro-data-inicio" type="date"
+               class="w-full h-8 px-2 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
+      </div>
+
+      <!-- Data Fim -->
+      <div class="col-span-1">
+        <label for="filtro-data-fim" class="block text-[11px] text-gray-600 mb-1">Data fim</label>
+        <input id="filtro-data-fim" type="date"
+               class="w-full h-8 px-2 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela de Notas Fiscais (compacta, sem scroll horizontal) -->
+  <div class="relative shadow-md sm:rounded-lg">
+    <table class="w-full table-fixed text-xs text-left text-gray-700 leading-tight">
+      <thead class="text-[11px] text-gray-700 uppercase bg-gray-100">
+        <tr>
+            <th scope="col" class="px-2 py-2 w-[10%]">Nº NF</th>
+            <th scope="col" class="px-2 py-2 w-[26%]">Emitente</th>
+            <th scope="col" class="px-2 py-2 w-[16%]">CNPJ</th>
+            <th scope="col" class="px-2 py-2 w-[12%]">Emissão</th>
+            <th scope="col" class="px-2 py-2 w-[14%]">Status</th>
+            <th scope="col" class="px-2 py-2 w-[12%]">Valor Total</th>
+            <th scope="col" class="px-2 py-2 w-[10%]">Ações</th>
+        </tr>
+        </thead>
+      <tbody id="tabela-notas-fiscais-body">
+        <!-- Linhas via script -->
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- =========================
+     MODAIS (placeholders mínimos)
+     Mantêm os IDs esperados pelo script
+     ========================= -->
+
+<!-- Modal: Editar Classificação -->
+<div id="modalEditarClassificacao" class="fixed inset-0 hidden z-50 bg-black/40">
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-3xl rounded-lg shadow">
+      <div class="px-4 py-2 border-b flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">Editar Classificação</h3>
+        <button type="button" data-modal-close class="text-gray-500 hover:text-gray-700">&times;</button>
+      </div>
+      <div class="p-4">
+        <!-- Conteúdo do formulário de classificação -->
+        <div class="text-xs text-gray-600">Ajuste a classificação da NF selecionada.</div>
+      </div>
+      <div class="px-4 py-2 border-t flex items-center justify-end gap-2">
+        <button type="button" data-modal-close
+                class="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
+          Cancelar
+        </button>
+        <button id="btn-salvar-classificacao" type="button"
+                class="px-3 py-1.5 text-xs rounded-md text-white bg-blue-600 hover:bg-blue-700">
+          Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmar Desfazer Conciliação -->
+<div id="modalConfirmarDesfazer" class="fixed inset-0 hidden z-50 bg-black/40">
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-lg shadow">
+      <div class="px-4 py-2 border-b flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">Desfazer Conciliação</h3>
+        <button type="button" data-modal-close class="text-gray-500 hover:text-gray-700">&times;</button>
+      </div>
+      <div class="p-4 text-sm text-gray-700">
+        Tem certeza que deseja desfazer a conciliação desta NF? Esta ação irá remover os lançamentos em
+        <strong>Contas a Pagar</strong> vinculados à chave e limpar o status na aba de <strong>Notas Fiscais</strong>.
+      </div>
+      <div class="px-4 py-2 border-t flex items-center justify-end gap-2">
+        <button type="button" data-modal-close
+                class="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
+          Cancelar
+        </button>
+        <button id="btn-confirmar-desfazer" type="button"
+                class="px-3 py-1.5 text-xs rounded-md text-white bg-amber-600 hover:bg-amber-700">
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Faturas / Contas a Pagar -->
+<div id="modalEditarBoletos" class="fixed inset-0 hidden z-50 bg-black/40">
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-5xl rounded-lg shadow">
+      <div class="px-4 py-2 border-b flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">Faturas e Contas a Pagar</h3>
+        <button type="button" data-modal-close class="text-gray-500 hover:text-gray-700">&times;</button>
+      </div>
+
+      <div class="p-4 space-y-4">
+        <!-- Faturas -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-xs font-semibold text-gray-700">Faturas</h4>
+            <button id="btn-add-fatura" type="button"
+                    class="px-2 py-1 text-[11px] rounded-md text-white bg-teal-600 hover:bg-teal-700">
+              Adicionar Fatura
+            </button>
+          </div>
+          <div class="overflow-x-auto border rounded-md">
+            <table class="min-w-full text-xs text-left text-gray-700">
+              <thead class="bg-gray-100 text-[11px]">
+                <tr>
+                  <th class="px-2 py-2">Chave de Acesso</th>
+                  <th class="px-2 py-2">Parcela</th>
+                  <th class="px-2 py-2">Vencimento</th>
+                  <th class="px-2 py-2">Valor</th>
+                  <th class="px-2 py-2">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tabela-faturas-body">
+                <!-- Linhas via script -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Contas a Pagar -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-xs font-semibold text-gray-700">Contas a Pagar</h4>
+            <button id="btn-add-conta" type="button"
+                    class="px-2 py-1 text-[11px] rounded-md text-white bg-teal-600 hover:bg-teal-700">
+              Adicionar Conta
+            </button>
+          </div>
+          <div class="overflow-x-auto border rounded-md">
+            <table class="min-w-full text-xs text-left text-gray-700">
+              <thead class="bg-gray-100 text-[11px]">
+                <tr>
+                  <th class="px-2 py-2">Chave de Acesso</th>
+                  <th class="px-2 py-2">Título</th>
+                  <th class="px-2 py-2">Vencimento</th>
+                  <th class="px-2 py-2">Valor</th>
+                  <th class="px-2 py-2">Empresa</th>
+                  <th class="px-2 py-2">Centro de Custo</th>
+                  <th class="px-2 py-2">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tabela-contas-a-pagar-body">
+                <!-- Linhas via script -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4 py-2 border-t flex items-center justify-end gap-2">
+        <button type="button" data-modal-close
+                class="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
+          Fechar
+        </button>
+        <button id="btn-salvar-boletos-contas" type="button"
+                class="px-3 py-1.5 text-xs rounded-md text-white bg-teal-600 hover:bg-teal-700">
+          Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<?!= App_incluirHtml('NotasFiscaisScript', true); ?>
