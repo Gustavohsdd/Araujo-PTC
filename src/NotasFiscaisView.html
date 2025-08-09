@@ -1,5 +1,31 @@
 <!-- NotasFiscaisView.html -->
 
+<style id="NotasFiscaisView_padraoProdutosCSS">
+  /* Scrollbar suave (igual Produtos) */
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #c5c5c5; border-radius: 10px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+  /* Hover/seleção de linhas - TABELA INTERATIVA (copiado do Produtos) */
+  .tabela-interativa tbody tr { cursor: pointer; }
+  .tabela-interativa tbody tr:hover { background-color: #f1f5f9; /* slate-100 */ }
+  .tabela-interativa tbody tr.linha-selecionada { background-color: #bae6fd !important; /* sky-200 */ }
+  .tabela-interativa tbody tr.linha-selecionada td { color: #075985; /* sky-700 */ }
+  .tabela-interativa tbody tr.linha-selecionada:hover { background-color: #bae6fd !important; }
+
+  /* (Opcional) Botões de paginação iguais ao Produtos */
+  .btn-paginacao {
+    padding-top: 0.25rem; padding-bottom: 0.25rem;
+    padding-left: 0.75rem; padding-right: 0.75rem;
+    border-width: 1px; border-color: #D1D5DB;
+    background-color: #FFFFFF; color: #374151;
+    border-radius: 0.375rem; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);
+  }
+  .btn-paginacao:hover { background-color: #F9FAFB; }
+  .btn-paginacao:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+
 <!-- Card principal -->
 <div id="NotasFiscaisView_container" class="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden relative">
 
@@ -74,25 +100,59 @@
   </div>
 
   <!-- Tabela de Notas Fiscais (compacta, sem scroll horizontal) -->
-  <div class="relative shadow-md sm:rounded-lg">
-    <table class="w-full table-fixed text-xs text-left text-gray-700 leading-tight">
-      <thead class="text-[11px] text-gray-700 uppercase bg-gray-100">
+        <!-- === ACTION BAR FIXA (PADRÃO PRODUTOS) === -->
+<div id="NotasFiscaisView_actionBarWrapper" class="sticky top-0 z-10">
+  <div id="NotasFiscaisView_actionBar" class="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 shadow-sm">
+    <button id="NotasFiscaisView_btnClassificarSelecionada"
+            class="px-3 py-2 rounded-md text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+            title="Editar classificação da nota selecionada">
+      Classificar
+    </button>
+
+    <button id="NotasFiscaisView_btnDesfazerSelecionada"
+            class="px-3 py-2 rounded-md text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+            title="Desfazer conciliação da nota selecionada">
+      Desfazer
+    </button>
+
+    <button id="NotasFiscaisView_btnFinanceiroSelecionada"
+            class="px-3 py-2 rounded-md text-white bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+            title="Abrir financeiro / faturas da nota selecionada">
+      Financeiro
+    </button>
+
+    <!-- Espaçador -->
+    <div class="flex-1"></div>
+
+    <!-- Indicador da seleção -->
+    <div id="NotasFiscaisView_statusSelecao" class="text-sm text-gray-600">
+      Nenhuma nota selecionada
+    </div>
+  </div>
+</div>
+
+  
+  <div class="bg-white shadow-xl rounded-lg overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="min-w-full table-auto tabela-interativa" id="NotasFiscaisView_tabelaNotas">
+      <thead class="bg-blue-600 text-white uppercase text-sm leading-normal">
         <tr>
-            <th scope="col" class="px-2 py-2 w-[10%]">Nº NF</th>
-            <th scope="col" class="px-2 py-2 w-[26%]">Emitente</th>
-            <th scope="col" class="px-2 py-2 w-[16%]">CNPJ</th>
-            <th scope="col" class="px-2 py-2 w-[12%]">Emissão</th>
-            <th scope="col" class="px-2 py-2 w-[14%]">Status</th>
-            <th scope="col" class="px-2 py-2 w-[12%]">Valor Total</th>
-            <th scope="col" class="px-2 py-2 w-[10%]">Ações</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wider w-[10%]">Nº NF</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wider w-[26%]">Emitente</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wider w-[16%]">CNPJ</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wider w-[12%]">Emissão</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wider w-[14%]">Status</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wider w-[12%]">Valor Total</th>
         </tr>
-        </thead>
-      <tbody id="tabela-notas-fiscais-body">
+      </thead>
+      <tbody id="tabela-notas-fiscais-body" class="text-gray-800 text-sm font-light divide-y divide-gray-200">
         <!-- Linhas via script -->
       </tbody>
     </table>
   </div>
-
 </div>
 
 <!-- =========================
