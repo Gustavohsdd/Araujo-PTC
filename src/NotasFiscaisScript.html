@@ -218,26 +218,83 @@ function NotasFiscaisScript_salvarClassificacao() {
 
 // helper para inputs
 function NotasFiscaisScript_rowInput(name, value, attrs='') {
-  value = value == null ? '' : value;
-  return `<input name="${name}" value="${value}" ${attrs}
-           class="w-full h-8 px-2 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">`;
+  value = (value == null ? '' : value);
+  const isReadOnly = /\breadonly\b/i.test(attrs) || /\bdisabled\b/i.test(attrs);
+
+  // Classe base + variação para bloqueado
+  const cls = [
+    'w-full', 'h-8', 'px-2', 'text-xs',
+    'border', 'border-gray-300', 'rounded-md',
+    'focus:outline-none'
+  ];
+  if (isReadOnly) {
+    cls.push('bg-gray-100', 'text-gray-600', 'cursor-not-allowed'); // Aparência de bloqueado
+  } else {
+    cls.push('bg-white', 'focus:ring-1', 'focus:ring-blue-500');
+  }
+
+  return `<input name="${name}" value="${value}" ${attrs} class="${cls.join(' ')}">`;
 }
 
-/** Abre modal Financeiro e carrega faturas/contas */
+function NotasFiscaisScript_parseNumeroFlex(v) {
+  if (v == null) return NaN;
+  let s = String(v).trim();
+  if (s === '') return NaN;
+
+  const hasComma = s.indexOf(',') !== -1;
+  const hasDot   = s.indexOf('.') !== -1;
+
+  if (hasComma && hasDot) {
+    // Quando tem vírgula e ponto, o ÚLTIMO separador costuma ser o decimal.
+    const lastComma = s.lastIndexOf(',');
+    const lastDot   = s.lastIndexOf('.');
+    const decimalSep = lastComma > lastDot ? ',' : '.';
+    const thousandSep = decimalSep === ',' ? '.' : ',';
+    s = s.split(thousandSep).join('');
+    s = s.replace(decimalSep, '.');
+  } else if (hasComma) {
+    // Só vírgula: vírgula é decimal; pontos (se houver) são milhares.
+    s = s.split('.').join('');
+    s = s.replace(',', '.');
+  } else if (hasDot) {
+    // Só ponto: trata como decimal, mas se houver vários pontos, mantém só o último como decimal.
+    const parts = s.split('.');
+    if (parts.length > 2) {
+      const frac = parts.pop();
+      s = parts.join('') + '.' + frac;
+    }
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function NotasFiscaisScript_formatarDuasCasas(v) {
+  const n = NotasFiscaisScript_parseNumeroFlex(v);
+  if (isNaN(n)) return '';
+  return n.toFixed(2);
+}
+
+/**
+ * NotasFiscaisScript_abrirModalBoletos
+ * Abre o modal e injeta placeholders com colspans corretos (Faturas=4, Contas=6)
+ */
 function NotasFiscaisScript_abrirModalBoletos(chaveAcesso, numeroNF) {
   NotasFiscaisScript_state.chaveAcessoAtual = chaveAcesso;
   NotasFiscaisScript_state.numeroNFAtual = numeroNF;
 
   NotasFiscaisScript_openModalById('modalEditarBoletos');
 
-  // Render vazio enquanto busca
+  // Placeholders enquanto busca (colspan: Faturas=4, Contas=6)
   const tFat = document.getElementById('tabela-faturas-body');
   const tCap = document.getElementById('tabela-contas-a-pagar-body');
-  if (tFat) tFat.innerHTML = `<tr><td colspan="5" class="px-2 py-2 text-center text-xs text-gray-500">Carregando...</td></tr>`;
-  if (tCap) tCap.innerHTML = `<tr><td colspan="7" class="px-2 py-2 text-center text-xs text-gray-500">Carregando...</td></tr>`;
+  if (tFat) tFat.innerHTML = `<tr><td colspan="4" class="px-2 py-2 text-center text-xs text-gray-500">Carregando...</td></tr>`;
+  if (tCap) tCap.innerHTML = `<tr><td colspan="6" class="px-2 py-2 text-center text-xs text-gray-500">Carregando...</td></tr>`;
 
-  // Buscar no backend
+  // Carrega dados financeiros (linhas do modal)
   NotasFiscaisScript_carregarResumoFinanceiro(chaveAcesso);
+
+  // Carrega sugestões de Centro de Custo (datalist) e aplica nos campos
+  NotasFiscaisScript_carregarSugestoesCentroCusto();
 }
 
 /** Busca faturas e contas no controller e renderiza inputs editáveis */
@@ -266,59 +323,80 @@ function NotasFiscaisScript_carregarResumoFinanceiro(chaveAcesso) {
     .NotasFiscaisController_obterResumoFinanceiroDaNF(chaveAcesso);
 }
 
-/** Renderiza as Faturas como linhas com inputs (aderente aos cabeçalhos do backend) */
+/**
+ * NotasFiscaisScript_renderFaturas
+ * Mantém apenas: Chave de Acesso (bloqueada), Número da Parcela, Data de Vencimento, Valor da Parcela.
+ * (Remove o antigo "Número da Fatura" que estava causando o desalinhamento.)
+ */
 function NotasFiscaisScript_renderFaturas(faturas) {
   const tbody = document.getElementById('tabela-faturas-body');
   if (!tbody) return;
   tbody.innerHTML = '';
 
   const chave = NotasFiscaisScript_state.chaveAcessoAtual || '';
-  (faturas || []).forEach(f => {
-    const tr = document.createElement('tr');
-    const numFat = f['Número da Fatura'] || f['Numero da Fatura'] || '';
-    const numPar = f['Número da Parcela'] || f['Numero da Parcela'] || f['Parcela'] || '';
-    const venc   = f['Data de Vencimento'] || f['Vencimento'] || '';
-    const val    = f['Valor da Parcela'] || f['Valor'] || '';
 
+  (faturas || []).forEach(f => {
+    const numPar = f['Número da Parcela'] || f['Numero da Parcela'] || f['Parcela'] || '';
+    const venc   = (f['Data de Vencimento'] || f['Vencimento'] || '');
+    const val    = NotasFiscaisScript_formatarDuasCasas(f['Valor da Parcela'] || f['Valor'] || '');
+
+    const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Fatura', numFat)}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Parcela', numPar)}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento', (venc||'').toString().slice(0,10), 'type="date"')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela', val, 'inputmode="decimal"')}</td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly tabindex="-1"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Número da Parcela', numPar)}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Data de Vencimento', (venc||'').toString().slice(0,10), 'type="date"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Valor da Parcela', val, 'inputmode="decimal" onblur="this.value=NotasFiscaisScript_formatarDuasCasas(this.value)"')}
+      </td>
     `;
     tbody.appendChild(tr);
   });
 
-  // Se não houver linhas, deixa pelo menos uma em branco para edição
   if (!tbody.children.length) {
     NotasFiscaisScript_adicionarLinhaTabela('tabela-faturas-body', true);
   }
 }
 
-/** Renderiza Contas a Pagar com inputs (mapeando para os cabeçalhos do backend) */
 function NotasFiscaisScript_renderContasAPagar(linhas) {
   const tbody = document.getElementById('tabela-contas-a-pagar-body');
   if (!tbody) return;
   tbody.innerHTML = '';
 
   const chave = NotasFiscaisScript_state.chaveAcessoAtual || '';
+
   (linhas || []).forEach(l => {
-    const resumo = l['Resumo dos Itens'] || l['Título'] || l['Descricao'] || '';
-    const venc   = l['Data de Vencimento'] || l['Vencimento'] || '';
-    const valor  = l['Valor da Parcela'] || l['Valor por Setor'] || l['Valor'] || '';
-    const setor  = l['Setor'] || l['Empresa'] || '';
-    const valorSetor = l['Valor por Setor'] || '';
+    const resumo       = l['Resumo dos Itens'] || l['Título'] || l['Descricao'] || '';
+    const venc         = (l['Data de Vencimento'] || l['Vencimento'] || '');
+    const valorParcela = l['Valor da Parcela'] || l['Valor'] || '';
+    const setor        = l['Setor'] || l['Empresa'] || '';
+    const valorRateado = NotasFiscaisScript_formatarDuasCasas(l['Valor por Setor'] || l['Valor Rateado'] || '');
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Resumo dos Itens', resumo)}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento', (venc||'').toString().slice(0,10), 'type="date"')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela', valor, 'inputmode="decimal"')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Setor', setor)}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor por Setor', valorSetor, 'inputmode="decimal"')}</td>
-      <td class="px-2 py-1 text-xs"></td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly tabindex="-1"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Resumo dos Itens', resumo)}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Data de Vencimento', (venc||'').toString().slice(0,10), 'type="date"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Valor da Parcela', NotasFiscaisScript_formatarDuasCasas(valorParcela), 'inputmode="decimal" onblur="this.value=NotasFiscaisScript_formatarDuasCasas(this.value)"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Setor', setor, 'list="NotasFiscaisView_datalistCentroCusto"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Valor por Setor', valorRateado, 'inputmode="decimal" onblur="this.value=NotasFiscaisScript_formatarDuasCasas(this.value)"')}
+      </td>
     `;
     tbody.appendChild(tr);
   });
@@ -326,35 +404,62 @@ function NotasFiscaisScript_renderContasAPagar(linhas) {
   if (!tbody.children.length) {
     NotasFiscaisScript_adicionarLinhaTabela('tabela-contas-a-pagar-body', false);
   }
+
+  // Garante que todos inputs de Setor apontem para o datalist
+  NotasFiscaisScript_aplicarDatalistNosCamposCentroCusto();
 }
 
-/** Adiciona uma linha em branco (fatura ou conta) */
 function NotasFiscaisScript_adicionarLinhaTabela(tbodyId, isFatura) {
   const tbody = document.getElementById(tbodyId);
   if (!tbody) return;
+
   const chave = NotasFiscaisScript_state.chaveAcessoAtual || '';
   const tr = document.createElement('tr');
 
   if (isFatura) {
     tr.innerHTML = `
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Fatura','')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Número da Parcela','')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento','', 'type="date"')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela','', 'inputmode="decimal"')}</td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly tabindex="-1"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Número da Parcela','')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Data de Vencimento','', 'type="date"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Valor da Parcela','', 'inputmode="decimal" onblur="this.value=NotasFiscaisScript_formatarDuasCasas(this.value)"')}
+      </td>
     `;
   } else {
     tr.innerHTML = `
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Resumo dos Itens','')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Data de Vencimento','', 'type="date"')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor da Parcela','', 'inputmode="decimal"')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Setor','')}</td>
-      <td class="px-2 py-1 text-xs">${NotasFiscaisScript_rowInput('Valor por Setor','', 'inputmode="decimal"')}</td>
-      <td class="px-2 py-1 text-xs"></td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Chave de Acesso', chave, 'readonly tabindex="-1"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Resumo dos Itens','')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Data de Vencimento','', 'type="date"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Valor da Parcela','', 'inputmode="decimal" onblur="this.value=NotasFiscaisScript_formatarDuasCasas(this.value)"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Setor','', 'list="NotasFiscaisView_datalistCentroCusto"')}
+      </td>
+      <td class="px-2 py-1 text-xs">
+        ${NotasFiscaisScript_rowInput('Valor por Setor','', 'inputmode="decimal" onblur="this.value=NotasFiscaisScript_formatarDuasCasas(this.value)"')}
+      </td>
     `;
   }
+
   tbody.appendChild(tr);
+
+  // Se for contas, aplica o datalist no novo campo Setor
+  if (!isFatura) {
+    NotasFiscaisScript_aplicarDatalistNosCamposCentroCusto();
+  }
 }
 
 /** Salva faturas e contas (chama 2 endpoints em sequência) */
@@ -748,6 +853,76 @@ function NotasFiscaisScript_toggleLoader(show) {
   } catch (e) {
     console.error('Falha ao alternar loader:', e);
   }
+}
+
+// Cache local de sugestões
+let NotasFiscaisScript_cacheSetoresCentroCusto = [];
+
+/**
+ * NotasFiscaisScript_injetarDatalistCentroCusto
+ * Garante a existência do <datalist id="NotasFiscaisView_datalistCentroCusto"> dentro do modal e popula as opções.
+ */
+function NotasFiscaisScript_injetarDatalistCentroCusto(opcoes) {
+  const modal = document.getElementById('modalEditarBoletos');
+  if (!modal) return;
+
+  let dl = document.getElementById('NotasFiscaisView_datalistCentroCusto');
+  if (!dl) {
+    dl = document.createElement('datalist');
+    dl.id = 'NotasFiscaisView_datalistCentroCusto';
+    // insere no modal para ficar disponível aos inputs
+    modal.appendChild(dl);
+  }
+  dl.innerHTML = '';
+  (opcoes || []).forEach(txt => {
+    const opt = document.createElement('option');
+    opt.value = txt;
+    dl.appendChild(opt);
+  });
+}
+
+/**
+ * NotasFiscaisScript_aplicarDatalistNosCamposCentroCusto
+ * Aponta todos inputs name="Setor" para usar o datalist como sugestão (não obrigatório).
+ */
+function NotasFiscaisScript_aplicarDatalistNosCamposCentroCusto() {
+  const modal = document.getElementById('modalEditarBoletos');
+  if (!modal) return;
+  const campos = modal.querySelectorAll('input[name="Setor"]');
+  campos.forEach(inp => { inp.setAttribute('list', 'NotasFiscaisView_datalistCentroCusto'); });
+}
+
+/**
+ * NotasFiscaisScript_carregarSugestoesCentroCusto
+ * Chama o controller, popula o datalist e aplica nos campos "Setor".
+ */
+function NotasFiscaisScript_carregarSugestoesCentroCusto() {
+  if (NotasFiscaisScript_cacheSetoresCentroCusto.length) {
+    // já temos cache: só injeta e aplica
+    NotasFiscaisScript_injetarDatalistCentroCusto(NotasFiscaisScript_cacheSetoresCentroCusto);
+    NotasFiscaisScript_aplicarDatalistNosCamposCentroCusto();
+    return;
+  }
+
+  if (typeof google === 'undefined' || !google.script || !google.script.run) {
+    console.warn('[NF] carregarSugestoesCentroCusto: ambiente inválido (google.script.run).');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(resp => {
+      if (resp && resp.success && Array.isArray(resp.dados)) {
+        NotasFiscaisScript_cacheSetoresCentroCusto = resp.dados.slice(0);
+        NotasFiscaisScript_injetarDatalistCentroCusto(NotasFiscaisScript_cacheSetoresCentroCusto);
+        NotasFiscaisScript_aplicarDatalistNosCamposCentroCusto();
+      } else {
+        console.warn('[NF] Sugestões centro de custo: resposta inválida.', resp);
+      }
+    })
+    .withFailureHandler(err => {
+      console.error('[NF] Falha ao carregar sugestões de centro de custo:', err);
+    })
+    .NotasFiscaisController_listarSetoresRegrasRateio();
 }
 
 // Chamada inicial

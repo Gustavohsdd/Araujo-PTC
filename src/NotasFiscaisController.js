@@ -156,3 +156,18 @@ function NotasFiscaisController_ping() {
     return { success: false, message: 'Falha no ping: ' + e.message };
   }
 }
+
+/**
+ * NotasFiscaisController_listarSetoresRegrasRateio
+ * Controller para expor a lista de setores do rateio ao frontend.
+ * @returns {{success:boolean, dados?: string[], message?: string}}
+ */
+function NotasFiscaisController_listarSetoresRegrasRateio() {
+  try {
+    var setores = NotasFiscaisCRUD_listarSetoresRegrasRateio();
+    return { success: true, dados: setores };
+  } catch (e) {
+    Logger.log('ERRO em NotasFiscaisController_listarSetoresRegrasRateio: ' + e.toString() + '\n' + e.stack);
+    return { success: false, message: 'Erro ao listar setores do rateio: ' + e.message };
+  }
+}

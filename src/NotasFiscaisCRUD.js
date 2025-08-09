@@ -302,3 +302,59 @@ function NotasFiscaisCRUD_substituirContasAPagarDaNF(chaveAcesso, linhas) {
     }
   }
 }
+
+/**
+ * NotasFiscaisCRUD_listarSetoresRegrasRateio
+ * Lê a aba "RegrasRateio" (coluna "Setor") e retorna uma lista ÚNICA e ordenada.
+ * Tenta encontrar a aba pelos nomes/constantes mais comuns; lança erro se não achar.
+ */
+function NotasFiscaisCRUD_listarSetoresRegrasRateio() {
+  // Abre a planilha financeira por padrão (onde normalmente fica o rateio)
+  var planilha;
+  if (typeof ID_PLANILHA_FINANCEIRO !== 'undefined' && ID_PLANILHA_FINANCEIRO) {
+    planilha = SpreadsheetApp.openById(ID_PLANILHA_FINANCEIRO);
+  } else if (typeof ID_PLANILHA_NF !== 'undefined' && ID_PLANILHA_NF) {
+    // fallback: se não tiver a financeira, tenta na planilha das NFs
+    planilha = SpreadsheetApp.openById(ID_PLANILHA_NF);
+  } else {
+    throw new Error('ID da planilha não definido (ID_PLANILHA_FINANCEIRO/ID_PLANILHA_NF).');
+  }
+
+  // Tenta achar a aba pelo nome/constante
+  var nomesPossiveis = [];
+  if (typeof ABA_FINANCEIRO_REGRAS_RATEIO !== 'undefined') nomesPossiveis.push(ABA_FINANCEIRO_REGRAS_RATEIO);
+  if (typeof ABA_REGRAS_RATEIO !== 'undefined') nomesPossiveis.push(ABA_REGRAS_RATEIO);
+  nomesPossiveis.push('RegrasRateio'); // nome literal mais comum
+
+  var aba = null;
+  for (var i = 0; i < nomesPossiveis.length && !aba; i++) {
+    aba = planilha.getSheetByName(nomesPossiveis[i]);
+  }
+  if (!aba) throw new Error('Aba "RegrasRateio" não encontrada nas planilhas esperadas.');
+
+  if (aba.getLastRow() < 2) return [];
+
+  var headers = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+  // Procura o índice da coluna "Setor" (tolerante a caixa/acentos básicos)
+  var idxSetor = -1;
+  for (var c = 0; c < headers.length; c++) {
+    var h = String(headers[c] || '').trim().toLowerCase();
+    if (h === 'setor' || h === 'centro de custo' || h === 'centro_de_custo') {
+      idxSetor = c; break;
+    }
+  }
+  if (idxSetor === -1) throw new Error('Coluna "Setor" não encontrada na aba RegrasRateio.');
+
+  var values = aba.getRange(2, idxSetor + 1, aba.getLastRow() - 1, 1).getValues();
+  var mapUniq = Object.create(null);
+  for (var r = 0; r < values.length; r++) {
+    var v = String(values[r][0] || '').trim();
+    if (!v) continue;
+    var key = v.toLowerCase();
+    if (!mapUniq[key]) mapUniq[key] = v; // mantém o primeiro casing encontrado
+  }
+
+  var lista = Object.keys(mapUniq).map(function(k){ return mapUniq[k]; });
+  lista.sort(function(a,b){ return a.localeCompare(b, 'pt-BR'); });
+  return lista;
+}
