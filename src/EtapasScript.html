@@ -13,8 +13,7 @@ console.log("CONFIRMADO: Arquivo EtapasScript.html carregado com sucesso - Vers�
 
 // ADIÇÃO DE NOVA CONSTANTE DE EXIBIÇÃO PARA A ETAPA 5
 const EtapasScript_COLUNAS_A_EXIBIR_FATURAMENTO = [
-  "SubProduto", "Fornecedor", "Tamanho", "UN", "Fator", 
-  "Preço", "Preço por Fator", "Comprar", "Valor Total", "Empresa Faturada"
+  "SubProduto", "Preço", "Preço por Fator", "Comprar", "Valor Total", "Empresa Faturada"
 ];
 
 
@@ -647,7 +646,7 @@ function EtapasScript_formatarMoeda(numero) {
 /**
  * Ponto de entrada para a Etapa 5 (versão Modal). Prepara e exibe o modal.
  * SUBSTITUI a implementação antiga.
- * VERSÃO CORRIGIDA com tratamento de erro que fecha o modal.
+ * VERSÃO CORRIGIDA com tratamento de erro que fecha o modal e com salvamento em lote.
  */
 function EtapasScript_ativarModoDefinirEmpresa() {
     console.log("EtapasScript: Ativando modo Definir Empresa para Faturamento (Modal).");
@@ -660,11 +659,9 @@ function EtapasScript_ativarModoDefinirEmpresa() {
         return;
     }
     
-    // Abre o modal ANTES da chamada de servidor para que o usuário veja o feedback de carregamento
     modalOverlay.classList.add('active'); 
     EtapasScript_exibirFeedbackModalDefinirEmpresa("Carregando dados para faturamento...", false, 0);
 
-    // Chama o servidor para obter a lista de empresas e pedidos mínimos
     google.script.run
         .withSuccessHandler(response => {
             if (response && response.success) {
@@ -682,34 +679,39 @@ function EtapasScript_ativarModoDefinirEmpresa() {
                 
                 EtapasScript_exibirFeedbackModalDefinirEmpresa("Selecione a empresa para faturamento de cada item.", false, 8000);
             } else {
-                // Em caso de falha, exibe o erro e FECHA o modal
                 EtapasScript_exibirFeedbackModalDefinirEmpresa(response.message || "Falha ao carregar dados da Etapa 5.", true, 5000);
                 setTimeout(() => {
-                    EtapasScript_fecharModalDefinirEmpresa(); // <-- SUBSTITUIÇÃO CORRETA
-                }, 5000); // Dá tempo para o usuário ler o erro antes de fechar
+                    EtapasScript_fecharModalDefinirEmpresa();
+                }, 5000);
             }
         })
         .withFailureHandler(err => {
-            // Em caso de erro de comunicação, também exibe o erro e FECHA o modal
             EtapasScript_exibirFeedbackModalDefinirEmpresa("Erro de comunicação com o servidor: " + err.message, true, 5000);
             setTimeout(() => {
-                EtapasScript_fecharModalDefinirEmpresa(); // <-- SUBSTITUIÇÃO CORRETA
+                EtapasScript_fecharModalDefinirEmpresa();
             }, 5000);
         })
         .EtapasController_obterDadosParaEtapaFaturamento();
     
-    // Atualiza o status da cotação em paralelo
     google.script.run.EtapasController_atualizarStatusCotacao(CotacaoIndividualScript_cotacaoIdAtual, "Definindo Empresa para Faturamento");
+
 
     // Configura os botões do modal
     const btnFechar = document.getElementById('EtapasScript_btnFecharModalDefinirEmpresa');
     const btnConcluir = document.getElementById('EtapasScript_btnConcluirModalDefinirEmpresa');
+    const btnSalvar = document.getElementById('EtapasScript_btnSalvarFaturamento');
+            if (btnSalvar) {
+        btnSalvar.removeEventListener('click', EtapasScript_salvarFaturamentoEmLote);
+        btnSalvar.addEventListener('click', EtapasScript_salvarFaturamentoEmLote);
+        }
     
     btnFechar.removeEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
     btnConcluir.removeEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
+    btnSalvar.removeEventListener('click', EtapasScript_salvarFaturamentoEmLote);
     
     btnFechar.addEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
     btnConcluir.addEventListener('click', EtapasScript_fecharModalDefinirEmpresa);
+    btnSalvar.addEventListener('click', EtapasScript_salvarFaturamentoEmLote);
 }
 
 
@@ -717,12 +719,11 @@ function EtapasScript_ativarModoDefinirEmpresa() {
  * Atualiza o painel de totais global DENTRO DO MODAL.
  * SUBSTITUI a implementação antiga.
  */
+// EtapasScript.html
 function EtapasScript_atualizarDashboardGlobal() {
-    // Escopo da busca é o modal da Etapa 5
     const modalOverlay = document.getElementById('EtapasScript_modalDefinirEmpresaOverlay');
     if (!modalOverlay) return;
 
-    // Busca o dashboard global com o ID correto do modal
     const dashboardContainer = modalOverlay.querySelector('#etapa5-global-dashboard-modal');
     if (!dashboardContainer) return;
 
@@ -737,13 +738,13 @@ function EtapasScript_atualizarDashboardGlobal() {
         const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
 
         if (empresaCell && valorTotalCell) {
-            const empresa = empresaCell.textContent.trim();
-            if (empresa) {
-                const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
-                if (!totaisGlobais[empresa]) totaisGlobais[empresa] = 0;
-                totaisGlobais[empresa] += valor;
-                grandeTotal += valor;
-            }
+            const select = empresaCell.querySelector('select');
+            const empresa = (select ? select.value : (empresaCell.textContent || '').trim()) || 'Não Definido';
+            const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+
+            if (!totaisGlobais[empresa]) totaisGlobais[empresa] = 0;
+            totaisGlobais[empresa] += valor;
+            grandeTotal += valor;
         }
     });
 
@@ -773,6 +774,7 @@ function EtapasScript_atualizarDashboardGlobal() {
     dashboardContainer.innerHTML = dashboardHTML;
 }
 
+
 /**
  * Renderiza a tabela e os controles do modo Faturamento DENTRO dos containers do modal.
  * SUBSTITUI a implementação antiga.
@@ -801,19 +803,9 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados, controlsCo
     tabela.className = 'sticky-header-table';
     const thead = tabela.createTHead();
     const tbody = tabela.createTBody();
-
-    // Conecta o manipulador de navegação do teclado ao tbody do modal.
-    if (typeof CotacaoIndividualScript_handleTableNavigation === 'function') {
-        tbody.addEventListener('keydown', CotacaoIndividualScript_handleTableNavigation);
-    } else {
-        console.error("Função 'CotacaoIndividualScript_handleTableNavigation' não encontrada. A navegação por teclado no modal não funcionará.");
-    }
-
     tableContainer.appendChild(tabela);
 
     const cabecalhosVisiveis = EtapasScript_COLUNAS_A_EXIBIR_FATURAMENTO;
-    const colunasEditaveisInput = ["SubProduto", "Tamanho", "UN", "Fator", "Preço", "Comprar"];
-    const colunasEditaveisSelect = ["Empresa Faturada"];
 
     const trHeader = thead.insertRow();
     cabecalhosVisiveis.forEach(texto => {
@@ -837,14 +829,29 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados, controlsCo
         const fornecedorCell = fornecedorRow.insertCell();
         fornecedorCell.colSpan = cabecalhosVisiveis.length;
         
-        fornecedorCell.innerHTML = `
-            <div class="categoria-header-content" style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
-                <div style="display: flex; align-items: center;">
-                    <svg class="categoria-accordion-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-                    <span style="margin-left: 8px;">Fornecedor: <strong>${fornecedor}</strong></span>
-                </div>
-                <div id="total-header-${fornecedorClass}"></div>
-            </div>`;
+        // NOVO: Adiciona o select para aplicação em massa
+        const selectMassa = document.createElement('select');
+        selectMassa.className = 'aplicar-massa-empresa';
+        selectMassa.innerHTML = `<option value="">Aplicar a todos...</option>` + EtapasScript_empresasParaFaturamento.map(e => `<option value="${e}">${e}</option>`).join('');
+        selectMassa.onchange = (e) => { 
+            e.stopPropagation(); 
+            EtapasScript_aplicarEmpresaParaFornecedor(fornecedor, e.target.value); 
+        };
+
+        const headerContainer = document.createElement('div');
+        headerContainer.style.cssText = 'display: flex; justify-content: space-between; width: 100%; align-items: center;';
+        headerContainer.innerHTML = `
+            <div style="display: flex; align-items: center; flex-grow: 1;">
+                <svg class="categoria-accordion-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+                <span style="margin-left: 8px;">Fornecedor: <strong>${fornecedor}</strong></span>
+            </div>
+            <div id="total-header-${fornecedorClass}"></div>
+        `;
+        const selectContainer = document.createElement('div');
+        selectContainer.style.marginLeft = '20px';
+        selectContainer.appendChild(selectMassa);
+        headerContainer.querySelector(`#total-header-${fornecedorClass}`).before(selectContainer);
+        fornecedorCell.appendChild(headerContainer);
 
         const dashboardRow = tbody.insertRow();
         dashboardRow.className = `etapa5-content-row ${fornecedorClass} hidden`;
@@ -862,30 +869,32 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados, controlsCo
 
             cabecalhosVisiveis.forEach(cabecalho => {
                 const td = subRow.insertCell();
-                let valor = subProduto[cabecalho];
-                let fmt;
-                if (typeof valor === 'number') {
-                    const fractionDigits = { 'Fator': 4, 'Preço por Fator': 4, 'Preço': 2, 'Comprar': 2, 'Valor Total': 2, 'Economia em Cotação': 2 };
-                    fmt = valor.toLocaleString('pt-BR', { minimumFractionDigits: fractionDigits[cabecalho] || 2, maximumFractionDigits: fractionDigits[cabecalho] || 2 });
-                } else {
-                    fmt = valor == null ? "" : String(valor);
-                }
-                
-                td.textContent = fmt;
                 td.dataset.coluna = cabecalho;
-                td.dataset.valorOriginal = fmt;
-
                 const classeCor = window.CotacaoIndividualScript_getClasseCorColuna(cabecalho);
                 if (classeCor) td.classList.add(classeCor);
 
-                if (colunasEditaveisSelect.includes(cabecalho)) {
-                    td.classList.add('editable-select-cell', 'editable-price-cell');
-                    td.tabIndex = 0;
-                    td.addEventListener('click', (e) => CotacaoIndividualScript_transformarCelulaEmSelect(e, EtapasScript_empresasParaFaturamento));
-                } else if (colunasEditaveisInput.includes(cabecalho)) {
-                    td.classList.add('editable-price-cell');
-                    td.tabIndex = 0;
-                    td.addEventListener('click', CotacaoIndividualScript_transformarCelulaEmInput);
+                if (cabecalho === "Empresa Faturada") {
+                    td.classList.add('editable-select-cell');
+                    const select = document.createElement('select');
+                    select.className = 'inline-edit-input';
+                    select.innerHTML = `<option value="">Selecione...</option>` + EtapasScript_empresasParaFaturamento.map(e => 
+                        `<option value="${e}" ${subProduto[cabecalho] === e ? 'selected' : ''}>${e}</option>`
+                    ).join('');
+                    select.addEventListener('change', () => {
+                        EtapasScript_atualizarDashboardFornecedor(fornecedor);
+                        EtapasScript_atualizarDashboardGlobal();
+                    });
+                    td.appendChild(select);
+                } else {
+                    let valor = subProduto[cabecalho];
+                    let fmt;
+                    if (typeof valor === 'number') {
+                        const fractionDigits = { 'Preço por Fator': 4, 'Preço': 2, 'Comprar': 2, 'Valor Total': 2 };
+                        fmt = valor.toLocaleString('pt-BR', { minimumFractionDigits: fractionDigits[cabecalho] || 2, maximumFractionDigits: fractionDigits[cabecalho] || 2 });
+                    } else {
+                        fmt = valor == null ? "" : String(valor);
+                    }
+                    td.textContent = fmt;
                 }
             });
         });
@@ -904,12 +913,105 @@ function EtapasScript_renderizarTabelaModoFaturamento(dadosAgrupados, controlsCo
 }
 
 /**
- * Atualiza o painel de totais de um fornecedor específico DENTRO DO MODAL.
- * SUBSTITUI a implementação antiga.
- * @param {string} fornecedor - O nome do fornecedor.
+ * NOVA FUNÇÃO: Aplica uma empresa de faturamento para todos os itens de um fornecedor no modal.
+ * @param {string} fornecedor O nome do fornecedor.
+ * @param {string} empresa A empresa selecionada para aplicar em massa.
  */
+function EtapasScript_aplicarEmpresaParaFornecedor(fornecedor, empresa) {
+    console.log(`Aplicando empresa '${empresa}' para todos os itens do fornecedor '${fornecedor}'.`);
+    const modalOverlay = document.getElementById('EtapasScript_modalDefinirEmpresaOverlay');
+    if (!modalOverlay) return;
+
+    const linhasDoFornecedor = modalOverlay.querySelectorAll(`tr[data-fornecedor="${fornecedor}"].sub-produto-row`);
+    
+    linhasDoFornecedor.forEach(row => {
+        const selectCell = row.querySelector('td[data-coluna="Empresa Faturada"] select');
+        if (selectCell) {
+            selectCell.value = empresa;
+        }
+    });
+
+    // Atualiza os dashboards para refletir a mudança em massa
+    EtapasScript_atualizarDashboardFornecedor(fornecedor);
+    EtapasScript_atualizarDashboardGlobal();
+}
+
+/**
+ * NOVA FUNÇÃO: Coleta apenas os itens que tiveram a "Empresa Faturada" alterada no modal.
+ * @returns {Array<object>} Lista de objetos com os dados dos itens alterados.
+ */
+function EtapasScript_coletarAlteracoesFaturamento() {
+    const alteracoes = [];
+    const todasLinhasDoModal = document.querySelectorAll('#EtapasScript_modalDefinirEmpresaOverlay .sub-produto-row');
+
+    todasLinhasDoModal.forEach(row => {
+        const identificadores = {
+            Produto: row.dataset.produto,
+            SubProdutoChave: row.dataset.subprodutoOriginalPersistido,
+            Fornecedor: row.dataset.fornecedor
+        };
+
+        const itemOriginal = CotacaoIndividualScript_dadosOriginaisCotacao.find(item => 
+            item.Produto === identificadores.Produto &&
+            item._subProdutoOriginalPersistido === identificadores.SubProdutoChave &&
+            item.Fornecedor === identificadores.Fornecedor
+        );
+
+        const selectEmpresa = row.querySelector('td[data-coluna="Empresa Faturada"] select');
+        if (selectEmpresa && itemOriginal) {
+            const novaEmpresa = selectEmpresa.value;
+            const empresaOriginal = itemOriginal["Empresa Faturada"] || "";
+            
+            if (novaEmpresa !== empresaOriginal) {
+                alteracoes.push({
+                    ...identificadores,
+                    "Empresa Faturada": novaEmpresa
+                });
+            }
+        }
+    });
+
+    console.log("Alterações de faturamento coletadas:", alteracoes);
+    return alteracoes;
+}
+
+/**
+ * NOVA FUNÇÃO: Envia as alterações de faturamento em lote para o servidor.
+ */
+function EtapasScript_salvarFaturamentoEmLote() {
+    const alteracoes = EtapasScript_coletarAlteracoesFaturamento();
+
+    if (alteracoes.length === 0) {
+        EtapasScript_exibirFeedbackModalDefinirEmpresa("Nenhuma alteração foi feita para salvar.", false, 4000);
+        return;
+    }
+
+    const btnSalvar = document.getElementById('EtapasScript_btnSalvarFaturamento');
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = 'Salvando...';
+    EtapasScript_exibirFeedbackModalDefinirEmpresa(`Salvando ${alteracoes.length} alteraçõe(s)...`, false, 0);
+
+    google.script.run
+        .withSuccessHandler(response => {
+            btnSalvar.disabled = false;
+            btnSalvar.textContent = 'Salvar e Fechar';
+            if (response && response.success) {
+                EtapasScript_fecharModalDefinirEmpresa();
+                CotacaoIndividualScript_exibirFeedback(response.message || "Faturamento salvo com sucesso! Atualizando dados...", false, 5000);
+                CotacaoIndividualScript_carregarDadosCotacao(CotacaoIndividualScript_cotacaoIdAtual);
+            } else {
+                EtapasScript_exibirFeedbackModalDefinirEmpresa(response.message || "Falha ao salvar faturamento.", true, 7000);
+            }
+        })
+        .withFailureHandler(error => {
+            btnSalvar.disabled = false;
+            btnSalvar.textContent = 'Salvar e Fechar';
+            EtapasScript_exibirFeedbackModalDefinirEmpresa("Erro de comunicação ao salvar faturamento: " + error.message, true, 7000);
+        })
+        .EtapasController_salvarEmpresasFaturadasEmLote(CotacaoIndividualScript_cotacaoIdAtual, alteracoes);
+}
+
 function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
-    // Escopo da busca é o modal da Etapa 5
     const modalOverlay = document.getElementById('EtapasScript_modalDefinirEmpresaOverlay');
     if (!modalOverlay) return;
 
@@ -927,15 +1029,15 @@ function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
     linhasFornecedor.forEach(row => {
         const empresaCell = row.querySelector('td[data-coluna="Empresa Faturada"]');
         const valorTotalCell = row.querySelector('td[data-coluna="Valor Total"]');
-        
-        if (empresaCell && valorTotalCell) {
-            const empresa = empresaCell.textContent.trim() || "Não Definido";
-            const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+        if (!empresaCell || !valorTotalCell) return;
 
-            if (!totaisPorEmpresa[empresa]) totaisPorEmpresa[empresa] = 0;
-            totaisPorEmpresa[empresa] += valor;
-            valorTotalFornecedor += valor;
-        }
+        const select = empresaCell.querySelector('select');
+        const empresa = (select ? select.value : (empresaCell.textContent || '').trim()) || 'Não Definido';
+        const valor = parseFloat(valorTotalCell.textContent.replace(/\./g, '').replace(',', '.')) || 0;
+
+        if (!totaisPorEmpresa[empresa]) totaisPorEmpresa[empresa] = 0;
+        totaisPorEmpresa[empresa] += valor;
+        valorTotalFornecedor += valor;
     });
 
     const pedidoMinimo = EtapasScript_pedidosMinimosFornecedores[String(fornecedor).trim()] || 0;
@@ -947,13 +1049,12 @@ function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
     let dashboardHTML = '<strong>Totais por Empresa de Faturamento:</strong> ';
     let todosAtingiramMinimo = true;
 
-    if (Object.keys(totaisPorEmpresa).length === 0 || (Object.keys(totaisPorEmpresa).length === 1 && totaisPorEmpresa["Não Definido"])) {
+    if (Object.keys(totaisPorEmpresa).length === 0 || (Object.keys(totaisPorEmpresa).length === 1 && totaisPorEmpresa['Não Definido'])) {
         dashboardHTML += '<span style="margin-left: 10px;">Nenhuma empresa definida para os itens.</span>';
         if (pedidoMinimo > 0) todosAtingiramMinimo = false;
     } else {
         for (const empresa in totaisPorEmpresa) {
-            if (empresa === "Não Definido") continue;
-            
+            if (empresa === 'Não Definido') continue;
             const totalEmpresa = totaisPorEmpresa[empresa];
             const atingiuMinimoEmpresa = totalEmpresa >= pedidoMinimo;
 
@@ -971,7 +1072,8 @@ function EtapasScript_atualizarDashboardFornecedor(fornecedor) {
     }
     dashboardDiv.innerHTML = dashboardHTML;
 
-    fornecedorRow.style.backgroundColor = (!todosAtingiramMinimo && pedidoMinimo > 0) ? '#FFF1F2' : '';
+    fornecedorRow.style.backgroundColor = (!todosAtingiramMinimo && pedidoMinimo > 0) ? '#fff7ed' : 'transparent';
+    fornecedorRow.style.borderLeft = (!todosAtingiramMinimo && pedidoMinimo > 0) ? '4px solid #f97316' : 'none';
 }
 
 function agruparPorChave(array, chave) {

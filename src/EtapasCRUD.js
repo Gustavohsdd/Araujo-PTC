@@ -814,3 +814,93 @@ function EtapasCRUD_buscarDadosAgrupadosParaImpressao(idCotacao) {
     return { success: false, message: "Erro no CRUD ao buscar e agrupar dados para impressão: " + error.message };
   }
 }
+
+/**
+ * NOVA FUNÇÃO: Salva um lote de alterações da coluna "Empresa Faturada" na aba 'Cotações'.
+ * @param {string} idCotacao O ID da cotação.
+ * @param {Array<object>} alteracoes Array de objetos {Produto, SubProdutoChave, Fornecedor, "Empresa Faturada"}.
+ * @returns {object} Resultado da operação { success, message, linhasAtualizadas }.
+ */
+function EtapasCRUD_salvarEmpresasFaturadasEmLote(idCotacao, alteracoes) {
+  Logger.log(`EtapasCRUD_salvarEmpresasFaturadasEmLote: Iniciando salvamento para cotação ${idCotacao}. ${alteracoes.length} alterações.`);
+  const planilha = SpreadsheetApp.getActiveSpreadsheet();
+  const abaCotacoes = planilha.getSheetByName(ABA_COTACOES);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000); // Aguarda até 30s
+  
+  let linhasAtualizadas = 0;
+
+  try {
+    if (!abaCotacoes) {
+      throw new Error(`Aba "${ABA_COTACOES}" não encontrada.`);
+    }
+
+    const range = abaCotacoes.getDataRange();
+    const values = range.getValues();
+    const headers = values[0];
+
+    const colMap = {
+      id: headers.indexOf("ID da Cotação"),
+      produto: headers.indexOf("Produto"),
+      subProduto: headers.indexOf("SubProduto"),
+      fornecedor: headers.indexOf("Fornecedor"),
+      empresaFaturada: headers.indexOf("Empresa Faturada")
+    };
+
+    // Valida se todas as colunas necessárias foram encontradas
+    for (const key in colMap) {
+      if (colMap[key] === -1) {
+        throw new Error(`Coluna obrigatória para faturamento ("${key}") não foi encontrada na aba ${ABA_COTACOES}.`);
+      }
+    }
+
+    // Criar um mapa das alterações para busca rápida
+    const mapaAlteracoes = alteracoes.reduce((acc, item) => {
+      const chave = `${item.Produto.trim()}__${item.SubProdutoChave.trim()}__${item.Fornecedor.trim()}`;
+      acc[chave] = item["Empresa Faturada"];
+      return acc;
+    }, {});
+
+    // Itera pelas linhas da planilha (a partir da segunda linha de dados)
+    for (let i = 1; i < values.length; i++) {
+      const linha = values[i];
+      if (String(linha[colMap.id]).trim() === String(idCotacao).trim()) {
+        const chaveLinha = `${String(linha[colMap.produto]).trim()}__${String(linha[colMap.subProduto]).trim()}__${String(linha[colMap.fornecedor]).trim()}`;
+        
+        if (mapaAlteracoes.hasOwnProperty(chaveLinha)) {
+          const novaEmpresa = mapaAlteracoes[chaveLinha];
+          if (String(linha[colMap.empresaFaturada]) !== novaEmpresa) {
+            values[i][colMap.empresaFaturada] = novaEmpresa; // Atualiza o valor no array
+            linhasAtualizadas++;
+          }
+        }
+      }
+    }
+
+    if (linhasAtualizadas > 0) {
+      range.setValues(values); // Escreve todo o array de valores de volta na planilha de uma vez
+      Logger.log(`${linhasAtualizadas} linha(s) tiveram a "Empresa Faturada" atualizada.`);
+      return { 
+        success: true, 
+        message: `${linhasAtualizadas} item(ns) tiveram a empresa de faturamento atualizada com sucesso.`,
+        linhasAtualizadas: linhasAtualizadas
+      };
+    } else {
+      return { 
+        success: true, 
+        message: "Nenhuma alteração de faturamento foi necessária.",
+        linhasAtualizadas: 0 
+      };
+    }
+
+  } catch (error) {
+    Logger.log(`ERRO em EtapasCRUD_salvarEmpresasFaturadasEmLote: ${error.toString()} Stack: ${error.stack}`);
+    return { 
+      success: false, 
+      message: "Erro no CRUD ao salvar faturamento em lote: " + error.message,
+      linhasAtualizadas: 0
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}

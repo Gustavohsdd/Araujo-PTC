@@ -300,7 +300,10 @@ function EtapasController_gerarDadosParaEnvioManual(idCotacao) {
             dadosParaModal.push({
               fornecedor: pedido.fornecedor,
               empresaFaturada: pedido.empresaFaturada,
-              linkPdf: linkPdfReal // Usa o link real do PDF gerado no Google Drive.
+              linkPdf: linkPdfReal, // Usa o link real do PDF gerado no Google Drive.
+              numeroCotacao: idCotacao,
+              condicaoPagamento: pedido.condicaoPagamento || 'Não informada',
+              totalPedido: pedido.totalPedido
             });
         } else {
              // Se a geração do PDF falhar, registra um log e continua para o próximo.
@@ -417,4 +420,32 @@ function EtapasController_criarArquivoPdfDoPedido(pedido, pastaDestino) {
         Logger.log(`ERRO CRÍTICO ao gerar PDF para ${pedido.fornecedor}: ${e.toString()}`);
         return null;
     }
+}
+
+/**
+ * NOVA FUNÇÃO: Controller para salvar as alterações de "Empresa Faturada" feitas no modal da Etapa 5.
+ * @param {string} idCotacao O ID da cotação.
+ * @param {Array<object>} alteracoes Um array de objetos, cada um contendo os identificadores da linha e a nova empresa.
+ * @returns {object} Resultado da operação.
+ */
+function EtapasController_salvarEmpresasFaturadasEmLote(idCotacao, alteracoes) {
+  Logger.log(`EtapasController_salvarEmpresasFaturadasEmLote: ID '${idCotacao}'. Alterações recebidas: ${alteracoes.length}`);
+  try {
+    if (!idCotacao) {
+      return { success: false, message: "ID da Cotação não fornecido." };
+    }
+    if (!alteracoes || !Array.isArray(alteracoes)) {
+      return { success: false, message: "Dados de alteração inválidos." };
+    }
+    if (alteracoes.length === 0) {
+      return { success: true, message: "Nenhuma alteração para salvar.", linhasAtualizadas: 0 };
+    }
+
+    const resultado = EtapasCRUD_salvarEmpresasFaturadasEmLote(idCotacao, alteracoes);
+    return resultado;
+
+  } catch (error) {
+    Logger.log(`ERRO em EtapasController_salvarEmpresasFaturadasEmLote: ${error.toString()} Stack: ${error.stack}`);
+    return { success: false, message: "Erro no Controller ao salvar faturamento em lote: " + error.message };
+  }
 }

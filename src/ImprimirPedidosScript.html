@@ -136,8 +136,8 @@ function ImprimirPedidosScript_renderizarPedidos(dadosAgrupados) {
                     <td>${item.subProduto}</td>
                     <td class="col-un">${item.un}</td>
                     <td class="col-qtd">${item.qtd}</td>
-                    <td class="col-valor">${formatarMoeda(item.valorUnit)}</td>
-                    <td class="col-valor">${formatarMoeda(item.valorTotal)}</td>
+                    <td class="col-valor">${ImprimirPedidosScript_formatarMoeda(item.valorUnit)}</td>
+                    <td class="col-valor">${ImprimirPedidosScript_formatarMoeda(item.valorTotal)}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -146,7 +146,7 @@ function ImprimirPedidosScript_renderizarPedidos(dadosAgrupados) {
             
             const footerTotal = document.createElement('div');
             footerTotal.className = 'total-pedido-footer';
-            footerTotal.textContent = `TOTAL DO PEDIDO: ${formatarMoeda(pedido.totalPedido)}`;
+            footerTotal.textContent = `TOTAL DO PEDIDO: ${ImprimirPedidosScript_formatarMoeda(pedido.totalPedido)}`;
             pedidoContainer.appendChild(footerTotal);
 
             containerPrincipal.appendChild(pedidoContainer);
@@ -381,7 +381,15 @@ function ImprimirPedidosScript_renderizarListaDeEnvioManual(dados) {
         copyButton.className = 'copy-button';
         copyButton.textContent = 'Copiar Mensagem + Link';
         copyButton.style.cssText = "padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 600; color: #fff; background-color: #2563eb; border: none; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s;"
+        
+        // Adiciona todos os dados necessários ao dataset do botão
         copyButton.dataset.linkPdf = pedido.linkPdf;
+        copyButton.dataset.fornecedor = pedido.fornecedor;
+        copyButton.dataset.empresa = pedido.empresaFaturada;
+        copyButton.dataset.condicao = pedido.condicaoPagamento;
+        copyButton.dataset.total = pedido.totalPedido;
+        copyButton.dataset.cotacao = pedido.numeroCotacao;
+
 
         copyButton.addEventListener('click', ImprimirPedidosScript_copiarParaAreaDeTransferencia);
 
@@ -397,10 +405,19 @@ function ImprimirPedidosScript_renderizarListaDeEnvioManual(dados) {
  */
 function ImprimirPedidosScript_copiarParaAreaDeTransferencia(event) {
     const botao = event.currentTarget;
-    const link = botao.dataset.linkPdf;
-    const mensagem = document.getElementById('ImprimirPedidosScript_generic-message').value;
+    const { linkPdf, fornecedor, empresa, condicao, total, cotacao } = botao.dataset;
+    
+    const totalFormatado = ImprimirPedidosScript_formatarMoeda(total);
+    const condicaoPagamento = condicao || "Não informada";
 
-    const textoParaCopiar = `${mensagem}\n\nLink para o pedido: ${link}`;
+    const textoParaCopiar = `Pedido ${cotacao} - ${fornecedor}
+Faturar para: ${empresa}
+Condição de Pagamento: ${condicaoPagamento}
+Valor Total: ${totalFormatado}
+
+*Atenção à forma de pagamento escolhida, qualquer coisa estou à disposição.*
+
+Link para o pedido: ${linkPdf}`;
 
     navigator.clipboard.writeText(textoParaCopiar).then(() => {
         const textoOriginal = botao.textContent;
@@ -414,6 +431,20 @@ function ImprimirPedidosScript_copiarParaAreaDeTransferencia(event) {
     }).catch(err => {
         console.error('Falha ao copiar texto: ', err);
         alert('Não foi possível copiar o texto. Por favor, copie manualmente.');
+    });
+}
+
+/**
+ * Formata um número como moeda BRL.
+ * Esta função substitui a 'formatarMoeda' genérica para seguir a convenção de nomenclatura.
+ * @param {number|string} valor - O valor a ser formatado.
+ * @returns {string} O valor formatado como moeda BRL (ex: "R$ 1.234,56").
+ */
+function ImprimirPedidosScript_formatarMoeda(valor) {
+    const numero = Number(valor) || 0;
+    return numero.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
     });
 }
 </script>

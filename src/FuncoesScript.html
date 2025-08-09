@@ -9,6 +9,33 @@
  * @description Lógica client-side para as funcionalidades do menu "Funções".
  */
 
+/**
+ * Texto padrão da mensagem de cotação mostrado no textarea
+ * (sem ID e sem nome do fornecedor — isso vai só no momento de copiar)
+ */
+const FuncoesScript_MENSAGEM_PADRAO_BASE = `Olá.
+Segue o link para a Cotação.
+Os pedidos serão fechados amanhã (terça) às 16:00.`;
+
+/**
+ * @file FuncoesScript.html
+ * Monta a mensagem final exatamente no formato desejado:
+ *
+ * [texto do textarea]
+ *
+ * [NOME DO FORNECEDOR] - Cotação([ID])
+ *
+ * Link:
+ * [link]
+ */
+function FuncoesScript_formatarMensagemCotacao(fornecedorNome, idCotacao, link, textoBase) {
+  // Mantém o texto do textarea como veio (inclusive o "D" se estiver no conteúdo),
+  // mas remove apenas espaços/quebras extras no final para não “grudar” com as próximas linhas.
+  const base = (textoBase ?? "").trimEnd();
+
+  return `${base}\n\n${fornecedorNome} - Cotação(${idCotacao})\n\nLink:\n${link}`;
+}
+
 //----------------------------------------------------------------------------------------------------
 // FUNÇÃO: GERENCIAR COTAÇÕES (PORTAL)
 //----------------------------------------------------------------------------------------------------
@@ -89,7 +116,7 @@ function FuncoesScript_renderizarConteudoGerenciarCotacoesPortal(dadosCotacoes) 
 
         const textoGlobalDiv = document.createElement('div');
         textoGlobalDiv.className = 'gerenciar-cotacoes-texto-global-cotacao';
-        const defaultTextCotacao = `Olá,\nSegue o link para a Cotação ${cotacao.idCotacao}.\nOs pedidos serão fechados hoje às 16:00.\n\nAtenciosamente,`;
+        const defaultTextCotacao = FuncoesScript_MENSAGEM_PADRAO_BASE;
         const textoSalvoCotacao = cotacao.textoPersonalizadoCotacao !== null && cotacao.textoPersonalizadoCotacao !== undefined && cotacao.textoPersonalizadoCotacao !== ""
                                     ? cotacao.textoPersonalizadoCotacao
                                     : defaultTextCotacao;
@@ -130,7 +157,13 @@ function FuncoesScript_renderizarConteudoGerenciarCotacoesPortal(dadosCotacoes) 
                 const btnCopiar = fornecedorItem.querySelector('.btn-copiar-msg-link-fornecedor');
                 btnCopiar.addEventListener('click', function() {
                     const textoCotacaoTextarea = accordionContent.querySelector(`#texto-cotacao-${cotacao.idCotacao}`);
-                    const textoParaCopiar = `${textoCotacaoTextarea.value}\nLink: ${fornecedor.link}`;
+                    const textoParaCopiar = FuncoesScript_formatarMensagemCotacao(
+                        fornecedor.nome,
+                        cotacao.idCotacao,
+                        fornecedor.link,
+                         textoCotacaoTextarea.value
+                    );
+
                     
                     navigator.clipboard.writeText(textoParaCopiar)
                         .then(() => FuncoesScript_exibirFeedbackModalGerenciarCotacoes("Mensagem e link copiados!", false, 2000))
