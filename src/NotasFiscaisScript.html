@@ -112,6 +112,8 @@ function NotasFiscaisScript_init() {
       NotasFiscaisScript_updateToolbarState();
     }
 
+    NotasFiscaisScript_fixZIndexModais();
+
     console.log('[NF] init: concluído.');
   } catch (e) {
     console.error('Falha ao iniciar Notas Fiscais:', e);
@@ -132,42 +134,84 @@ const NotasFiscaisScript_state = {
 function NotasFiscaisScript_openModalById(id) {
   const el = document.getElementById(id);
   if (!el) return;
+
+  // Garante o modal no topo absoluto
+  NotasFiscaisScript_fixZIndexModais();
+
+  // Exibe o modal
   el.classList.remove('hidden');
+
+  // Evita scroll do body enquanto o modal está aberto
+  document.body.classList.add('overflow-hidden');
+
+  // Foco no painel para acessibilidade
+  const painel = el.querySelector('.bg-white');
+  if (painel && painel.focus) {
+    painel.setAttribute('tabindex', '-1');
+    painel.focus();
+  }
 }
 function NotasFiscaisScript_closeModalById(id) {
   const el = document.getElementById(id);
   if (!el) return;
+
+  // Usa closeModal se existir; senão, apenas oculta
   if (typeof NotasFiscaisScript_closeModal === 'function') {
     NotasFiscaisScript_closeModal(el);
   } else {
     el.classList.add('hidden');
   }
+
+  // Se nenhum outro modal estiver aberto, libera o scroll do body
+  setTimeout(() => {
+    const algumAberto = document.querySelector('.fixed.inset-0:not(.hidden)');
+    if (!algumAberto) document.body.classList.remove('overflow-hidden');
+  }, 0);
 }
 
 // -----------------------------
 // CLASSIFICAÇÃO (editar/salvar)
 // -----------------------------
 function NotasFiscaisScript_ensureClassificacaoUI() {
-  const modal = document.getElementById('modalEditarClassificacao');
-  if (!modal) return;
-  const body = modal.querySelector('.p-4');
-  if (!body) return;
+  try {
+    const modal = document.getElementById('modalEditarClassificacao');
+    if (!modal) return;
 
-  // Injeta o select de status se ainda não existir
-  if (!body.querySelector('#classificacao-status')) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'space-y-2';
-    wrapper.innerHTML = `
-      <label class="block text-xs text-gray-600">Status da Conciliação</label>
-      <select id="classificacao-status" class="w-full h-9 px-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
-        <option value="Pendente">Pendente</option>
-        <option value="Conciliada">Conciliada</option>
-        <option value="Bonificação">Bonificação</option>
-        <option value="NF Tipo B">NF Tipo B</option>
-        <option value="Sem Pedido">Sem Pedido</option>
-      </select>
-    `;
-    body.appendChild(wrapper);
+    // Corpo correto do modal (div .p-4 dentro do painel branco)
+    const painel = modal.querySelector('.bg-white');
+    const body = painel ? painel.querySelector('.p-4') : null;
+    if (!body) {
+      console.warn('[NF] Corpo do modal de Classificação não encontrado (.p-4).');
+      return;
+    }
+
+    // Se por algum motivo existir um select solto fora do modal, remove
+    document.querySelectorAll('#classificacao-status').forEach(el => {
+      if (!modal.contains(el)) el.remove();
+    });
+
+    // Injeta o select de status se ainda não existir no corpo do modal
+    if (!body.querySelector('#classificacao-status')) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'space-y-2 mt-2';
+      wrapper.innerHTML = `
+        <label class="block text-xs text-gray-600">Status da Conciliação</label>
+        <select id="classificacao-status"
+                class="w-full h-9 px-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
+          <option value="Pendente">Pendente</option>
+          <option value="Conciliada">Conciliada</option>
+          <option value="Bonificação">Bonificação</option>
+          <option value="NF Tipo B">NF Tipo B</option>
+          <option value="Sem Pedido">Sem Pedido</option>
+        </select>
+      `;
+      body.appendChild(wrapper);
+    }
+
+    // Garante que o modal está por cima de tudo
+    NotasFiscaisScript_fixZIndexModais();
+  } catch (e) {
+    console.error('[NF] ensureClassificacaoUI:', e);
   }
 }
 
@@ -990,6 +1034,162 @@ function NotasFiscaisScript_aplicarEstiloConciliacaoBtn() {
   } catch (e) {
     console.warn('[NF] aplicarEstiloConciliacaoBtn:', e);
   }
+}
+
+function NotasFiscaisScript_fixZIndexModais() {
+  try {
+    const ids = ['modalEditarClassificacao', 'modalConfirmarDesfazer', 'modalEditarBoletos'];
+    ids.forEach(id => {
+      const modal = document.getElementById(id);
+      if (!modal) return;
+
+      // Overlay sempre acima de qualquer sticky/top
+      modal.style.position = 'fixed';
+      modal.style.inset = '0';
+      modal.style.zIndex = '9999'; // topo absoluto
+      // se houver classe tailwind z-*, mantenha; este inline ganha prioridade
+
+      // Painel interno do modal
+      const painel = modal.querySelector('.bg-white');
+      if (painel) {
+        painel.style.position = 'relative';
+        painel.style.zIndex = '10000';
+        // Evita qualquer corte de dropdowns em navegadores esquisitos
+        painel.style.overflow = 'visible';
+      }
+
+      // Contêiner centralizador
+      const center = modal.querySelector('.flex.items-center.justify-center');
+      if (center) {
+        center.style.position = 'absolute';
+        center.style.inset = '0';
+        center.style.zIndex = '9999';
+      }
+    });
+  } catch (e) {
+    console.warn('[NF] fixZIndexModais:', e);
+  }
+}
+
+/**
+ * NotasFiscaisScript_confirmarDesfazer
+ * Chama o controller passando chave + número da nota, fecha o modal e recarrega a lista.
+ */
+function NotasFiscaisScript_confirmarDesfazer() {
+  try {
+    if (NotasFiscaisScript_desfazendo) return; // guard contra duplo clique rápido
+
+    const chave    = (window.NotasFiscaisScript_state && window.NotasFiscaisScript_state.chaveAcessoAtual) || null;
+    const numeroNF = (window.NotasFiscaisScript_state && window.NotasFiscaisScript_state.numeroNFAtual) || null;
+
+    if (!chave) { alert('Chave da NF não definida. Selecione uma nota.'); return; }
+    if (numeroNF == null || String(numeroNF).trim() === '') { alert('Número da Nota não definido.'); return; }
+
+    // UI: trava modal + texto de processamento
+    NotasFiscaisScript_setModalDesfazerBusy(true);
+
+    // (opcional) liga loader global também
+    if (typeof NotasFiscaisScript_toggleLoader === 'function') {
+      NotasFiscaisScript_toggleLoader(true);
+    }
+
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      throw new Error('Ambiente inválido. Abra pelo link publicado do Web App.');
+    }
+
+    google.script.run
+      .withSuccessHandler(resp => {
+        if (typeof NotasFiscaisScript_toggleLoader === 'function') {
+          NotasFiscaisScript_toggleLoader(false);
+        }
+        NotasFiscaisScript_setModalDesfazerBusy(false);
+
+        if (resp && resp.success) {
+          // Fecha modal e recarrega lista
+          NotasFiscaisScript_closeModalById('modalConfirmarDesfazer');
+          if (typeof NotasFiscaisScript_buscar === 'function') {
+            NotasFiscaisScript_buscar();
+          }
+          // feedback
+          alert(resp.message || 'Conciliação desfeita com sucesso.');
+        } else {
+          const msg = (resp && resp.message) ? resp.message : 'Falha ao desfazer.';
+          alert(msg);
+        }
+      })
+      .withFailureHandler(err => {
+        if (typeof NotasFiscaisScript_toggleLoader === 'function') {
+          NotasFiscaisScript_toggleLoader(false);
+        }
+        NotasFiscaisScript_setModalDesfazerBusy(false);
+        alert('Erro ao desfazer conciliação: ' + (err && err.message ? err.message : err));
+      })
+      .NotasFiscaisController_desfazerConciliacao(chave, numeroNF);
+
+  } catch (e) {
+    if (typeof NotasFiscaisScript_toggleLoader === 'function') {
+      NotasFiscaisScript_toggleLoader(false);
+    }
+    NotasFiscaisScript_setModalDesfazerBusy(false);
+    console.error('[NF] confirmarDesfazer:', e);
+    alert('Erro ao desfazer conciliação.');
+  }
+}
+
+/**
+ * NotasFiscaisScript_abrirModalDesfazer
+ * Guarda chave/número no state e abre o modal de confirmação.
+ */
+function NotasFiscaisScript_abrirModalDesfazer(chaveAcesso, numeroNF) {
+  if (!window.NotasFiscaisScript_state) window.NotasFiscaisScript_state = {};
+  window.NotasFiscaisScript_state.chaveAcessoAtual = chaveAcesso || null;
+  window.NotasFiscaisScript_state.numeroNFAtual    = numeroNF || null;
+
+  // garante que o modal comece habilitado e com rótulo padrão
+  NotasFiscaisScript_setModalDesfazerBusy(false);
+
+  NotasFiscaisScript_openModalById('modalConfirmarDesfazer');
+}
+
+/**
+ * NotasFiscaisScript_setModalDesfazerBusy
+ * Controla estado de processamento do modal "Confirmar Desfazer":
+ * - Desabilita/abilita botões
+ * - Mostra texto "Desfazendo..." e um pequeno spinner no botão Confirmar
+ * - Define aria-busy no modal
+ */
+let NotasFiscaisScript_desfazendo = false;
+
+function NotasFiscaisScript_setModalDesfazerBusy(isBusy) {
+  const modal   = document.getElementById('modalConfirmarDesfazer');
+  const btnOk   = document.getElementById('btn-confirmar-desfazer');
+  const btnClose = modal ? modal.querySelector('[data-modal-close]') : null;
+
+  if (modal) modal.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+
+  if (btnOk) {
+    if (!btnOk.dataset.originalLabel) {
+      btnOk.dataset.originalLabel = btnOk.innerHTML;
+    }
+    btnOk.disabled = !!isBusy;
+
+    if (isBusy) {
+      btnOk.innerHTML = `
+        <span class="inline-flex items-center gap-2">
+          <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25" stroke-width="4"></circle>
+            <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="4"></path>
+          </svg>
+          Desfazendo...
+        </span>`;
+    } else {
+      btnOk.innerHTML = btnOk.dataset.originalLabel || 'Confirmar';
+    }
+  }
+
+  if (btnClose) btnClose.disabled = !!isBusy;
+
+  NotasFiscaisScript_desfazendo = !!isBusy;
 }
 
 // Chamada inicial

@@ -59,30 +59,57 @@ function NotasFiscaisController_atualizarStatusNF(chaveAcesso, novoStatus) {
 }
 
 /**
- * Desfaz a conciliação de uma NF, retornando-a ao estado "Pendente" e limpando dados financeiros.
- * @param {string} chaveAcesso A chave de acesso da NF.
- * @returns {{success: boolean, message: string}}
+ * Desfaz a conciliação de uma NF.
+ * 1) Reseta a NF para "Pendente" (e "Status do Rateio" para "Pendente")
+ * 2) Limpa campos da aba Cotações, localizando por "Número da Nota"
+ * 3) Ajusta "Status da Cotação" para "Aguardando Faturamento" (somente dos itens dessa nota)
+ * 4) Remove lançamentos de Contas a Pagar da chave
+ *
+ * @param {string} chaveAcesso
+ * @param {string|number} numeroNF
+ * @returns {{success:boolean, message:string}}
  */
-function NotasFiscaisController_desfazerConciliacao(chaveAcesso) {
+function NotasFiscaisController_desfazerConciliacao(chaveAcesso, numeroNF) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) {
     return { success: false, message: 'Outro processo está em execução. Tente novamente.' };
   }
   try {
-    Logger.log(`Controller: Iniciando processo para desfazer conciliação da NF ${chaveAcesso}`);
-    
-    // 1. Apagar lançamentos correspondentes no Contas a Pagar
+    if (!chaveAcesso) throw new Error('Chave de acesso não informada.');
+    if (numeroNF === undefined || numeroNF === null || String(numeroNF).trim() === '') {
+      throw new Error('Número da Nota não informado.');
+    }
+
+    Logger.log(`[Desfazer] Iniciando para chave=${chaveAcesso}, numeroNF=${numeroNF}`);
+
+    // 4) Remove Contas a Pagar
     NotasFiscaisCRUD_excluirContasAPagarPorChave(chaveAcesso);
-    Logger.log(`Lançamentos em Contas a Pagar para a chave ${chaveAcesso} foram excluídos.`);
 
-    // 2. Resetar o status da NF para "Pendente" e limpar ID da cotação e status do rateio
+    // 2) Limpa campos da aba Cotações por Número da Nota
+    NotasFiscaisCRUD_limparDadosCotacoesPorNumeroNota(numeroNF);
+
+    // 3) Ajusta status da cotação para "Aguardando Faturamento"
+    NotasFiscaisCRUD_atualizarStatusCotacoesPorNumeroNota(numeroNF, 'Aguardando Faturamento');
+
+    // 1) Reseta NF para "Pendente" (e rateio p/ "Pendente")
     NotasFiscaisCRUD_resetarStatusNF(chaveAcesso);
-    Logger.log(`Status da NF ${chaveAcesso} resetado para Pendente.`);
 
-    return { success: true, message: "Conciliação desfeita com sucesso! A NF está novamente pendente e os lançamentos financeiros foram removidos." };
+    // (Opcional) se existir rotina de conciliação central, tenta marcar como Pendente também
+    try {
+      if (typeof ConciliacaoNFCrud_atualizarStatusNF === 'function') {
+        ConciliacaoNFCrud_atualizarStatusNF([chaveAcesso], null, 'Pendente');
+      }
+    } catch (eOpc) {
+      Logger.log('[Desfazer] API ConciliacaoNFCrud_atualizarStatusNF não disponível. Prosseguindo mesmo assim.');
+    }
+
+    return {
+      success: true,
+      message: 'Conciliação desfeita: NF voltou a "Pendente", Cotações limpas/ajustadas e Contas a Pagar removidas.'
+    };
   } catch (e) {
-    Logger.log(`ERRO em NotasFiscaisController_desfazerConciliacao: ${e.toString()}\n${e.stack}`);
-    return { success: false, message: `Erro ao desfazer conciliação: ${e.message}` };
+    Logger.log('ERRO em NotasFiscaisController_desfazerConciliacao: ' + e.toString() + '\n' + e.stack);
+    return { success: false, message: 'Erro ao desfazer conciliação: ' + e.message };
   } finally {
     lock.releaseLock();
   }

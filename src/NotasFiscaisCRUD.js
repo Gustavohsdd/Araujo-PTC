@@ -358,3 +358,105 @@ function NotasFiscaisCRUD_listarSetoresRegrasRateio() {
   lista.sort(function(a,b){ return a.localeCompare(b, 'pt-BR'); });
   return lista;
 }
+
+/**
+ * NotasFiscaisCRUD_limparDadosCotacoesPorNumeroNota
+ * Apaga, na aba de Cotações, os campos:
+ *   "Status do SubProduto", "Quantidade Recebida", "Divergencia da Nota",
+ *   "Quantidade na Nota", "Preço da Nota"
+ * para todas as linhas cujo "Número da Nota" == numeroNF.
+ *
+ * @param {string|number} numeroNF
+ */
+function NotasFiscaisCRUD_limparDadosCotacoesPorNumeroNota(numeroNF) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const aba = ss.getSheetByName(typeof ABA_COTACOES !== 'undefined' ? ABA_COTACOES : 'Cotacoes');
+  if (!aba || aba.getLastRow() < 2) return;
+
+  const range = aba.getRange(1, 1, aba.getLastRow(), aba.getLastColumn());
+  const valores = range.getValues();
+  const headers = valores[0];
+
+  // helper para normalizar cabeçalhos
+  const norm = s => String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ').trim();
+
+  // localiza colunas
+  const idxNumNota = headers.findIndex(h => {
+    const n = norm(h);
+    return n === 'numero da nota' || n === 'número da nota' || n === 'numero nf' || n === 'nº nf' || n === 'n° nf';
+  });
+  if (idxNumNota < 0) throw new Error('Coluna "Número da Nota" não encontrada em Cotações.');
+
+  const alvo = {
+    statusSub: headers.findIndex(h => norm(h) === 'status do subproduto'),
+    qtdReceb:  headers.findIndex(h => norm(h) === 'quantidade recebida'),
+    diverg:    headers.findIndex(h => norm(h) === 'divergencia da nota' || norm(h) === 'divergência da nota'),
+    qtdNota:   headers.findIndex(h => norm(h) === 'quantidade na nota'),
+    precoNota: headers.findIndex(h => norm(h) === 'preco da nota' || norm(h) === 'preço da nota')
+  };
+
+  // Se alguma coluna não existir, apenas ignora aquela específica
+  let alterou = false;
+  for (let r = 1; r < valores.length; r++) {
+    const linha = valores[r];
+    if (String(linha[idxNumNota] || '').trim() === String(numeroNF).trim()) {
+      if (alvo.statusSub >= 0) linha[alvo.statusSub] = '';
+      if (alvo.qtdReceb  >= 0) linha[alvo.qtdReceb]  = '';
+      if (alvo.diverg    >= 0) linha[alvo.diverg]    = '';
+      if (alvo.qtdNota   >= 0) linha[alvo.qtdNota]   = '';
+      if (alvo.precoNota >= 0) linha[alvo.precoNota] = '';
+      alterou = true;
+    }
+  }
+
+  if (alterou) {
+    range.setValues(valores);
+    SpreadsheetApp.flush();
+  }
+}
+
+/**
+ * NotasFiscaisCRUD_atualizarStatusCotacoesPorNumeroNota
+ * Define "Status da Cotação" para o valor informado SOMENTE nas linhas com o "Número da Nota" correspondente.
+ *
+ * @param {string|number} numeroNF
+ * @param {string} novoStatus (ex.: "Aguardando Faturamento")
+ */
+function NotasFiscaisCRUD_atualizarStatusCotacoesPorNumeroNota(numeroNF, novoStatus) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const aba = ss.getSheetByName(typeof ABA_COTACOES !== 'undefined' ? ABA_COTACOES : 'Cotacoes');
+  if (!aba || aba.getLastRow() < 2) return;
+
+  const range = aba.getRange(1, 1, aba.getLastRow(), aba.getLastColumn());
+  const valores = range.getValues();
+  const headers = valores[0];
+
+  const norm = s => String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ').trim();
+
+  const idxNumNota = headers.findIndex(h => {
+    const n = norm(h);
+    return n === 'numero da nota' || n === 'número da nota' || n === 'numero nf' || n === 'nº nf' || n === 'n° nf';
+  });
+  if (idxNumNota < 0) throw new Error('Coluna "Número da Nota" não encontrada em Cotações.');
+
+  const idxStatusCot = headers.findIndex(h => norm(h) === 'status da cotacao' || norm(h) === 'status da cotação');
+  if (idxStatusCot < 0) throw new Error('Coluna "Status da Cotação" não encontrada em Cotações.');
+
+  let alterou = false;
+  for (let r = 1; r < valores.length; r++) {
+    const linha = valores[r];
+    if (String(linha[idxNumNota] || '').trim() === String(numeroNF).trim()) {
+      linha[idxStatusCot] = novoStatus;
+      alterou = true;
+    }
+  }
+
+  if (alterou) {
+    range.setValues(valores);
+    SpreadsheetApp.flush();
+  }
+}
