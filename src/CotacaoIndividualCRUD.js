@@ -7,11 +7,29 @@
 //####################################################################################################
 
 /**
- * @file CotacaoIndividualCRUD.gs
- * @description Funções CRUD principais para os detalhes de uma cotação individual e operações relacionadas.
- * As lógicas CRUD específicas das "Etapas" foram movidas para EtapasCRUD.gs.
- * As lógicas CRUD específicas das "Funções do Portal" foram movidas para FuncoesCRUD.gs.
+ * CotacaoIndividualCRUD_parseNumeroPtBr
+ * Normaliza números vindos do Sheets (pt-BR e en-US).
+ * Aceita: number, "1.234,56", "1234.56", "2,5", "10,0000", etc.
+ * Retorna NaN para valores vazios/Date/texto não numérico.
  */
+function CotacaoIndividualCRUD_parseNumeroPtBr(valor) {
+  if (valor === null || valor === undefined) return NaN;
+  if (typeof valor === 'number') return Number(valor);
+  if (valor instanceof Date) return NaN;
+
+  const s = String(valor).trim();
+  if (!s) return NaN;
+
+  // remove espaços; remove separador de milhar "."; troca "," por "."
+  const normalizado = s
+    .replace(/\s+/g, '')
+    .replace(/\.(?=\d{3}(?:\D|$))/g, '') // remove "." de milhar (ex.: 1.234,56)
+    .replace(',', '.');
+
+  const n = Number(normalizado);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 
 /**
  * Cria um mapa de Produto -> Estoque Mínimo a partir da aba de Produtos.
@@ -82,114 +100,134 @@ function CotacaoIndividualCRUD_criarMapaEstoqueMinimoProdutos() {
  * @return {Array<object>|null} Um array de objetos, onde cada objeto representa uma linha da cotação, ou null em caso de erro.
  */
 function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
-  // ... (código original desta função permanece aqui)
-  console.log(`CotacaoIndividualCRUD_buscarProdutosPorIdCotacao: Buscando produtos para ID '${idCotacaoAlvo}'.`);
+  console.log("CotacaoIndividualCRUD_buscarProdutosPorIdCotacao: Buscando produtos para ID '" + idCotacaoAlvo + "'.");
+
   const mapaEstoqueMinimoProdutos = CotacaoIndividualCRUD_criarMapaEstoqueMinimoProdutos();
+
   try {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
-    const abaCotacoes = planilha.getSheetByName(ABA_COTACOES); // Constante global
+    const abaCotacoes = planilha.getSheetByName(ABA_COTACOES);
     if (!abaCotacoes) {
-      console.error(`CotacaoIndividualCRUD: Aba "${ABA_COTACOES}" não encontrada.`);
+      console.error('CotacaoIndividualCRUD: Aba "' + ABA_COTACOES + '" não encontrada.');
       return null;
     }
+
     const ultimaLinha = abaCotacoes.getLastRow();
-    if (ultimaLinha <= 1) { 
-      console.log(`CotacaoIndividualCRUD: Aba "${ABA_COTACOES}" vazia ou só cabeçalho.`);
+    if (ultimaLinha <= 1) {
+      console.log('CotacaoIndividualCRUD: Aba "' + ABA_COTACOES + '" vazia ou só cabeçalho.');
       return [];
     }
 
-    const ultimaColunaPlanilha = abaCotacoes.getLastColumn();
-    const rangeCompleto = abaCotacoes.getRange(1, 1, ultimaLinha, ultimaColunaPlanilha);
-    const todosOsValores = rangeCompleto.getValues();
-    const cabecalhosDaPlanilha = todosOsValores[0]; 
-    const cabecalhosDaConstante = CABECALHOS_COTACOES; // Constante global
+    const ultimaColuna = abaCotacoes.getLastColumn();
+    const range = abaCotacoes.getRange(1, 1, ultimaLinha, ultimaColuna);
 
-    if (!cabecalhosDaConstante || cabecalhosDaConstante.length === 0) {
-        console.error("CotacaoIndividualCRUD: Constante CABECALHOS_COTACOES não está definida ou está vazia.");
-        return null;
-    }
+    // crú + display (evita vazar Date como string)
+    const valores = range.getValues();
+    const displays = range.getDisplayValues();
 
-    const indiceIdCotacaoNaPlanilha = cabecalhosDaPlanilha.indexOf("ID da Cotação");
-    if (indiceIdCotacaoNaPlanilha === -1) {
-      console.error(`CotacaoIndividualCRUD: Coluna "ID da Cotação" não encontrada no cabeçalho da planilha "${ABA_COTACOES}".`);
+    const cabPlanilha = valores[0];
+    const cabConst = CABECALHOS_COTACOES; // sua constante global de colunas esperadas
+
+    if (!cabConst || cabConst.length === 0) {
+      console.error('CotacaoIndividualCRUD: CABECALHOS_COTACOES não definida ou vazia.');
       return null;
     }
-    
-    const indiceProdutoPrincipalNaCotacao = cabecalhosDaPlanilha.indexOf("Produto");
-    if (indiceProdutoPrincipalNaCotacao === -1) {
-        console.warn(`CotacaoIndividualCRUD: Coluna "Produto" não encontrada na aba "${ABA_COTACOES}". Estoque mínimo do produto principal não será adicionado.`);
+
+    const idxIdCotacao = cabPlanilha.indexOf('ID da Cotação');
+    if (idxIdCotacao === -1) {
+      console.error('CotacaoIndividualCRUD: Coluna "ID da Cotação" não encontrada.');
+      return null;
     }
 
-    const produtosDaCotacaoEncontrada = [];
-    const camposNumericosEsperados = ["Fator", "Estoque Mínimo", "Estoque Atual", "Preço", "Preço por Fator", "Comprar", "Valor Total"];
+    const idxProdutoPrincipal = cabPlanilha.indexOf('Produto');
 
-    for (let i = 1; i < todosOsValores.length; i++) {
-      const linhaAtualDaPlanilha = todosOsValores[i];
-      const idCotacaoLinha = linhaAtualDaPlanilha[indiceIdCotacaoNaPlanilha];
+    // Quais campos devem ser numéricos (inclui "Fator")
+    const camposNumericosEsperados = [
+      'Fator',
+      'Estoque Mínimo',
+      'Estoque Atual',
+      'Preço',
+      'Preço por Fator',
+      'Comprar',
+      'Valor Total',
+      'Economia em Cotação'
+    ];
 
-      if (String(idCotacaoLinha) === String(idCotacaoAlvo)) {
-        const objetoProduto = {};
-        let nomeProdutoPrincipalParaEstoque = null;
-        if (indiceProdutoPrincipalNaCotacao !== -1) { 
-            nomeProdutoPrincipalParaEstoque = String(linhaAtualDaPlanilha[indiceProdutoPrincipalNaCotacao]).trim();
-        }
-        
-        if (nomeProdutoPrincipalParaEstoque && mapaEstoqueMinimoProdutos.hasOwnProperty(nomeProdutoPrincipalParaEstoque)) {
-            objetoProduto["EstoqueMinimoProdutoPrincipal"] = mapaEstoqueMinimoProdutos[nomeProdutoPrincipalParaEstoque];
-        } else {
-            objetoProduto["EstoqueMinimoProdutoPrincipal"] = null; 
-        }
+    const itens = [];
 
-        cabecalhosDaConstante.forEach((nomeCabecalhoConstante) => {
-          const indiceCabecalhoNaPlanilha = cabecalhosDaPlanilha.indexOf(nomeCabecalhoConstante);
-          let valorOriginalDaCelula;
+    for (let i = 1; i < valores.length; i++) {
+      const rowRaw = valores[i];
+      const rowDisp = displays[i];
 
-          if (indiceCabecalhoNaPlanilha !== -1 && indiceCabecalhoNaPlanilha < linhaAtualDaPlanilha.length) {
-            valorOriginalDaCelula = linhaAtualDaPlanilha[indiceCabecalhoNaPlanilha];
-          } else {
-            objetoProduto[nomeCabecalhoConstante] = null; 
-            return; 
-          }
+      if (String(rowRaw[idxIdCotacao]).trim() !== String(idCotacaoAlvo).trim()) continue;
 
-          if (nomeCabecalhoConstante === "Data Abertura") {
-            if (valorOriginalDaCelula instanceof Date) {
-              objetoProduto[nomeCabecalhoConstante] = valorOriginalDaCelula.toISOString();
-            } else if (valorOriginalDaCelula) { 
-              try {
-                const dataObj = new Date(valorOriginalDaCelula); 
-                objetoProduto[nomeCabecalhoConstante] = !isNaN(dataObj.getTime()) ? dataObj.toISOString() : String(valorOriginalDaCelula).trim();
-              } catch (e) { 
-                objetoProduto[nomeCabecalhoConstante] = String(valorOriginalDaCelula).trim();
-              }
-            } else {
-              objetoProduto[nomeCabecalhoConstante] = null; 
-            }
-          } else if (camposNumericosEsperados.includes(nomeCabecalhoConstante)) {
-            if (valorOriginalDaCelula === "" || valorOriginalDaCelula === null || valorOriginalDaCelula === undefined) {
-              objetoProduto[nomeCabecalhoConstante] = null; 
-            } else {
-              const num = parseFloat(String(valorOriginalDaCelula).replace(",", ".")); 
-              objetoProduto[nomeCabecalhoConstante] = isNaN(num) ? String(valorOriginalDaCelula).trim() : num;
-            }
-          } else { 
-            if (valorOriginalDaCelula instanceof Date) {
-              console.warn(`CotacaoIndividualCRUD: Campo "${nomeCabecalhoConstante}" (linha ${i+1}) era um objeto Date e foi convertido para ISO string.`);
-              objetoProduto[nomeCabecalhoConstante] = valorOriginalDaCelula.toISOString();
-            } else {
-              objetoProduto[nomeCabecalhoConstante] = (valorOriginalDaCelula !== null && valorOriginalDaCelula !== undefined) ? String(valorOriginalDaCelula).trim() : null;
-            }
-          }
-        });
-        produtosDaCotacaoEncontrada.push(objetoProduto);
+      const item = {};
+
+      // estoque mínimo do produto principal, se existir no mapa
+      let nomeProdutoPrincipal = null;
+      if (idxProdutoPrincipal !== -1) {
+        nomeProdutoPrincipal = String(rowRaw[idxProdutoPrincipal] || '').trim();
       }
+      if (nomeProdutoPrincipal && mapaEstoqueMinimoProdutos.hasOwnProperty(nomeProdutoPrincipal)) {
+        item['EstoqueMinimoProdutoPrincipal'] = mapaEstoqueMinimoProdutos[nomeProdutoPrincipal];
+      } else {
+        item['EstoqueMinimoProdutoPrincipal'] = null;
+      }
+
+      // mapeamento campo a campo
+      cabConst.forEach(function (nomeCol) {
+        const idx = cabPlanilha.indexOf(nomeCol);
+        if (idx === -1 || idx >= rowRaw.length) {
+          item[nomeCol] = null;
+          return;
+        }
+
+        const valorRaw = rowRaw[idx];
+        const valorDisp = rowDisp[idx];
+
+        if (nomeCol === 'Data Abertura') {
+          if (valorRaw instanceof Date) {
+            item[nomeCol] = valorRaw.toISOString();
+          } else if (valorRaw) {
+            const d = new Date(valorRaw);
+            item[nomeCol] = Number.isFinite(d.getTime()) ? d.toISOString() : String(valorDisp || valorRaw).trim();
+          } else {
+            item[nomeCol] = null;
+          }
+          return;
+        }
+
+        if (camposNumericosEsperados.indexOf(nomeCol) !== -1) {
+          // 1ª tentativa pelo display (respeita pt-BR)
+          let n = CotacaoIndividualCRUD_parseNumeroPtBr(valorDisp);
+          // fallback no raw se display não for numérico
+          if (!Number.isFinite(n)) n = CotacaoIndividualCRUD_parseNumeroPtBr(valorRaw);
+          item[nomeCol] = Number.isFinite(n) ? n : null; // nunca retorna Date/string aqui
+          return;
+        }
+
+        if (valorRaw instanceof Date) {
+          item[nomeCol] = valorRaw.toISOString();
+        } else {
+          item[nomeCol] = (valorRaw !== null && valorRaw !== undefined) ? String(valorRaw).trim() : null;
+        }
+      });
+
+      if (!item._subProdutoOriginalPersistido) {
+        item._subProdutoOriginalPersistido = item.SubProduto || null;
+      }
+
+      itens.push(item);
     }
-    console.log(`CotacaoIndividualCRUD: ${produtosDaCotacaoEncontrada.length} produtos encontrados para ID '${idCotacaoAlvo}'.`);
-    return produtosDaCotacaoEncontrada;
-  } catch (error) {
-    console.error(`ERRO em CotacaoIndividualCRUD_buscarProdutosPorIdCotacao para ID '${idCotacaoAlvo}': ${error.toString()} Stack: ${error.stack}`);
+
+    console.log('CotacaoIndividualCRUD: ' + itens.length + " produtos encontrados para ID '" + idCotacaoAlvo + "'.");
+    return itens;
+  } catch (e) {
+    console.error('ERRO em CotacaoIndividualCRUD_buscarProdutosPorIdCotacao para ID "' + idCotacaoAlvo + '": ' + e.toString() + ' Stack: ' + e.stack);
     return null;
   }
 }
+
 
 
 /**
@@ -202,144 +240,158 @@ function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
  * @return {object} Um objeto { success: boolean, message: string, ..., valoresCalculados?: { valorTotal: number, precoPorFator: number } }.
  */
 function CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao(idCotacao, identificadoresLinha, colunaAlterada, novoValor) {
-  Logger.log(`CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ID Cotação '${idCotacao}', Identificadores: ${JSON.stringify(identificadoresLinha)}, Coluna '${colunaAlterada}', Novo Valor '${novoValor}'`);
-  
-  const planilha = SpreadsheetApp.getActiveSpreadsheet();
-  const abaCotacoes = planilha.getSheetByName(ABA_COTACOES);
-  const abaSubProdutos = planilha.getSheetByName(ABA_SUBPRODUTOS);
+  Logger.log(
+    "CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ID Cotação '" + idCotacao +
+    "', Identificadores: " + JSON.stringify(identificadoresLinha) +
+    ", Coluna '" + colunaAlterada + "', Novo Valor '" + novoValor + "'"
+  );
 
-  const COLUNAS_SINCRONIZAVEIS_COM_SUBPRODUTOS = (typeof COLUNAS_PARA_ABA_SUBPRODUTOS !== 'undefined') ? COLUNAS_PARA_ABA_SUBPRODUTOS : ["SubProduto", "Tamanho", "UN", "Fator"];
-  const colunasTriggerCalculo = ["Preço", "Comprar", "Fator"];
+  const planilha = SpreadsheetApp.getActiveSpreadsheet();
+  const abaCotacoes = planilha.getSheetByName(ABA_COTACOES);
+  const abaSubProdutos = planilha.getSheetByName(ABA_SUBPRODUTOS);
 
-  let updatedInCotacoes = false;
-  let updatedInSubProdutos = false;
-  let nomeProdutoPrincipalDaLinhaCotacao = identificadoresLinha.Produto;
+  const COLUNAS_SINCRONIZAVEIS_COM_SUBPRODUTOS =
+    (typeof COLUNAS_PARA_ABA_SUBPRODUTOS !== 'undefined')
+      ? COLUNAS_PARA_ABA_SUBPRODUTOS
+      : ['SubProduto', 'Tamanho', 'UN', 'Fator'];
 
-  const resultado = { 
-    success: false, 
-    message: "Nenhuma alteração realizada.", 
-    updatedInCotacoes: false, 
-    updatedInSubProdutos: false 
-  };
+  const colunasTriggerCalculo = ['Preço', 'Comprar', 'Fator'];
 
-  if (!abaCotacoes) {
-    resultado.message = `Aba "${ABA_COTACOES}" não encontrada.`;
-    Logger.log(`CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ${resultado.message}`);
-    return resultado;
-  }
+  let updatedInCotacoes = false;
+  let updatedInSubProdutos = false;
+  let nomeProdutoPrincipalDaLinhaCotacao = identificadoresLinha.Produto;
 
-  try {
-    const dadosCot = abaCotacoes.getDataRange().getValues();
-    const cabecalhosCot = dadosCot[0];
-    const indicesCot = cabecalhosCot.reduce((acc, c, i) => ({...acc, [c]: i }), {});
+  const resultado = {
+    success: false,
+    message: 'Nenhuma alteração realizada.',
+    updatedInCotacoes: false,
+    updatedInSubProdutos: false
+  };
 
-    const idxColunaAlteradaCot = indicesCot[colunaAlterada];
-    const idxIdCotacaoCot = indicesCot["ID da Cotação"];
-    const idxProdutoCot = indicesCot["Produto"];
-    const idxSubProdutoCot = indicesCot["SubProduto"];
-    const idxFornecedorCot = indicesCot["Fornecedor"];
+  if (!abaCotacoes) {
+    resultado.message = 'Aba "' + ABA_COTACOES + '" não encontrada.';
+    Logger.log('CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ' + resultado.message);
+    return resultado;
+  }
 
-    if (idxColunaAlteradaCot === undefined) throw new Error(`Coluna "${colunaAlterada}" não encontrada na aba "${ABA_COTACOES}".`);
-    if ([idxIdCotacaoCot, idxProdutoCot, idxSubProdutoCot, idxFornecedorCot].some(idx => idx === undefined)) {
-      throw new Error("Colunas chave (ID da Cotação, Produto, SubProduto, Fornecedor) não encontradas na ABA_COTACOES.");
-    }
+  try {
+    const dadosCot = abaCotacoes.getDataRange().getValues();
+    const cabecalhosCot = dadosCot[0];
+    const indicesCot = cabecalhosCot.reduce(function (acc, c, i) { acc[c] = i; return acc; }, {});
 
-    let linhaEncontradaCot = -1;
-    for (let i = 1; i < dadosCot.length; i++) {
-      const linhaAtual = dadosCot[i];
-      if (String(linhaAtual[idxIdCotacaoCot]).trim() === String(idCotacao).trim() &&
-          String(linhaAtual[idxProdutoCot]).trim() === String(identificadoresLinha.Produto).trim() &&
-          String(linhaAtual[idxSubProdutoCot]).trim() === String(identificadoresLinha.SubProdutoChave).trim() && 
-          String(linhaAtual[idxFornecedorCot]).trim() === String(identificadoresLinha.Fornecedor).trim()) {
-        
-        abaCotacoes.getRange(i + 1, idxColunaAlteradaCot + 1).setValue(novoValor);
-        updatedInCotacoes = true;
-        linhaEncontradaCot = i + 1;
-        Logger.log(`CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ABA_COTACOES - Linha ${linhaEncontradaCot}, Coluna "${colunaAlterada}" atualizada para: ${novoValor}`);
-        break; 
-      }
-    }
-    
-    if (!updatedInCotacoes) {
-      resultado.message = `Linha não encontrada na ABA_COTACOES para os identificadores fornecidos.`;
-      Logger.log(`CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ${resultado.message}`);
-      return resultado; 
-    }
+    const idxColunaAlteradaCot = indicesCot[colunaAlterada];
+    const idxIdCotacaoCot      = indicesCot['ID da Cotação'];
+    const idxProdutoCot        = indicesCot['Produto'];
+    const idxSubProdutoCot     = indicesCot['SubProduto'];
+    const idxFornecedorCot     = indicesCot['Fornecedor'];
 
-    // Bloco MODIFICADO E ADICIONADO para cálculo
-    if (updatedInCotacoes && colunasTriggerCalculo.includes(colunaAlterada)) {
+    if (idxColunaAlteradaCot === undefined) throw new Error('Coluna "' + colunaAlterada + '" não encontrada na aba "' + ABA_COTACOES + '".');
+    if ([idxIdCotacaoCot, idxProdutoCot, idxSubProdutoCot, idxFornecedorCot].some(function (x) { return x === undefined; })) {
+      throw new Error('Colunas chave (ID da Cotação, Produto, SubProduto, Fornecedor) não encontradas na ABA_COTACOES.');
+    }
+
+    let linhaEncontradaCot = -1;
+    for (let i = 1; i < dadosCot.length; i++) {
+      const linhaAtual = dadosCot[i];
+      if (
+        String(linhaAtual[idxIdCotacaoCot]).trim() === String(idCotacao).trim() &&
+        String(linhaAtual[idxProdutoCot]).trim() === String(identificadoresLinha.Produto).trim() &&
+        String(linhaAtual[idxSubProdutoCot]).trim() === String(identificadoresLinha.SubProdutoChave).trim() &&
+        String(linhaAtual[idxFornecedorCot]).trim() === String(identificadoresLinha.Fornecedor).trim()
+      ) {
+        abaCotacoes.getRange(i + 1, idxColunaAlteradaCot + 1).setValue(novoValor);
+        updatedInCotacoes = true;
+        linhaEncontradaCot = i + 1;
+        Logger.log('CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ABA_COTACOES - Linha ' + linhaEncontradaCot + ', Coluna "' + colunaAlterada + '" atualizada para: ' + novoValor);
+        break;
+      }
+    }
+
+    if (!updatedInCotacoes) {
+      resultado.message = 'Linha não encontrada na ABA_COTACOES para os identificadores fornecidos.';
+      Logger.log('CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ' + resultado.message);
+      return resultado;
+    }
+
+    // Recalcular usando DISPLAY VALUES (robusto contra formatação/Date)
+    if (updatedInCotacoes && colunasTriggerCalculo.indexOf(colunaAlterada) !== -1) {
       const rangeLinha = abaCotacoes.getRange(linhaEncontradaCot, 1, 1, abaCotacoes.getLastColumn());
-      const valoresLinha = rangeLinha.getValues()[0];
-      
-      const preco = parseFloat(valoresLinha[indicesCot["Preço"]]) || 0;
-      const comprar = parseFloat(valoresLinha[indicesCot["Comprar"]]) || 0;
-      const fator = parseFloat(valoresLinha[indicesCot["Fator"]]) || 0;
+      const displays = rangeLinha.getDisplayValues()[0];
 
-      const valorTotalCalculado = (preco * comprar);
+      const preco   = CotacaoIndividualCRUD_parseNumeroPtBr(displays[indicesCot['Preço']])   || 0;
+      const comprar = CotacaoIndividualCRUD_parseNumeroPtBr(displays[indicesCot['Comprar']]) || 0;
+      const fator   = CotacaoIndividualCRUD_parseNumeroPtBr(displays[indicesCot['Fator']])   || 0;
+
+      const valorTotalCalculado    = (preco * comprar);
       const precoPorFatorCalculado = (fator !== 0) ? (preco / fator) : 0;
 
-      abaCotacoes.getRange(linhaEncontradaCot, indicesCot["Valor Total"] + 1).setValue(valorTotalCalculado);
-      abaCotacoes.getRange(linhaEncontradaCot, indicesCot["Preço por Fator"] + 1).setValue(precoPorFatorCalculado);
-      
+      if (indicesCot['Valor Total'] !== undefined) {
+        abaCotacoes.getRange(linhaEncontradaCot, indicesCot['Valor Total'] + 1).setValue(valorTotalCalculado);
+      }
+      if (indicesCot['Preço por Fator'] !== undefined) {
+        abaCotacoes.getRange(linhaEncontradaCot, indicesCot['Preço por Fator'] + 1).setValue(precoPorFatorCalculado);
+      }
+
       resultado.valoresCalculados = {
         valorTotal: valorTotalCalculado,
         precoPorFator: precoPorFatorCalculado
       };
-      Logger.log(`CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: Campos recalculados. Valor Total: ${valorTotalCalculado}, Preço por Fator: ${precoPorFatorCalculado}`);
+      Logger.log(
+        'CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: Recalculo -> Valor Total: ' +
+        valorTotalCalculado + ', Preço por Fator: ' + precoPorFatorCalculado
+      );
     }
 
-    if (colunaAlterada === "SubProduto") { 
-        resultado.novoSubProdutoNomeSeAlterado = novoValor;
-    }
+    if (colunaAlterada === 'SubProduto') {
+      resultado.novoSubProdutoNomeSeAlterado = novoValor;
+    }
 
-    if (COLUNAS_SINCRONIZAVEIS_COM_SUBPRODUTOS.includes(colunaAlterada)) {
-      if (!abaSubProdutos) {
-        console.warn(`CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: Aba "${ABA_SUBPRODUTOS}" não encontrada.`);
-      } else {
-        // Lógica de sincronização com ABA_SUBPRODUTOS (inalterada)
-        const dadosSub = abaSubProdutos.getDataRange().getValues();
-        const cabecalhosSub = dadosSub[0];
-        const indicesSub = cabecalhosSub.reduce((acc, c, i) => ({...acc, [c]: i }), {});
+    if (COLUNAS_SINCRONIZAVEIS_COM_SUBPRODUTOS.indexOf(colunaAlterada) !== -1 && abaSubProdutos) {
+      const dadosSub = abaSubProdutos.getDataRange().getValues();
+      const cabSub = dadosSub[0];
+      const idxSub = cabSub.reduce(function (acc, c, i) { acc[c] = i; return acc; }, {});
+      const idxProdV   = idxSub['Produto Vinculado'];
+      const idxSubProd = idxSub['SubProduto'];
+      const idxForn    = idxSub['Fornecedor'];
+      const idxColSub  = idxSub[colunaAlterada];
 
-        const idxProdutoVinculadoSub = indicesSub["Produto Vinculado"];
-        const idxSubProdutoSub = indicesSub["SubProduto"];
-        const idxFornecedorSub = indicesSub["Fornecedor"]; 
-        const idxColunaAlteradaSub = indicesSub[colunaAlterada];
+      if (idxProdV !== undefined && idxSubProd !== undefined && idxColSub !== undefined) {
+        for (let i = 1; i < dadosSub.length; i++) {
+          const linhaSub = dadosSub[i];
+          const fornecedorPlanilha = (idxForn !== undefined) ? String(linhaSub[idxForn]).trim() : null;
 
-        if (idxProdutoVinculadoSub !== undefined && idxSubProdutoSub !== undefined && idxColunaAlteradaSub !== undefined) {
-          for (let i = 1; i < dadosSub.length; i++) {
-            const linhaSub = dadosSub[i];
-            const fornecedorPlanilha = idxFornecedorSub !== undefined ? String(linhaSub[idxFornecedorSub]).trim() : null;
-            if (String(linhaSub[idxProdutoVinculadoSub]).trim() === String(nomeProdutoPrincipalDaLinhaCotacao).trim() &&
-                String(linhaSub[idxSubProdutoSub]).trim() === String(identificadoresLinha.SubProdutoChave).trim() &&
-                (fornecedorPlanilha === null || fornecedorPlanilha === String(identificadoresLinha.Fornecedor).trim())) {
-              
-              abaSubProdutos.getRange(i + 1, idxColunaAlteradaSub + 1).setValue(novoValor);
-              updatedInSubProdutos = true;
-              Logger.log(`CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ABA_SUBPRODUTOS - Linha ${i+1}, Coluna "${colunaAlterada}" atualizada.`);
-              break;
-            }
+          const match = (
+            String(linhaSub[idxProdV]).trim() === String(nomeProdutoPrincipalDaLinhaCotacao).trim() &&
+            String(linhaSub[idxSubProd]).trim() === String(identificadoresLinha.SubProdutoChave).trim() &&
+            (fornecedorPlanilha === null || fornecedorPlanilha === String(identificadoresLinha.Fornecedor).trim())
+          );
+
+          if (match) {
+            abaSubProdutos.getRange(i + 1, idxColSub + 1).setValue(novoValor);
+            updatedInSubProdutos = true;
+            Logger.log('CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ABA_SUBPRODUTOS - Linha ' + (i + 1) + ', Coluna "' + colunaAlterada + '" atualizada.');
+            break;
           }
         }
-      }
-    }
+      }
+    }
 
-    if (updatedInCotacoes) {
-      resultado.success = true;
-      resultado.message = `"${colunaAlterada}" atualizado com sucesso.`;
-    }
-    
-    resultado.updatedInCotacoes = updatedInCotacoes;
-    resultado.updatedInSubProdutos = updatedInSubProdutos;
-    return resultado;
+    if (updatedInCotacoes) {
+      resultado.success = true;
+      resultado.message = '"' + colunaAlterada + '" atualizado com sucesso.';
+    }
+    resultado.updatedInCotacoes = updatedInCotacoes;
+    resultado.updatedInSubProdutos = updatedInSubProdutos;
 
-  } catch (error) {
-    Logger.log(`ERRO CRÍTICO em CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ${error.toString()} Stack: ${error.stack}`);
-    resultado.success = false;
-    resultado.message = `Erro ao salvar alteração da célula: ${error.message}`;
-    return resultado;
-  }
+    return resultado;
+  } catch (e) {
+    Logger.log('ERRO CRÍTICO em CotacaoIndividualCRUD_salvarEdicaoCelulaCotacao: ' + e.toString() + ' Stack: ' + e.stack);
+    resultado.success = false;
+    resultado.message = 'Erro ao salvar alteração da célula: ' + e.message;
+    return resultado;
+  }
 }
+
 
 /**
  * NOVA FUNÇÃO: Salva um conjunto de alterações do modal de detalhes (SubProduto, Tamanho, etc.).

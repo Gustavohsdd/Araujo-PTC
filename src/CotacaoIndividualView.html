@@ -1282,6 +1282,46 @@
       </div>
     </div>
 
+<!-- ========================= MODAL: NEGOCIAÇÃO ========================= -->
+<div id="CotacaoIndividualScript_modalNegociacaoOverlay" class="modal-overlay">
+  <div class="modal-content custom-scrollbar" role="dialog" aria-modal="true" aria-labelledby="CotacaoIndividualScript_modalNegociacao_titulo">
+    <div class="modal-header">
+      <h3 id="CotacaoIndividualScript_modalNegociacao_titulo" class="modal-title">Negociação</h3>
+      <button id="CotacaoIndividualScript_btnFecharModalNegociacao" class="modal-close-btn" aria-label="Fechar">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="CotacaoIndividualScript_selectSubproduto">Subproduto base (normalmente o menor preço)</label>
+        <select id="CotacaoIndividualScript_selectSubproduto"></select>
+        <div id="CotacaoIndividualScript_infoSubproduto" style="margin-top:6px;color:#6b7280;font-size:0.85rem;"></div>
+      </div>
+
+      <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label for="CotacaoIndividualScript_inputPercentual">Desconto sobre o preço base (%)</label>
+          <input id="CotacaoIndividualScript_inputPercentual" type="number" step="0.01" min="0" value="2">
+        </div>
+        <div>
+          <label for="CotacaoIndividualScript_inputPrecoNovo">Novo preço (automático)</label>
+          <input id="CotacaoIndividualScript_inputPrecoNovo" type="text" readonly>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="CotacaoIndividualScript_textareaMensagem">Mensagem para enviar aos fornecedores</label>
+        <textarea id="CotacaoIndividualScript_textareaMensagem" rows="5"></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="CotacaoIndividualScript_btnCancelarModalNegociacao" class="btn-painel-acao btn-modal-secondary">Cancelar</button>
+      <button id="CotacaoIndividualScript_btnCopiarTextoNegociacao" class="btn-painel-acao btn-modal-primary">Copiar Texto</button>
+    </div>
+  </div>
+</div>
+<!-- ======================= FIM MODAL: NEGOCIAÇÃO ======================= -->
+
   <?!= App_incluirHtml('CotacaoIndividualScript', true) ?>
   <?!= App_incluirHtml('EtapasScript', true) ?>
   <?!= App_incluirHtml('FuncoesScript', true) ?>

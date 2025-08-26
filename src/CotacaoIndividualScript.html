@@ -558,7 +558,9 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
     if (!tabela) { console.error("Tabela não encontrada."); return; }
     const tbody = tabela.querySelector('tbody');
     if (!tbody) { console.error("Tbody não encontrado."); return; }
+
     tbody.innerHTML = '';
+
     if (!gruposDeProdutos || gruposDeProdutos.length === 0) {
         const tr = tbody.insertRow();
         const td = tr.insertCell();
@@ -567,61 +569,104 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
         td.textContent = 'Nenhum produto agrupado para esta cotação.';
         return;
     }
+
     let categoriaAtualRenderizada = null;
     const colunasEditaveis = ["SubProduto", "Tamanho", "UN", "Fator", "Preço", "Comprar"];
+
     gruposDeProdutos.forEach(grupo => {
         const catSanit = String(grupo.categoria).replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || 'sem-categoria';
         const catClass = `content-for-category-${catSanit}`;
+
+        // ------------------- Cabeçalho da Categoria (igual ao seu) -------------------
         if (grupo.categoria !== categoriaAtualRenderizada) {
             const catRow = tbody.insertRow();
             catRow.className = 'categoria-accordion-header-row';
             catRow.dataset.targetClass = catClass;
             catRow.dataset.categoriaNome = grupo.categoria;
+
             const catCell = catRow.insertCell();
             catCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
+
             const headerDiv = document.createElement('div');
             headerDiv.className = 'categoria-header-content';
+
             const icon = document.createElementNS("http://www.w3.org/2000/svg","svg");
             icon.setAttribute("class","categoria-accordion-icon");
             icon.setAttribute("viewBox","0 0 20 20");
             icon.setAttribute("fill","currentColor");
             icon.innerHTML = `<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>`;
             headerDiv.appendChild(icon);
+
             const span = document.createElement('span');
             span.textContent = `Categoria: ${grupo.categoria}`;
             headerDiv.appendChild(span);
+
             catCell.appendChild(headerDiv);
+
             catRow.addEventListener('click', function() {
                 this.classList.toggle('expanded');
                 const exp = this.classList.contains('expanded');
                 if (icon) icon.style.transform = exp ? 'rotate(90deg)' : 'rotate(0deg)';
                 tbody.querySelectorAll(`.${this.dataset.targetClass}`).forEach(r => {
-                    if (!r.classList.contains('hidden-by-search') &&
-                        !r.classList.contains('hidden-by-etapa')) {
+                    if (!r.classList.contains('hidden-by-search') && !r.classList.contains('hidden-by-etapa')) {
                         r.classList.toggle('hidden', !exp);
                     }
                 });
             });
+
             categoriaAtualRenderizada = grupo.categoria;
         }
+
+        // ------------------- Separador de Produto (igual ao seu + botão Negociação) -------------------
         const sepRow = tbody.insertRow();
         sepRow.className = `produto-group-separator-row category-content-row ${catClass} hidden`;
         sepRow.dataset.produtoNome = grupo.produtoNome;
         sepRow.dataset.categoria = grupo.categoria;
+
         const sepCell = sepRow.insertCell();
         sepCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
+
         if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
             const min = grupo.estoqueMinimoProdutoPrincipal != null ? grupo.estoqueMinimoProdutoPrincipal : 'N/A';
-            
-            // ================= INÍCIO DA MUDANÇA =================
-            // Pega o valor bruto do estoque atual do primeiro subproduto do grupo.
-            const valorEstoqueBruto = grupo.subProdutos[0]["Estoque Atual"];
-            // Formata para exibição, mostrando o valor bruto ou 'N/A' se for nulo/vazio.
+
+            const valorEstoqueBruto = (grupo.subProdutos && grupo.subProdutos[0]) ? grupo.subProdutos[0]["Estoque Atual"] : '';
             const estoqueParaExibir = (valorEstoqueBruto !== null && valorEstoqueBruto !== undefined && valorEstoqueBruto !== "") ? valorEstoqueBruto : 'N/A';
-            // Monta o texto do separador usando o valor bruto.
-            sepCell.textContent = `Produto: ${grupo.produtoNome} (Estoque Mínimo: ${min}) (Estoque Atual: ${estoqueParaExibir})`;
-            // ================= FIM DA MUDANÇA =================
+
+            const wrap = document.createElement('div');
+            wrap.style.display = 'flex';
+            wrap.style.justifyContent = 'space-between';
+            wrap.style.alignItems = 'center';
+            wrap.className = 'contagem-container-principal';
+
+            const info = document.createElement('div');
+            info.className = 'produto-principal-info';
+            info.textContent = `Produto: ${grupo.produtoNome} (Estoque Mínimo: ${min}) (Estoque Atual: ${estoqueParaExibir})`;
+
+            const actions = document.createElement('div');
+            actions.className = 'contagem-fields-container';
+
+            // ------- Botão Negociação (injeção) - Nova Lógica para chamar a nova função -------
+            const btnNeg = document.createElement('button');
+            btnNeg.type = 'button';
+            btnNeg.title = 'Negociação';
+            btnNeg.className = 'btn-menu-superior dropdown-menu-button';
+            btnNeg.style.cssText = 'background-color: #235fc2; border: 1px solid transparent; margin-right: 0.5rem;';
+            btnNeg.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true" style="width: 1em; height: 1em; margin-right: 0.375rem;"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zm1 5h2v8h-2V8zm-4 0h2v8H9V8z"/></svg><span>Negociação</span>`;
+
+            btnNeg.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const produto = sepRow.dataset.produtoNome || '';
+                const subprodutos = CotacaoIndividualScript_obterSubprodutosDoProduto(produto);
+                CotacaoIndividualScript_abrirModalNegociacao(produto, subprodutos);
+            });
+
+            actions.appendChild(btnNeg);
+            wrap.appendChild(info);
+            wrap.appendChild(actions);
+            sepCell.appendChild(wrap);
         }
+
+        // ------------------- Linhas de Subproduto (idêntico ao seu fluxo) -------------------
         if (grupo.subProdutos && grupo.subProdutos.length > 0) {
             grupo.subProdutos.forEach(sub => {
                 const subRow = tbody.insertRow();
@@ -629,11 +674,13 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
                 if (CotacaoIndividualScript_modoEtapaAtual === 'contagem_estoque') {
                     subRow.classList.add('hidden-by-etapa');
                 }
+
                 subRow.dataset.subprodutoOriginalPersistido = sub["_subProdutoOriginalPersistido"] || sub["SubProduto"];
                 subRow.dataset.produto    = sub['Produto'];
                 subRow.dataset.fornecedor = sub['Fornecedor'];
                 subRow.dataset.subprodutoAtual = sub['SubProduto'];
                 subRow.dataset.categoria = sub['Categoria'] || 'Sem Categoria';
+
                 CotacaoIndividualScript_cabecalhosVisiveis.forEach(header => {
                     const td = subRow.insertCell();
                     const cor = CotacaoIndividualScript_getClasseCorColuna(header);
@@ -648,7 +695,7 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
                         fmt = val == null ? "" : String(val);
                     }
                     td.textContent = fmt;
-                    td.dataset.coluna       = header;
+                    td.dataset.coluna        = header;
                     td.dataset.valorOriginal = fmt;
                     if (colunasEditaveis.includes(header)) {
                         td.classList.add('editable-price-cell');
@@ -966,6 +1013,7 @@ function CotacaoIndividualScript_renderizarVisualizacaoCategoria() {
     const gruposDeProdutos = agruparEClassificarProdutosInterno(CotacaoIndividualScript_dadosOriginaisCotacao);
     renderizarGruposDeProdutosInterno(gruposDeProdutos);
     CotacaoIndividualScript_filtrarTabelaPrincipal();
+    
 }
 
 function CotacaoIndividualScript_renderizarVisualizacaoFornecedor() {
@@ -1071,6 +1119,148 @@ window.CotacaoIndividualScript_carregarDadosCotacao = async function(idCotacao) 
           })
           .CotacaoIndividualController_obterDetalhesDaCotacao(idCotacao);
     });
+}
+
+/* =====================================================================
+ * NEGOCIAÇÃO — VISUALIZAR POR CATEGORIA
+ * Prefixo: CotacaoIndividualScript_
+ * Lida 100% com as classes/atributos já existentes:
+ * - Linhas de PRODUTO: .produto-group-separator-row  (dataset.produtoNome)
+ * - Linhas de SUBPRODUTO: .sub-produto-row (data-produto, data-fornecedor, td[data-coluna="Preço"], td[data-coluna="SubProduto"])
+ * ===================================================================== */
+
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_OVERLAY = 'CotacaoIndividualScript_modalNegociacaoOverlay';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_TITULO = 'CotacaoIndividualScript_modalNegociacao_titulo';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_BTN_FECHAR = 'CotacaoIndividualScript_btnFecharModalNegociacao';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_BTN_CANCELAR = 'CotacaoIndividualScript_btnCancelarModalNegociacao';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_SELECT_SUBPRODUTO = 'CotacaoIndividualScript_selectSubproduto';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_INFO_SUBPRODUTO = 'CotacaoIndividualScript_infoSubproduto';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_INPUT_PERCENTUAL = 'CotacaoIndividualScript_inputPercentual';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_INPUT_PRECO_NOVO = 'CotacaoIndividualScript_inputPrecoNovo';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_TEXTAREA_MENSAGEM = 'CotacaoIndividualScript_textareaMensagem';
+const CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_BTN_COPIAR = 'CotacaoIndividualScript_btnCopiarTextoNegociacao';
+
+function CotacaoIndividualScript_parseNumeroPtBr(v) {
+  if (v === null || v === undefined) return NaN;
+  if (typeof v === 'number') return Number(v);
+  const s = String(v).trim();
+  if (!s) return NaN;
+  const normalizado = s.replace(/\s+/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.');
+  const n = Number(normalizado);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function CotacaoIndividualScript_formatarPreco(n) {
+  const v = Number(n || 0);
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function CotacaoIndividualScript_aplicarDesconto(precoBase, percentual) {
+  const p = Number(precoBase) || 0;
+  const d = Number(percentual) || 0;
+  return Math.max(0, p * (100 - d) / 100);
+}
+
+function CotacaoIndividualScript_obterSubprodutosDoProduto(produto) {
+  const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
+  const tbody  = tabela ? tabela.querySelector('tbody') : null;
+  if (!tbody) return [];
+  const linhas = Array.from(tbody.querySelectorAll('tr.sub-produto-row[data-produto="' + CSS.escape(produto) + '"]'));
+  const lista  = [];
+
+  linhas.forEach(tr => {
+    const fornecedor = tr.dataset.fornecedor || '';
+    const tdSub   = tr.querySelector('td[data-coluna="SubProduto"]');
+    const tdPreco = tr.querySelector('td[data-coluna="Preço"]');
+    const nome = tdSub ? tdSub.textContent.trim() : (tr.dataset.subprodutoAtual || tr.dataset.subprodutoOriginalPersistido || '');
+    const precoT = tdPreco ? tdPreco.textContent.trim() : '';
+    const precoN = CotacaoIndividualScript_parseNumeroPtBr(precoT);
+
+    lista.push({ fornecedor, subproduto: nome, preco: Number.isFinite(precoN) ? precoN : null });
+  });
+
+  lista.sort((a,b) => {
+    if (a.preco === null && b.preco === null) return 0;
+    if (a.preco === null) return 1;
+    if (b.preco === null) return -1;
+    return a.preco - b.preco;
+  });
+
+  return lista;
+}
+
+function CotacaoIndividualScript_gerarMensagemNegociacao(nomeProduto, novoPrecoNumero) {
+  const precoFmt = CotacaoIndividualScript_formatarPreco(novoPrecoNumero);
+  const linhas = [
+    `Produto: ${nomeProduto}`,
+    `Melhor preço obtido: ${precoFmt}`,
+    `...`
+  ];
+  return linhas.join('\n');
+}
+
+function CotacaoIndividualScript_abrirModalNegociacao(produto, subprodutos) {
+    const modal = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_OVERLAY);
+    const tituloModal = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_TITULO);
+    const select = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_SELECT_SUBPRODUTO);
+    const info = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_INFO_SUBPRODUTO);
+    const inpPerc = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_INPUT_PERCENTUAL);
+    const inpNovo = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_INPUT_PRECO_NOVO);
+    const txt = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_TEXTAREA_MENSAGEM);
+    const btnCopiar = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_BTN_COPIAR);
+    const btnFechar = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_BTN_FECHAR);
+    const btnCancelar = document.getElementById(CotacaoIndividualScript_ID_MODAL_NEGOCIACAO_BTN_CANCELAR);
+
+    if (!modal) {
+        console.error('Modal de Negociação não encontrado no DOM.');
+        return;
+    }
+
+    tituloModal.textContent = `Negociação: ${produto}`;
+    select.innerHTML = '';
+    subprodutos.forEach((sp, idx) => {
+        const opt = document.createElement('option');
+        const precoFmt = sp.preco === null ? '—' : CotacaoIndividualScript_formatarPreco(sp.preco);
+        opt.value = String(idx);
+        opt.textContent = `${sp.subproduto} — ${sp.fornecedor} — ${precoFmt}`;
+        select.appendChild(opt);
+    });
+    if (subprodutos.length > 0) select.value = '0';
+
+    const atualizar = () => {
+        const sp = subprodutos[Number(select.value)];
+        if (!sp) return;
+        info.textContent = `Base: ${sp.subproduto} — ${sp.fornecedor} — ${CotacaoIndividualScript_formatarPreco(sp.preco)}`;
+        const perc = Number(inpPerc.value || 0);
+        const novo = CotacaoIndividualScript_aplicarDesconto(sp.preco, perc);
+        inpNovo.value = CotacaoIndividualScript_formatarPreco(novo);
+        txt.value = CotacaoIndividualScript_gerarMensagemNegociacao(produto, novo);
+    };
+
+    select.onchange = atualizar;
+    inpPerc.oninput = atualizar;
+
+    const fechar = () => {
+        modal.classList.remove('active');
+        select.onchange = null;
+        inpPerc.oninput = null;
+    };
+
+    btnCopiar.onclick = () => {
+        txt.select();
+        txt.setSelectionRange(0, 99999);
+        document.execCommand('copy');
+        CotacaoIndividualScript_exibirFeedback('Mensagem copiada para a área de transferência!', false, 2000);
+    };
+
+    btnFechar.onclick = fechar;
+    btnCancelar.onclick = fechar;
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) fechar();
+    });
+
+    atualizar();
+    modal.classList.add('active');
 }
 
 //----------------------------------------------------------------------------------------------------
