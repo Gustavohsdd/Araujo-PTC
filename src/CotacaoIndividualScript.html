@@ -36,7 +36,7 @@ let CotacaoIndividualScript_cotacaoIdAtual = null;
 let CotacaoIndividualScript_modoPagina = 'editar';
 let CotacaoIndividualScript_cabecalhosVisiveis = [];
 let CABECALHOS_COTACOES_TODOS = [];
-let CotacaoIndividualScript_dadosOriginaisCotacao = [];
+window.CotacaoIndividualScript_dadosOriginaisCotacao = [];
 let CotacaoIndividualScript_modoEtapaAtual = null;
 let CotacaoIndividualScript_abaAtiva = 'categoria';
 
@@ -58,6 +58,109 @@ const CotacaoIndividualScript_MAPA_CORES_COLUNAS = {
 //----------------------------------------------------------------------------------------------------
 window.CotacaoIndividualScript_getClasseCorColuna = function(nomeCabecalho) {
   return CotacaoIndividualScript_MAPA_CORES_COLUNAS[nomeCabecalho] || "";
+}
+
+function CotacaoIndividualScript_parseNumeroPtBr(valor) {
+    if (valor === null || valor === undefined) return NaN;
+    if (typeof valor === 'number') return Number(valor);
+    const s = String(valor).trim();
+    if (!s) return NaN;
+
+    // Remove espaços, troca o separador de milhar '.' por nada, e a vírgula decimal por '.'
+    const normalizado = s.replace(/\s+/g, '').replace(/\.(?=\d{3}(?:,|\.|$))/g, '').replace(',', '.');
+    const n = Number(normalizado);
+
+    return Number.isFinite(n) ? n : NaN;
+}
+
+function CotacaoIndividualScript_formatarPreco(n) {
+    const v = Number(n || 0);
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function CotacaoIndividualScript_getPrecoPorFatorFromItem(item) {
+    if (!item) return null;
+
+    // 1. Tenta usar o valor já existente de "Preço por Fator"
+    if (item.hasOwnProperty("Preço por Fator")) {
+        const precoFatorExistente = CotacaoIndividualScript_parseNumeroPtBr(item["Preço por Fator"]);
+        if (!isNaN(precoFatorExistente)) {
+            return precoFatorExistente;
+        }
+    }
+
+    // 2. Se não existir ou for inválido, calcula a partir de "Preço" e "Fator"
+    if (item.hasOwnProperty("Preço") && item.hasOwnProperty("Fator")) {
+        const preco = CotacaoIndividualScript_parseNumeroPtBr(item["Preço"]);
+        const fator = CotacaoIndividualScript_parseNumeroPtBr(item["Fator"]);
+
+        if (!isNaN(preco) && !isNaN(fator) && fator > 0) {
+            return preco / fator;
+        }
+    }
+    
+    return null;
+}
+
+function CotacaoIndividualScript_calcularMetricasNegociacao(grupo) {
+    const resultado = {
+        oportunidadeReais: 0, // MUDANÇA: de 'economiaReais' para 'oportunidadeReais'
+        spreadPercent: 0,
+        P1: null,
+        P2: null,
+        Pmediana: null, // MUDANÇA: de 'Pmax' para 'Pmediana'
+        Q: 0
+    };
+
+    if (!grupo || !grupo.subProdutos || grupo.subProdutos.length === 0) {
+        return resultado;
+    }
+
+    // 1. Calcular todos os preços por fator válidos e ordená-los
+    const precosPorFatorValidos = grupo.subProdutos
+        .map(sub => CotacaoIndividualScript_getPrecoPorFatorFromItem(sub))
+        .filter(p => p !== null && p > 0)
+        .sort((a, b) => a - b);
+
+    if (precosPorFatorValidos.length < 2) {
+        return resultado;
+    }
+
+    // 2. Definir P1, P2 e a Mediana
+    resultado.P1 = precosPorFatorValidos[0];
+    resultado.P2 = precosPorFatorValidos[1];
+    
+    // MUDANÇA: Lógica para calcular a Mediana
+    const mid = Math.floor(precosPorFatorValidos.length / 2);
+    if (precosPorFatorValidos.length % 2 === 0) {
+        // Se for par, a mediana é a média dos dois valores centrais
+        resultado.Pmediana = (precosPorFatorValidos[mid - 1] + precosPorFatorValidos[mid]) / 2;
+    } else {
+        // Se for ímpar, a mediana é o valor central
+        resultado.Pmediana = precosPorFatorValidos[mid];
+    }
+
+    // 3. MUDANÇA: Obter a quantidade base (Q) usando a Demanda Média
+    let quantidadeBase = 0;
+    if (grupo.hasOwnProperty("demandaMediaProdutoPrincipal") && grupo.demandaMediaProdutoPrincipal !== null) {
+        quantidadeBase = CotacaoIndividualScript_parseNumeroPtBr(grupo.demandaMediaProdutoPrincipal);
+    } else if (grupo.hasOwnProperty("estoqueMinimoProdutoPrincipal") && grupo.estoqueMinimoProdutoPrincipal !== null) {
+        // Fallback para o estoque mínimo se a demanda não existir
+        quantidadeBase = CotacaoIndividualScript_parseNumeroPtBr(grupo.estoqueMinimoProdutoPrincipal);
+    }
+    resultado.Q = isNaN(quantidadeBase) ? 0 : quantidadeBase;
+
+    // 4. MUDANÇA: Calcular Oportunidade (R$)
+    if (resultado.Q > 0 && resultado.Pmediana > resultado.P1) {
+        resultado.oportunidadeReais = (resultado.Pmediana - resultado.P1) * resultado.Q;
+    }
+
+    // 5. Calcular Spread (%) - Sem alteração
+    if (resultado.P1 > 0 && resultado.P2) {
+        resultado.spreadPercent = ((resultado.P2 - resultado.P1) / resultado.P1) * 100;
+    }
+
+    return resultado;
 }
 
 window.CotacaoIndividualScript_mostrarLoadingOverlay = function(mostrar = true, mensagem = "Processando...") {
@@ -404,6 +507,39 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
         }
         escreverValorNaLinha(tr, "Economia em Cotação", economia, 2);
     });
+
+    const sepRow = tbody.querySelector(`tr.produto-group-separator-row[data-produto-nome="${nomeProdutoPrincipal}"]`);
+    if (sepRow) {
+        const metricasSpan = sepRow.querySelector('.negociacao-metrics');
+        if (metricasSpan) {
+            const grupoDoDom = {
+                subProdutos: [],
+                demandaMediaProdutoPrincipal: CotacaoIndividualScript_parseNumeroPtBr(trEditada.dataset.demandaMedia) || 0
+            };
+            
+            todasLinhasDoGrupo.forEach(tr => {
+                const precoCell = tr.querySelector('td[data-coluna="Preço"]');
+                const fatorCell = tr.querySelector('td[data-coluna="Fator"]');
+                const precoPorFatorCell = tr.querySelector('td[data-coluna="Preço por Fator"]');
+                
+                grupoDoDom.subProdutos.push({
+                    "Preço": precoCell ? precoCell.textContent : '0',
+                    "Fator": fatorCell ? fatorCell.textContent : '0',
+                    "Preço por Fator": precoPorFatorCell ? precoPorFatorCell.textContent : '0'
+                });
+            });
+
+            // MUDANÇA: usa a nova função de cálculo e o novo nome do indicador
+            const metricas = CotacaoIndividualScript_calcularMetricasNegociacao(grupoDoDom);
+            const oportunidadeFormatada = CotacaoIndividualScript_formatarPreco(metricas.oportunidadeReais);
+            const spreadFormatado = metricas.spreadPercent.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + '%';
+            
+            metricasSpan.textContent = `Oportunidade: ${oportunidadeFormatada} | Spread: ${spreadFormatado}`;
+        }
+    }
 }
 
 function CotacaoIndividualScript_forcarRecalculoTotalUI() {
@@ -577,7 +713,6 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
         const catSanit = String(grupo.categoria).replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() || 'sem-categoria';
         const catClass = `content-for-category-${catSanit}`;
 
-        // ------------------- Cabeçalho da Categoria (igual ao seu) -------------------
         if (grupo.categoria !== categoriaAtualRenderizada) {
             const catRow = tbody.insertRow();
             catRow.className = 'categoria-accordion-header-row';
@@ -617,7 +752,6 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
             categoriaAtualRenderizada = grupo.categoria;
         }
 
-        // ------------------- Separador de Produto (igual ao seu + botão Negociação) -------------------
         const sepRow = tbody.insertRow();
         sepRow.className = `produto-group-separator-row category-content-row ${catClass} hidden`;
         sepRow.dataset.produtoNome = grupo.produtoNome;
@@ -627,11 +761,13 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
         sepCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
 
         if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
-            const min = grupo.estoqueMinimoProdutoPrincipal != null ? grupo.estoqueMinimoProdutoPrincipal : 'N/A';
+            const demandaMedia = (grupo.subProdutos && grupo.subProdutos[0] && grupo.subProdutos[0]['DemandaMediaProdutoPrincipal'] != null) 
+                ? parseFloat(grupo.subProdutos[0]['DemandaMediaProdutoPrincipal']).toFixed(2) 
+                : 'N/A';
 
             const valorEstoqueBruto = (grupo.subProdutos && grupo.subProdutos[0]) ? grupo.subProdutos[0]["Estoque Atual"] : '';
             const estoqueParaExibir = (valorEstoqueBruto !== null && valorEstoqueBruto !== undefined && valorEstoqueBruto !== "") ? valorEstoqueBruto : 'N/A';
-
+            
             const wrap = document.createElement('div');
             wrap.style.display = 'flex';
             wrap.style.justifyContent = 'space-between';
@@ -640,12 +776,11 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
 
             const info = document.createElement('div');
             info.className = 'produto-principal-info';
-            info.textContent = `Produto: ${grupo.produtoNome} (Estoque Mínimo: ${min}) (Estoque Atual: ${estoqueParaExibir})`;
+            info.textContent = `Produto: ${grupo.produtoNome} (Demanda Média: ${demandaMedia}) (Estoque Atual: ${estoqueParaExibir})`;
 
             const actions = document.createElement('div');
             actions.className = 'contagem-fields-container';
 
-            // ------- Botão Negociação (injeção) - Nova Lógica para chamar a nova função -------
             const btnNeg = document.createElement('button');
             btnNeg.type = 'button';
             btnNeg.title = 'Negociação';
@@ -659,14 +794,32 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
                 const subprodutos = CotacaoIndividualScript_obterSubprodutosDoProduto(produto);
                 CotacaoIndividualScript_abrirModalNegociacao(produto, subprodutos);
             });
-
             actions.appendChild(btnNeg);
+
+            // ------- INJEÇÃO DOS NOVOS INDICADORES -------
+            // Usa o primeiro subproduto para obter a demanda média do grupo
+            const grupoComDemanda = { ...grupo, demandaMediaProdutoPrincipal: (grupo.subProdutos[0] ? grupo.subProdutos[0].DemandaMediaProdutoPrincipal : 0) };
+            const metricas = CotacaoIndividualScript_calcularMetricasNegociacao(grupoComDemanda);
+            const oportunidadeFormatada = CotacaoIndividualScript_formatarPreco(metricas.oportunidadeReais); // MUDANÇA
+            const spreadFormatado = metricas.spreadPercent.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + '%';
+
+            let metricasSpan = actions.querySelector('.negociacao-metrics');
+            if (!metricasSpan) {
+                metricasSpan = document.createElement('span');
+                metricasSpan.className = 'negociacao-metrics';
+                actions.appendChild(metricasSpan);
+            }
+            metricasSpan.textContent = `Oportunidade: ${oportunidadeFormatada} | Spread: ${spreadFormatado}`; // MUDANÇA
+            // ------- FIM DA INJEÇÃO -------
+
             wrap.appendChild(info);
             wrap.appendChild(actions);
             sepCell.appendChild(wrap);
         }
 
-        // ------------------- Linhas de Subproduto (idêntico ao seu fluxo) -------------------
         if (grupo.subProdutos && grupo.subProdutos.length > 0) {
             grupo.subProdutos.forEach(sub => {
                 const subRow = tbody.insertRow();
@@ -676,10 +829,12 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
                 }
 
                 subRow.dataset.subprodutoOriginalPersistido = sub["_subProdutoOriginalPersistido"] || sub["SubProduto"];
-                subRow.dataset.produto    = sub['Produto'];
+                subRow.dataset.produto = sub['Produto'];
                 subRow.dataset.fornecedor = sub['Fornecedor'];
                 subRow.dataset.subprodutoAtual = sub['SubProduto'];
                 subRow.dataset.categoria = sub['Categoria'] || 'Sem Categoria';
+                // ADIÇÃO IMPORTANTE: Armazena a demanda média na linha para uso no recálculo em tempo real
+                subRow.dataset.demandaMedia = sub['DemandaMediaProdutoPrincipal'] || '0';
 
                 CotacaoIndividualScript_cabecalhosVisiveis.forEach(header => {
                     const td = subRow.insertCell();
@@ -695,7 +850,7 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
                         fmt = val == null ? "" : String(val);
                     }
                     td.textContent = fmt;
-                    td.dataset.coluna        = header;
+                    td.dataset.coluna = header;
                     td.dataset.valorOriginal = fmt;
                     if (colunasEditaveis.includes(header)) {
                         td.classList.add('editable-price-cell');
@@ -763,6 +918,7 @@ function initDropdownsInterno() {
                         case 'etapa_definir_condicoes_pagamento': if (typeof EtapasScript_ativarModoDefinirCondicoesPagamento === 'function') EtapasScript_ativarModoDefinirCondicoesPagamento(); break;
                         case 'etapa_imprimir_pedidos': if (typeof EtapasScript_abrirPaginaImpressao === 'function') EtapasScript_abrirPaginaImpressao(); break;
                         case 'funcao_gerenciar_cotacoes': if (typeof FuncoesScript_ativarModoGerenciarCotacoesPortal === 'function') FuncoesScript_ativarModoGerenciarCotacoesPortal(); break;
+                        case 'funcao_melhores_oportunidades': if (typeof FuncoesScript_abrirSidebarOportunidades === 'function') FuncoesScript_abrirSidebarOportunidades(); break;
                         case 'funcao_acrescentar_itens': if (typeof FuncoesScript_ativarModoAcrescentarItens === 'function') FuncoesScript_ativarModoAcrescentarItens(); break;
                         case 'funcao_preencher_precos': if (typeof FuncoesScript_iniciarPreenchimentoUltimosPrecos === 'function') { FuncoesScript_iniciarPreenchimentoUltimosPrecos(); } else { console.error("Função FuncoesScript_iniciarPreenchimentoUltimosPrecos não definida."); } break;
                         case 'relatorio_analise_compra': if (typeof RelatoriosScript_abrirRelatorioAnaliseCompra === 'function') { RelatoriosScript_abrirRelatorioAnaliseCompra(CotacaoIndividualScript_cotacaoIdAtual); } else { console.error("Função RelatoriosScript_abrirRelatorioAnaliseCompra não definida."); } break;
@@ -1268,7 +1424,8 @@ function CotacaoIndividualScript_abrirModalNegociacao(produto, subprodutos) {
 //----------------------------------------------------------------------------------------------------
 function initCotacaoIndividualScript() {
     console.log("initCotacaoIndividualScript: Iniciando configuração da página.");
-    // **A CORREÇÃO É CHAMAR A FUNÇÃO DE INICIALIZAÇÃO AQUI DENTRO**
     inicializarPaginaPrincipal();
+    
+    if (typeof FuncoesScript_initSidebarOportunidades === 'function') FuncoesScript_initSidebarOportunidades();
 }
 </script>

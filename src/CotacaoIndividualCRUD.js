@@ -30,6 +30,79 @@ function CotacaoIndividualCRUD_parseNumeroPtBr(valor) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+/**
+ * Cria um mapa de Produto -> Média das 3 últimas compras a partir da aba "Cotacoes".
+ * Itera a planilha de baixo para cima para otimizar a busca pelos itens mais recentes.
+ * @returns {object} Um mapa onde a chave é o nome do produto e o valor é a demanda média.
+ */
+function CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos() {
+  console.log("CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos: Iniciando criação do mapa de demanda média.");
+  const mapaDemandas = {};
+  const valoresComprasPorProduto = {};
+
+  try {
+    const planilha = SpreadsheetApp.getActiveSpreadsheet();
+    const abaCotacoes = planilha.getSheetByName(ABA_COTACOES); // Constante global
+
+    if (!abaCotacoes) {
+      console.error(`CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos: Aba "${ABA_COTACOES}" não encontrada.`);
+      return mapaDemandas;
+    }
+
+    const ultimaLinha = abaCotacoes.getLastRow();
+    if (ultimaLinha <= 1) {
+      console.log(`CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos: Aba "${ABA_COTACOES}" vazia.`);
+      return mapaDemandas;
+    }
+
+    const todosOsValores = abaCotacoes.getRange(1, 1, ultimaLinha, abaCotacoes.getLastColumn()).getValues();
+    const cabecalhos = todosOsValores[0];
+    
+    const indiceProduto = cabecalhos.indexOf("Produto");
+    const indiceComprar = cabecalhos.indexOf("Comprar");
+
+    if (indiceProduto === -1 || indiceComprar === -1) {
+      console.error(`CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos: Colunas "Produto" ou "Comprar" não encontradas na aba "${ABA_COTACOES}".`);
+      return mapaDemandas;
+    }
+
+    // Itera de baixo para cima para pegar as compras mais recentes primeiro
+    for (let i = ultimaLinha - 1; i >= 1; i--) {
+      const linha = todosOsValores[i];
+      const nomeProduto = String(linha[indiceProduto]).trim();
+
+      if (nomeProduto) {
+        // Se ainda não temos 3 valores para este produto, buscamos mais
+        if (!valoresComprasPorProduto[nomeProduto] || valoresComprasPorProduto[nomeProduto].length < 3) {
+          const valorComprar = linha[indiceComprar];
+          const quantidade = CotacaoIndividualCRUD_parseNumeroPtBr(valorComprar);
+
+          // Considera apenas valores de compra positivos
+          if (Number.isFinite(quantidade) && quantidade > 0) {
+            if (!valoresComprasPorProduto[nomeProduto]) {
+              valoresComprasPorProduto[nomeProduto] = [];
+            }
+            valoresComprasPorProduto[nomeProduto].push(quantidade);
+          }
+        }
+      }
+    }
+
+    // Calcula a média para cada produto que teve valores encontrados
+    for (const produto in valoresComprasPorProduto) {
+      const compras = valoresComprasPorProduto[produto];
+      if (compras.length > 0) {
+        const soma = compras.reduce((acc, val) => acc + val, 0);
+        mapaDemandas[produto] = soma / compras.length;
+      }
+    }
+
+    console.log(`CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos: Mapa de demanda média criado com ${Object.keys(mapaDemandas).length} entradas.`);
+  } catch (error) {
+    console.error("CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos: Erro ao criar mapa de demanda: " + error.toString() + " Stack: " + error.stack);
+  }
+  return mapaDemandas;
+}
 
 /**
  * Cria um mapa de Produto -> Estoque Mínimo a partir da aba de Produtos.
@@ -95,14 +168,16 @@ function CotacaoIndividualCRUD_criarMapaEstoqueMinimoProdutos() {
 
 /**
  * Busca todos os produtos/linhas de uma cotação específica na aba 'Cotações'.
- * Adiciona o "EstoqueMinimoProdutoPrincipal" buscando da aba 'Produtos'.
+ * Adiciona o "EstoqueMinimoProdutoPrincipal" e a "DemandaMediaProdutoPrincipal".
  * @param {string} idCotacaoAlvo O ID da cotação a ser buscada.
  * @return {Array<object>|null} Um array de objetos, onde cada objeto representa uma linha da cotação, ou null em caso de erro.
  */
 function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
   console.log("CotacaoIndividualCRUD_buscarProdutosPorIdCotacao: Buscando produtos para ID '" + idCotacaoAlvo + "'.");
 
+  // CHAMA AS DUAS FUNÇÕES DE MAPEAMENTO
   const mapaEstoqueMinimoProdutos = CotacaoIndividualCRUD_criarMapaEstoqueMinimoProdutos();
+  const mapaDemandaMediaProdutos = CotacaoIndividualCRUD_criarMapaDemandaMediaProdutos();
 
   try {
     const planilha = SpreadsheetApp.getActiveSpreadsheet();
@@ -121,12 +196,11 @@ function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
     const ultimaColuna = abaCotacoes.getLastColumn();
     const range = abaCotacoes.getRange(1, 1, ultimaLinha, ultimaColuna);
 
-    // crú + display (evita vazar Date como string)
     const valores = range.getValues();
     const displays = range.getDisplayValues();
 
     const cabPlanilha = valores[0];
-    const cabConst = CABECALHOS_COTACOES; // sua constante global de colunas esperadas
+    const cabConst = CABECALHOS_COTACOES; 
 
     if (!cabConst || cabConst.length === 0) {
       console.error('CotacaoIndividualCRUD: CABECALHOS_COTACOES não definida ou vazia.');
@@ -141,16 +215,9 @@ function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
 
     const idxProdutoPrincipal = cabPlanilha.indexOf('Produto');
 
-    // Quais campos devem ser numéricos (inclui "Fator")
     const camposNumericosEsperados = [
-      'Fator',
-      'Estoque Mínimo',
-      'Estoque Atual',
-      'Preço',
-      'Preço por Fator',
-      'Comprar',
-      'Valor Total',
-      'Economia em Cotação'
+      'Fator', 'Estoque Mínimo', 'Estoque Atual', 'Preço', 'Preço por Fator',
+      'Comprar', 'Valor Total', 'Economia em Cotação'
     ];
 
     const itens = [];
@@ -163,18 +230,24 @@ function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
 
       const item = {};
 
-      // estoque mínimo do produto principal, se existir no mapa
       let nomeProdutoPrincipal = null;
       if (idxProdutoPrincipal !== -1) {
         nomeProdutoPrincipal = String(rowRaw[idxProdutoPrincipal] || '').trim();
       }
-      if (nomeProdutoPrincipal && mapaEstoqueMinimoProdutos.hasOwnProperty(nomeProdutoPrincipal)) {
-        item['EstoqueMinimoProdutoPrincipal'] = mapaEstoqueMinimoProdutos[nomeProdutoPrincipal];
+
+      // INCLUSÃO DOS NOVOS DADOS NO ITEM
+      if (nomeProdutoPrincipal) {
+        item['EstoqueMinimoProdutoPrincipal'] = mapaEstoqueMinimoProdutos.hasOwnProperty(nomeProdutoPrincipal) 
+            ? mapaEstoqueMinimoProdutos[nomeProdutoPrincipal] : null;
+
+        item['DemandaMediaProdutoPrincipal'] = mapaDemandaMediaProdutos.hasOwnProperty(nomeProdutoPrincipal) 
+            ? mapaDemandaMediaProdutos[nomeProdutoPrincipal] : null;
       } else {
         item['EstoqueMinimoProdutoPrincipal'] = null;
+        item['DemandaMediaProdutoPrincipal'] = null;
       }
 
-      // mapeamento campo a campo
+      // mapeamento campo a campo (lógica original mantida)
       cabConst.forEach(function (nomeCol) {
         const idx = cabPlanilha.indexOf(nomeCol);
         if (idx === -1 || idx >= rowRaw.length) {
@@ -198,11 +271,9 @@ function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
         }
 
         if (camposNumericosEsperados.indexOf(nomeCol) !== -1) {
-          // 1ª tentativa pelo display (respeita pt-BR)
           let n = CotacaoIndividualCRUD_parseNumeroPtBr(valorDisp);
-          // fallback no raw se display não for numérico
           if (!Number.isFinite(n)) n = CotacaoIndividualCRUD_parseNumeroPtBr(valorRaw);
-          item[nomeCol] = Number.isFinite(n) ? n : null; // nunca retorna Date/string aqui
+          item[nomeCol] = Number.isFinite(n) ? n : null;
           return;
         }
 

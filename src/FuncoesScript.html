@@ -870,4 +870,142 @@ function FuncoesScript_exibirFeedbackModalGerenciarCotacoes(mensagem, isError = 
     }
 }
 
+//####################################################################################################
+//FUNÇÃO MELHORES OPORTUNIDADES
+//####################################################################################################
+
+// Variável para armazenar os dados calculados e evitar reprocessamento ao reordenar
+let FuncoesScript_dadosOportunidades = [];
+
+/**
+ * Orquestra a abertura e o preenchimento do sidebar de Melhores Oportunidades.
+ */
+function FuncoesScript_abrirSidebarOportunidades() {
+    const sidebar = document.getElementById('FuncoesScript_sidebarOportunidades');
+    if (!sidebar) {
+        console.error("Sidebar de Oportunidades não encontrado no DOM.");
+        return;
+    }
+    // CORREÇÃO: Adiciona classe ao body para ajustar o layout principal
+    document.body.classList.add('sidebar-active');
+    sidebar.classList.add('active');
+
+    const listaContainer = document.getElementById('FuncoesScript_sidebarOportunidadesListaContainer');
+    listaContainer.innerHTML = '<div class="sidebar-oportunidades-empty-state">Calculando oportunidades...</div>';
+
+    // A variável global agora estará acessível corretamente
+    const dadosBrutos = window.CotacaoIndividualScript_dadosOriginaisCotacao || [];
+    if (dadosBrutos.length === 0) {
+        console.warn("FuncoesScript_abrirSidebarOportunidades: dadosOriginaisCotacao está vazio. A tabela principal pode não ter sido carregada ainda.");
+        listaContainer.innerHTML = '<div class="sidebar-oportunidades-empty-state">Nenhum dado para exibir. Verifique se a cotação foi carregada.</div>';
+        return;
+    }
+
+    const gruposTemp = {};
+    dadosBrutos.forEach(linhaProduto => {
+        const nomeProdutoPrincipal = linhaProduto["Produto"];
+        if (!nomeProdutoPrincipal) return; // Pula linhas sem produto principal
+        
+        const chaveGrupo = nomeProdutoPrincipal;
+        if (!gruposTemp[chaveGrupo]) {
+            gruposTemp[chaveGrupo] = {
+                produtoNome: nomeProdutoPrincipal,
+                subProdutos: [],
+                demandaMediaProdutoPrincipal: linhaProduto.hasOwnProperty("DemandaMediaProdutoPrincipal") ? linhaProduto["DemandaMediaProdutoPrincipal"] : 0
+            };
+        }
+        gruposTemp[chaveGrupo].subProdutos.push(linhaProduto);
+    });
+    const arrayDeGrupos = Object.values(gruposTemp);
+
+    FuncoesScript_dadosOportunidades = arrayDeGrupos.map(grupo => {
+        const metricas = window.CotacaoIndividualScript_calcularMetricasNegociacao(grupo);
+        return {
+            produtoNome: grupo.produtoNome,
+            oportunidade: metricas.oportunidadeReais,
+            spread: metricas.spreadPercent
+        };
+    });
+
+    FuncoesScript_renderizarListaOportunidades('oportunidade');
+}
+
+/**
+ * Fecha o sidebar de Melhores Oportunidades.
+ */
+function FuncoesScript_fecharSidebarOportunidades() {
+    const sidebar = document.getElementById('FuncoesScript_sidebarOportunidades');
+    if (sidebar) {
+        sidebar.classList.remove('active');
+    }
+    // CORREÇÃO: Remove a classe do body para o layout principal voltar ao normal
+    document.body.classList.remove('sidebar-active');
+}
+
+/**
+ * Renderiza (ou re-renderiza) a lista de produtos no sidebar, aplicando a ordenação.
+ * @param {'oportunidade' | 'spread'} sortBy - O critério de ordenação.
+ */
+function FuncoesScript_renderizarListaOportunidades(sortBy) {
+    const listaContainer = document.getElementById('FuncoesScript_sidebarOportunidadesListaContainer');
+    if (!listaContainer) return;
+
+    // Faz uma cópia para não alterar a ordem original dos dados cacheados
+    const dadosOrdenados = [...FuncoesScript_dadosOportunidades];
+
+    // Ordena os dados com base no critério (sempre do maior para o menor)
+    if (sortBy === 'oportunidade') {
+        dadosOrdenados.sort((a, b) => b.oportunidade - a.oportunidade);
+    } else if (sortBy === 'spread') {
+        dadosOrdenados.sort((a, b) => b.spread - a.spread);
+    }
+
+    // Limpa o container
+    listaContainer.innerHTML = '';
+
+    if (dadosOrdenados.length === 0) {
+        listaContainer.innerHTML = '<div class="sidebar-oportunidades-empty-state">Nenhum dado para exibir.</div>';
+        return;
+    }
+
+    // Popula a lista com os itens ordenados
+    dadosOrdenados.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'sidebar-oportunidades-item';
+
+        const oportunidadeFormatada = window.CotacaoIndividualScript_formatarPreco(item.oportunidade);
+        const spreadFormatado = item.spread.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+
+        itemDiv.innerHTML = `
+            <span class="sidebar-oportunidades-item-produto">${item.produtoNome}</span>
+            <div class="sidebar-oportunidades-item-metricas">
+                <span>Oportunidade: <strong>${oportunidadeFormatada}</strong></span>
+                <span>Spread: <strong>${spreadFormatado}</strong></span>
+            </div>
+        `;
+        listaContainer.appendChild(itemDiv);
+    });
+
+    // Atualiza o estado visual dos botões de ordenação
+    const btnOportunidade = document.getElementById('FuncoesScript_btnOrdenarPorOportunidade');
+    const btnSpread = document.getElementById('FuncoesScript_btnOrdenarPorSpread');
+    if(btnOportunidade && btnSpread) {
+        btnOportunidade.classList.toggle('active', sortBy === 'oportunidade');
+        btnSpread.classList.toggle('active', sortBy === 'spread');
+    }
+}
+
+/**
+ * Inicializa os event listeners para o sidebar. Deve ser chamada uma vez no carregamento da página.
+ */
+function FuncoesScript_initSidebarOportunidades() {
+    const btnFechar = document.getElementById('FuncoesScript_btnFecharSidebarOportunidades');
+    const btnOportunidade = document.getElementById('FuncoesScript_btnOrdenarPorOportunidade');
+    const btnSpread = document.getElementById('FuncoesScript_btnOrdenarPorSpread');
+
+    if(btnFechar) btnFechar.addEventListener('click', FuncoesScript_fecharSidebarOportunidades);
+    if(btnOportunidade) btnOportunidade.addEventListener('click', () => FuncoesScript_renderizarListaOportunidades('oportunidade'));
+    if(btnSpread) btnSpread.addEventListener('click', () => FuncoesScript_renderizarListaOportunidades('spread'));
+}
+
 </script>
