@@ -215,8 +215,8 @@ function CotacaoIndividualCRUD_buscarProdutosPorIdCotacao(idCotacaoAlvo) {
 
     const idxProdutoPrincipal = cabPlanilha.indexOf('Produto');
 
-    const camposNumericosEsperados = [
-      'Fator', 'Estoque Mínimo', 'Estoque Atual', 'Preço', 'Preço por Fator',
+      const camposNumericosEsperados = [
+      'Fator', 'Estoque Mínimo', 'Preço', 'Preço por Fator',
       'Comprar', 'Valor Total', 'Economia em Cotação'
     ];
 

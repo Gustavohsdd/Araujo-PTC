@@ -466,13 +466,16 @@ function CotacaoIndividualScript_salvarEdicaoInline(element) {
 function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
     const nomeProdutoPrincipal = trEditada.dataset.produto;
     if (!nomeProdutoPrincipal) return;
+
     const tbody = trEditada.parentElement;
     const todasLinhasDoGrupo = tbody.querySelectorAll(`tr.sub-produto-row[data-produto="${nomeProdutoPrincipal}"]`);
+
     const lerValorDaLinha = (tr, coluna) => {
         const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
         const valorTexto = cell.querySelector('input')?.value || cell?.dataset.valorOriginal || cell?.textContent || '0';
         return parseFloat(String(valorTexto).replace(/\./g, '').replace(',', '.')) || 0;
     };
+
     const escreverValorNaLinha = (tr, coluna, valor, casasDecimais = 2) => {
         const cell = tr.querySelector(`td[data-coluna="${coluna}"]`);
         if (cell) {
@@ -484,7 +487,10 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
             cell.dataset.valorOriginal = valorFormatado;
         }
     };
+
     let maxPrecoPorFator = 0;
+    
+    // PASSO 1: Recalcula os totais de cada linha do produto (Preço por Fator, Valor Total, etc.)
     todasLinhasDoGrupo.forEach(tr => {
         const preco = lerValorDaLinha(tr, "Preço");
         const fator = lerValorDaLinha(tr, "Fator");
@@ -493,14 +499,18 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
             maxPrecoPorFator = precoPorFator;
         }
     });
+
     todasLinhasDoGrupo.forEach(tr => {
         const preco = lerValorDaLinha(tr, "Preço");
         const fator = lerValorDaLinha(tr, "Fator");
         const comprar = lerValorDaLinha(tr, "Comprar");
+        
         const precoPorFator = fator > 0 ? (preco / fator) : 0;
         escreverValorNaLinha(tr, "Preço por Fator", precoPorFator, 4);
+
         const valorTotal = preco * comprar;
         escreverValorNaLinha(tr, "Valor Total", valorTotal, 2);
+
         let economia = 0;
         if (comprar > 0 && maxPrecoPorFator > 0 && todasLinhasDoGrupo.length > 1) {
             economia = (maxPrecoPorFator * fator * comprar) - (preco * comprar);
@@ -508,9 +518,12 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
         escreverValorNaLinha(tr, "Economia em Cotação", economia, 2);
     });
 
+    // PASSO 2: Recalcula os indicadores do cabeçalho do grupo (Oportunidade e Spread)
     const sepRow = tbody.querySelector(`tr.produto-group-separator-row[data-produto-nome="${nomeProdutoPrincipal}"]`);
     if (sepRow) {
-        const metricasSpan = sepRow.querySelector('.negociacao-metrics');
+        // CORREÇÃO FINAL: Usa a classe específica '.indicador-oportunidade' que adicionamos na renderização.
+        const metricasSpan = sepRow.querySelector('.indicador-oportunidade');
+        
         if (metricasSpan) {
             const grupoDoDom = {
                 subProdutos: [],
@@ -529,7 +542,6 @@ function CotacaoIndividualScript_atualizarGrupoDeCalculosCliente(trEditada) {
                 });
             });
 
-            // MUDANÇA: usa a nova função de cálculo e o novo nome do indicador
             const metricas = CotacaoIndividualScript_calcularMetricasNegociacao(grupoDoDom);
             const oportunidadeFormatada = CotacaoIndividualScript_formatarPreco(metricas.oportunidadeReais);
             const spreadFormatado = metricas.spreadPercent.toLocaleString('pt-BR', {
@@ -687,7 +699,7 @@ function agruparEClassificarProdutosInterno(todosOsProdutosDaCotacao) {
 }
 
 /**
- * FUNÇÃO ATUALIZADA: Monta o corpo da tabela de produtos, agrupados por categoria.
+ * FUNÇÃO ATUALIZADA E CORRIGIDA: Monta o corpo da tabela de produtos, agrupados por categoria.
  */
 function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
     const tabela = document.getElementById(CotacaoIndividualScript_ID_TABELA_PRODUTOS_COTACAO);
@@ -761,13 +773,6 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
         sepCell.colSpan = CotacaoIndividualScript_cabecalhosVisiveis.length || 1;
 
         if (CotacaoIndividualScript_modoEtapaAtual !== 'contagem_estoque') {
-            const demandaMedia = (grupo.subProdutos && grupo.subProdutos[0] && grupo.subProdutos[0]['DemandaMediaProdutoPrincipal'] != null) 
-                ? parseFloat(grupo.subProdutos[0]['DemandaMediaProdutoPrincipal']).toFixed(2) 
-                : 'N/A';
-
-            const valorEstoqueBruto = (grupo.subProdutos && grupo.subProdutos[0]) ? grupo.subProdutos[0]["Estoque Atual"] : '';
-            const estoqueParaExibir = (valorEstoqueBruto !== null && valorEstoqueBruto !== undefined && valorEstoqueBruto !== "") ? valorEstoqueBruto : 'N/A';
-            
             const wrap = document.createElement('div');
             wrap.style.display = 'flex';
             wrap.style.justifyContent = 'space-between';
@@ -776,7 +781,28 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
 
             const info = document.createElement('div');
             info.className = 'produto-principal-info';
-            info.textContent = `Produto: ${grupo.produtoNome} (Demanda Média: ${demandaMedia}) (Estoque Atual: ${estoqueParaExibir})`;
+            info.style.display = 'flex';
+            info.style.alignItems = 'center';
+            info.style.gap = '0.75rem';
+
+            const nomeProdutoSpan = document.createElement('span');
+            nomeProdutoSpan.textContent = `Produto: ${grupo.produtoNome}`;
+            info.appendChild(nomeProdutoSpan);
+
+            const demandaMedia = (grupo.subProdutos && grupo.subProdutos[0] && grupo.subProdutos[0]['DemandaMediaProdutoPrincipal'] != null) 
+                ? parseFloat(grupo.subProdutos[0]['DemandaMediaProdutoPrincipal']).toFixed(2) 
+                : 'N/A';
+            const demandaBadge = document.createElement('span');
+            demandaBadge.className = 'info-badge';
+            demandaBadge.textContent = `Demanda Média: ${demandaMedia}`;
+            info.appendChild(demandaBadge);
+
+            const valorEstoqueBruto = (grupo.subProdutos && grupo.subProdutos[0]) ? grupo.subProdutos[0]["Estoque Atual"] : '';
+            const estoqueParaExibir = (valorEstoqueBruto !== null && valorEstoqueBruto !== undefined && valorEstoqueBruto !== "") ? valorEstoqueBruto : 'N/A';
+            const estoqueBadge = document.createElement('span');
+            estoqueBadge.className = 'info-badge';
+            estoqueBadge.textContent = estoqueParaExibir;
+            info.appendChild(estoqueBadge);
 
             const actions = document.createElement('div');
             actions.className = 'contagem-fields-container';
@@ -784,10 +810,8 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
             const btnNeg = document.createElement('button');
             btnNeg.type = 'button';
             btnNeg.title = 'Negociação';
-            btnNeg.className = 'btn-menu-superior dropdown-menu-button';
-            btnNeg.style.cssText = 'background-color: #235fc2; border: 1px solid transparent; margin-right: 0.5rem;';
-            btnNeg.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true" style="width: 1em; height: 1em; margin-right: 0.375rem;"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zm1 5h2v8h-2V8zm-4 0h2v8H9V8z"/></svg><span>Negociação</span>`;
-
+            btnNeg.className = 'info-badge clickable'; 
+            btnNeg.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true" style="width: 1em; height: 1em;"><path d="M12 3a9 9 0 100 18 9 9 0 000-18zm1 5h2v8h-2V8zm-4 0h2v8H9V8z"/></svg><span>Negociação</span>`;
             btnNeg.addEventListener('click', function(e) {
                 e.stopPropagation();
                 const produto = sepRow.dataset.produtoNome || '';
@@ -796,24 +820,19 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
             });
             actions.appendChild(btnNeg);
 
-            // ------- INJEÇÃO DOS NOVOS INDICADORES -------
-            // Usa o primeiro subproduto para obter a demanda média do grupo
             const grupoComDemanda = { ...grupo, demandaMediaProdutoPrincipal: (grupo.subProdutos[0] ? grupo.subProdutos[0].DemandaMediaProdutoPrincipal : 0) };
             const metricas = CotacaoIndividualScript_calcularMetricasNegociacao(grupoComDemanda);
-            const oportunidadeFormatada = CotacaoIndividualScript_formatarPreco(metricas.oportunidadeReais); // MUDANÇA
+            const oportunidadeFormatada = CotacaoIndividualScript_formatarPreco(metricas.oportunidadeReais);
             const spreadFormatado = metricas.spreadPercent.toLocaleString('pt-BR', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             }) + '%';
 
-            let metricasSpan = actions.querySelector('.negociacao-metrics');
-            if (!metricasSpan) {
-                metricasSpan = document.createElement('span');
-                metricasSpan.className = 'negociacao-metrics';
-                actions.appendChild(metricasSpan);
-            }
-            metricasSpan.textContent = `Oportunidade: ${oportunidadeFormatada} | Spread: ${spreadFormatado}`; // MUDANÇA
-            // ------- FIM DA INJEÇÃO -------
+            let metricasSpan = document.createElement('span');
+            // ADICIONA A CLASSE ESPECÍFICA PARA FACILITAR A SELEÇÃO
+            metricasSpan.className = 'info-badge indicador-oportunidade';
+            metricasSpan.textContent = `Oportunidade: ${oportunidadeFormatada} | Spread: ${spreadFormatado}`;
+            actions.appendChild(metricasSpan);
 
             wrap.appendChild(info);
             wrap.appendChild(actions);
@@ -833,7 +852,6 @@ function renderizarGruposDeProdutosInterno(gruposDeProdutos) {
                 subRow.dataset.fornecedor = sub['Fornecedor'];
                 subRow.dataset.subprodutoAtual = sub['SubProduto'];
                 subRow.dataset.categoria = sub['Categoria'] || 'Sem Categoria';
-                // ADIÇÃO IMPORTANTE: Armazena a demanda média na linha para uso no recálculo em tempo real
                 subRow.dataset.demandaMedia = sub['DemandaMediaProdutoPrincipal'] || '0';
 
                 CotacaoIndividualScript_cabecalhosVisiveis.forEach(header => {
