@@ -67,22 +67,17 @@ function initCotacoesScript() {
     const contentId = headerButton.getAttribute('aria-controls');
     const content = document.getElementById(contentId);
     
-    // Se o elemento de conteúdo correspondente não for encontrado, a função para aqui para evitar erros.
     if (!content) {
       console.error('Elemento de conteúdo do acordeão não encontrado:', contentId);
       return;
     }
   
-    // Verifica qual é o estado atual do acordeão (se está expandido ou não)
     const isExpanded = headerButton.getAttribute('aria-expanded') === 'true';
   
-    // Inverte o estado de expansão. Se estava 'true', vira 'false', e vice-versa.
     headerButton.setAttribute('aria-expanded', !isExpanded);
   
-    // Alterna a classe 'active' no próprio botão. Se a classe existe, ela é removida. Se não existe, é adicionada.
     headerButton.classList.toggle('active');
   
-    // Alterna a classe 'hidden' no painel de conteúdo. Se a classe existe, ela é removida (mostrando o conteúdo). Se não existe, é adicionada (ocultando o conteúdo).
     content.classList.toggle('hidden');
   }
 
@@ -125,6 +120,8 @@ function initCotacoesScript() {
     itemDiv.appendChild(infoContainer);
 
     const botaoContainer = document.createElement('div');
+    botaoContainer.className = 'flex items-center gap-2';
+
     const btnAbrir = document.createElement('button');
     btnAbrir.className = 'btn-painel-acao btn-abrir-cotacao';
     btnAbrir.dataset.cotacaoId = cotacaoResumo.ID_da_Cotacao;
@@ -155,11 +152,85 @@ function initCotacoesScript() {
             .App_obterUrlCotacaoIndividual(idDaCotacao, 'editar');
     });
 
+    const btnCopiarLink = document.createElement('button');
+    btnCopiarLink.className = 'btn-painel-acao';
+    btnCopiarLink.style.backgroundColor = '#6366f1';
+    btnCopiarLink.dataset.cotacaoId = cotacaoResumo.ID_da_Cotacao;
+    btnCopiarLink.title = 'Copiar link da Contagem de Estoque (Mobile)';
+
+    btnCopiarLink.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0l-1.5-1.5a.75.75 0 111.06-1.06l1.5 1.5a.5.5 0 00.707 0l3-3z" clip-rule="evenodd" />
+                                  <path fill-rule="evenodd" d="M6.414 7.414a.75.75 0 011.06 0l1.5 1.5a.5.5 0 00.707 0l3-3a.75.75 0 011.06 1.06l-3 3a2 2 0 01-2.828 0l-1.5-1.5a2 2 0 010-2.828l3-3a2 2 0 112.828 2.828l-3 3a.75.75 0 01-1.06-1.06l3-3a.5.5 0 00-.707-.707l-3 3z" clip-rule="evenodd" />
+                                </svg>
+                                <span>Copiar Link</span>`;
+
+    btnCopiarLink.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const idDaCotacao = cotacaoResumo.ID_da_Cotacao;
+        CotacoesScript_copiarLinkContagemEstoque(idDaCotacao, btnCopiarLink);
+    });
+    
     botaoContainer.appendChild(btnAbrir);
+    botaoContainer.appendChild(btnCopiarLink);
     itemDiv.appendChild(botaoContainer); 
 
     return itemDiv;
   }
+
+  // ===== INÍCIO DA CORREÇÃO =====
+  // A função CotacoesScript_copiarLinkContagemEstoque foi movida para DENTRO de initCotacoesScript
+  function CotacoesScript_copiarLinkContagemEstoque(idCotacao, botaoElemento) {
+    const textoOriginal = botaoElemento.innerHTML;
+    botaoElemento.disabled = true;
+    botaoElemento.innerHTML = 'Copiando...';
+
+    const restaurarBotao = (delay = 2000) => {
+      setTimeout(() => {
+        botaoElemento.innerHTML = textoOriginal;
+        botaoElemento.disabled = false;
+      }, delay);
+    };
+
+    google.script.run
+      .withSuccessHandler(function(url) {
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(url).then(function() {
+            CotacoesScript_exibirFeedbackGlobal(`Link da cotação ${idCotacao} copiado!`, false, 3000);
+            botaoElemento.innerHTML = 'Copiado!';
+            restaurarBotao();
+          }, function(err) {
+            console.error('Falha ao copiar link: ', err);
+            CotacoesScript_exibirFeedbackGlobal('Erro ao copiar. Verifique as permissões do navegador.', true, 5000);
+            botaoElemento.innerHTML = 'Falhou!';
+            restaurarBotao();
+          });
+        } else {
+          const textArea = document.createElement("textarea");
+          textArea.value = url;
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            CotacoesScript_exibirFeedbackGlobal(`Link da cotação ${idCotacao} copiado!`, false, 3000);
+            botaoElemento.innerHTML = 'Copiado!';
+          } catch (err) {
+            console.error('Falha ao usar execCommand: ', err);
+            CotacoesScript_exibirFeedbackGlobal('Erro ao copiar o link.', true, 5000);
+            botaoElemento.innerHTML = 'Falhou!';
+          }
+          document.body.removeChild(textArea);
+          restaurarBotao();
+        }
+      })
+      .withFailureHandler(function(error) {
+        CotacoesScript_exibirFeedbackGlobal("Erro ao obter o link do servidor: " + error.message, true);
+        botaoElemento.innerHTML = 'Erro!';
+        restaurarBotao();
+      })
+      .App_obterUrlContagemDeEstoque(idCotacao);
+  }
+  // ===== FIM DA CORREÇÃO =====
 
   function CotacoesScript_popularAcordeoes(cotacoesAgrupadasPorStatus) {
     CotacoesScript_ORDEM_STATUS.forEach(statusNomeOriginal => {
@@ -610,12 +681,10 @@ function initCotacoesScript() {
     CotacoesScript_carregarTodasCotacoes();
   }
 
-  // Inicializa o script quando o DOM estiver pronto
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', CotacoesScript_inicializar);
   } else {
     CotacoesScript_inicializar();
   }
 }
-
 </script>
